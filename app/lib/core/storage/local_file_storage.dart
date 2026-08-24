@@ -1,10 +1,10 @@
 import 'dart:io';
-
+import 'package:uuid/uuid.dart';
 import 'package:path_provider/path_provider.dart';
 
 class LocalFileStorage {
   static const String _assetsDirectoryName = 'assets';
-
+  static const Uuid _uuid = Uuid();
   /// Returns the root directory where AssetVentory stores
   /// user-generated asset files.
   Future<Directory> _getAssetsDirectory() async {
@@ -55,9 +55,7 @@ class LocalFileStorage {
 
     final extension = _getExtension(sourceFile.path);
 
-    final fileName =
-        'image_${DateTime.now().millisecondsSinceEpoch}$extension';
-
+    final fileName = '${_uuid.v4()}$extension';
     final destination = File(
       '${imagesDirectory.path}/$fileName',
     );
