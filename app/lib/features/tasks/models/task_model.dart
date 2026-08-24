@@ -7,6 +7,8 @@ class TaskModel {
   final String? assignedTo;
   final String visibility; // 'personal' | 'assigned' | 'family'
   final String title;
+  final String? emoji;
+  final String? imageUrl;
   final String? assetId;
   final DateTime dueDate;
   final DateTime? dueTime;
@@ -23,6 +25,8 @@ class TaskModel {
     this.assignedTo,
     this.visibility = 'personal',
     required this.title,
+    this.emoji,
+    this.imageUrl,
     this.assetId,
     required this.dueDate,
     this.dueTime,
@@ -42,6 +46,8 @@ class TaskModel {
       assignedTo: data['assignedTo'] as String?,
       visibility: data['visibility'] as String? ?? 'personal',
       title: data['title'] as String? ?? '',
+      emoji: data['emoji'] as String?,
+      imageUrl: data['imageUrl'] as String?,
       assetId: data['assetId'] as String?,
       dueDate: (data['dueDate'] as Timestamp?)?.toDate() ?? DateTime.now(),
       dueTime: (data['dueTime'] as Timestamp?)?.toDate(),
@@ -60,6 +66,8 @@ class TaskModel {
       'assignedTo': assignedTo,
       'visibility': visibility,
       'title': title,
+      'emoji': emoji,
+      'imageUrl': imageUrl,
       'assetId': assetId,
       'dueDate': Timestamp.fromDate(dueDate),
       'dueTime': dueTime != null ? Timestamp.fromDate(dueTime!) : null,

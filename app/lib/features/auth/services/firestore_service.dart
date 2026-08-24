@@ -322,6 +322,31 @@ class FirestoreService {
     await batch.commit();
   }
 
+  /// Deletes only the reminder document and clears reminderId on the parent
+  /// task. The Home page reminder stream will update automatically because it
+  /// is a live Firestore listener.
+  Future<void> deleteReminderOnly(
+    String reminderId,
+    String taskId,
+  ) async {
+    final batch = _firestore.batch();
+    batch.delete(_remindersCollection.doc(reminderId));
+    batch.update(_tasksCollection.doc(taskId), {
+      'reminderId': null,
+      'updatedAt': FieldValue.serverTimestamp(),
+    });
+    await batch.commit();
+  }
+
+  /// Live stream of a single reminder document. Emits null when the document
+  /// does not exist (e.g. after deletion).
+  Stream<ReminderModel?> streamReminder(String reminderId) {
+    return _remindersCollection.doc(reminderId).snapshots().map((doc) {
+      if (!doc.exists) return null;
+      return ReminderModel.fromFirestore(doc);
+    });
+  }
+
   /// Delete an asset
   Future<void> deleteAsset(String assetId) async {
     await _assetsCollection.doc(assetId).delete();

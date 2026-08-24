@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import '../../../core/constants/app_colors.dart';
+import '../../../core/widgets/custom_button.dart';
+import '../../../core/widgets/asset_avatar.dart';
 import '../../assets/models/asset_model.dart';
 import '../../auth/models/user_model.dart';
 import '../../auth/services/firestore_service.dart';
@@ -33,7 +35,7 @@ class _TasksScreenState extends State<TasksScreen> {
         return Scaffold(
           backgroundColor: AppColors.scaffoldBg,
           floatingActionButton: FloatingActionButton.extended(
-            onPressed: () => _openEditor(context, familyId: familyId),
+            onPressed: () => TaskEditorSheet.show(context, familyId: familyId),
             backgroundColor: AppColors.primaryPurple,
             icon: const Icon(Icons.add_rounded, color: Colors.white),
             label: Text(
@@ -284,20 +286,34 @@ class _TasksScreenState extends State<TasksScreen> {
           side: const BorderSide(color: AppColors.lightLavenderBorder),
         ),
         child: ListTile(
-          contentPadding: const EdgeInsets.fromLTRB(10, 8, 14, 8),
-          leading: IconButton(
-            onPressed: task.createdBy == _uid || task.assignedTo == _uid
-                ? () => _service.updateTaskStatus(
-                    task.id,
-                    completed ? 'pending' : 'completed',
-                  )
-                : null,
-            icon: Icon(
-              completed
-                  ? Icons.check_circle_rounded
-                  : Icons.radio_button_unchecked_rounded,
-              color: completed ? AppColors.success : AppColors.primaryPurple,
-            ),
+          contentPadding: const EdgeInsets.fromLTRB(6, 8, 14, 8),
+          leading: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              IconButton(
+                visualDensity: VisualDensity.compact,
+                onPressed: task.createdBy == _uid || task.assignedTo == _uid
+                    ? () => _service.updateTaskStatus(
+                        task.id,
+                        completed ? 'pending' : 'completed',
+                      )
+                    : null,
+                icon: Icon(
+                  completed
+                      ? Icons.check_circle_rounded
+                      : Icons.radio_button_unchecked_rounded,
+                  color: completed ? AppColors.success : AppColors.primaryPurple,
+                ),
+              ),
+              AssetAvatar(
+                imageUrl: task.imageUrl,
+                emoji: task.emoji ?? '📋',
+                size: 34,
+                borderRadius: 10,
+                fontSize: 18,
+                defaultIcon: Icons.task_alt_rounded,
+              ),
+            ],
           ),
           title: Text(
             task.title,
@@ -340,7 +356,7 @@ class _TasksScreenState extends State<TasksScreen> {
               ? IconButton(
                   icon: const Icon(Icons.more_horiz_rounded),
                   onPressed: () =>
-                      _openEditor(context, task: task, familyId: familyId),
+                      TaskEditorSheet.show(context, task: task, familyId: familyId),
                 )
               : null,
         ),
@@ -392,8 +408,14 @@ class _TasksScreenState extends State<TasksScreen> {
       ],
     ),
   );
+}
 
-  Future<void> _openEditor(
+class TaskEditorSheet extends StatefulWidget {
+  final TaskModel? task;
+  final String? familyId;
+  const TaskEditorSheet({super.key, this.task, this.familyId});
+
+  static Future<void> show(
     BuildContext context, {
     TaskModel? task,
     String? familyId,
@@ -402,22 +424,18 @@ class _TasksScreenState extends State<TasksScreen> {
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (_) => _TaskEditor(task: task, familyId: familyId),
+      builder: (_) => TaskEditorSheet(task: task, familyId: familyId),
     );
   }
-}
 
-class _TaskEditor extends StatefulWidget {
-  final TaskModel? task;
-  final String? familyId;
-  const _TaskEditor({this.task, this.familyId});
   @override
-  State<_TaskEditor> createState() => _TaskEditorState();
+  State<TaskEditorSheet> createState() => _TaskEditorSheetState();
 }
 
-class _TaskEditorState extends State<_TaskEditor> {
+class _TaskEditorSheetState extends State<TaskEditorSheet> {
   final _service = FirestoreService();
   final _formKey = GlobalKey<FormState>();
+
   late final TextEditingController _title = TextEditingController(
     text: widget.task?.title ?? '',
   );
@@ -432,7 +450,26 @@ class _TaskEditorState extends State<_TaskEditor> {
   late bool _reminder = widget.task?.reminderId != null;
   late String _visibility = widget.task?.visibility ?? 'personal';
   late String? _assignedTo = widget.task?.assignedTo;
+
+  // Live reminder data for edit mode
+  Stream<ReminderModel?>? _reminderStream;
+  ReminderModel? _liveReminder;
+
+  AssetModel? _selectedAsset;
   bool _saving = false;
+  bool _deletingReminder = false;
+
+  @override
+  void initState() {
+    super.initState();
+    // If editing a task that already has a reminder, start streaming it
+    // so we can show live details and react to deletion.
+    final reminderId = widget.task?.reminderId;
+    if (reminderId != null && reminderId.isNotEmpty) {
+      _reminderStream = _service.streamReminder(reminderId);
+    }
+  }
+
   @override
   void dispose() {
     _title.dispose();
@@ -441,123 +478,97 @@ class _TaskEditorState extends State<_TaskEditor> {
   }
 
   @override
-  Widget build(BuildContext context) => SafeArea(
-    top: false,
-    child: Container(
-      height: MediaQuery.sizeOf(context).height * .88,
-      padding: EdgeInsets.fromLTRB(
-        20,
-        14,
-        20,
-        20 + MediaQuery.viewInsetsOf(context).bottom,
-      ),
-      decoration: const BoxDecoration(
-        color: AppColors.scaffoldBg,
-        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
-      ),
-      child: Form(
-        key: _formKey,
-        child: ListView(
-          children: [
-            Center(
-              child: Container(
-                width: 40,
-                height: 4,
-                decoration: BoxDecoration(
-                  color: AppColors.lightLavenderBorder,
-                  borderRadius: BorderRadius.circular(4),
+  Widget build(BuildContext context) {
+    return SafeArea(
+      top: false,
+      child: Container(
+        height: MediaQuery.sizeOf(context).height * .85,
+        padding: EdgeInsets.fromLTRB(
+          20,
+          14,
+          20,
+          20 + MediaQuery.viewInsetsOf(context).bottom,
+        ),
+        decoration: const BoxDecoration(
+          color: AppColors.scaffoldBg,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+        ),
+        child: Form(
+          key: _formKey,
+          child: ListView(
+            children: [
+              Center(
+                child: Container(
+                  width: 40,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: AppColors.lightLavenderBorder,
+                    borderRadius: BorderRadius.circular(4),
+                  ),
                 ),
               ),
-            ),
-            const SizedBox(height: 18),
-            Text(
-              widget.task == null ? 'Create Task' : 'Edit Task',
-              style: GoogleFonts.outfit(
-                fontSize: 22,
-                fontWeight: FontWeight.w800,
-              ),
-            ),
-            const SizedBox(height: 20),
-            _input(
-              _title,
-              'Task title',
-              Icons.task_alt_rounded,
-              required: true,
-            ),
-            const SizedBox(height: 14),
-            StreamBuilder<List<AssetModel>>(
-              stream: _service.streamUserAssets(
-                FirebaseAuth.instance.currentUser!.uid,
-              ),
-              builder: (context, snapshot) => _assetPicker(snapshot.data ?? []),
-            ),
-            const SizedBox(height: 14),
-            Row(
-              children: [
-                Expanded(child: _dateButton()),
-                const SizedBox(width: 10),
-                Expanded(child: _timeButton()),
-              ],
-            ),
-            const SizedBox(height: 14),
-            if (widget.familyId != null && widget.familyId!.isNotEmpty)
-              _visibilityPicker(),
-            if (_visibility == 'assigned') _assigneePicker(),
-            SwitchListTile(
-              contentPadding: EdgeInsets.zero,
-              value: _reminder,
-              activeThumbColor: AppColors.primaryPurple,
-              title: Text(
-                'Add reminder',
-                style: GoogleFonts.outfit(fontWeight: FontWeight.w700),
-              ),
-              subtitle: Text(
-                _reminder
-                    ? 'Smart notification will be scheduled for this task.'
-                    : 'Optional — you can complete this without one.',
+              const SizedBox(height: 18),
+              Text(
+                widget.task == null ? 'Create Task' : 'Edit Task',
                 style: GoogleFonts.outfit(
-                  fontSize: 12,
-                  color: AppColors.textSecondary,
+                  fontSize: 22,
+                  fontWeight: FontWeight.w800,
                 ),
               ),
-              onChanged: (value) => setState(() => _reminder = value),
-            ),
-            const SizedBox(height: 10),
-            _input(
-              _notes,
-              'Notes (optional)',
-              Icons.notes_rounded,
-              maxLines: 3,
-            ),
-            const SizedBox(height: 24),
-            FilledButton(
-              onPressed: _saving ? null : _save,
-              style: FilledButton.styleFrom(
-                backgroundColor: AppColors.primaryPurple,
-                padding: const EdgeInsets.symmetric(vertical: 16),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(16),
+              const SizedBox(height: 20),
+
+              _input(
+                _title,
+                'Task title',
+                Icons.task_alt_rounded,
+                required: true,
+              ),
+              const SizedBox(height: 14),
+              StreamBuilder<List<AssetModel>>(
+                stream: _service.streamUserAssets(
+                  FirebaseAuth.instance.currentUser!.uid,
+                ),
+                builder: (context, snapshot) => _assetPicker(
+                  snapshot.data ?? [],
+                  snapshot.connectionState == ConnectionState.waiting,
                 ),
               ),
-              child: _saving
-                  ? const SizedBox(
-                      height: 22,
-                      width: 22,
-                      child: CircularProgressIndicator(
-                        color: Colors.white,
-                        strokeWidth: 2,
-                      ),
-                    )
-                  : Text(
-                      widget.task == null ? 'Create Task' : 'Save Changes',
-                      style: GoogleFonts.outfit(fontWeight: FontWeight.w800),
-                    ),
-            ),
-          ],
+              const SizedBox(height: 14),
+              Row(
+                children: [
+                  Expanded(child: _dateButton()),
+                  const SizedBox(width: 10),
+                  Expanded(child: _timeButton()),
+                ],
+              ),
+              const SizedBox(height: 14),
+              if (widget.familyId != null && widget.familyId!.isNotEmpty)
+                _visibilityPicker(),
+              if (_visibility == 'assigned') _assigneePicker(),
+              // Reminder toggle + live card
+              _buildReminderSection(),
+
+              _input(
+                _notes,
+                'Notes (optional)',
+                Icons.notes_rounded,
+                maxLines: 3,
+              ),
+              const SizedBox(height: 24),
+
+              // GradientButton ensures vibrant purple color and instant loading state
+              GradientButton(
+                text: widget.task == null ? 'Create Task' : 'Save Changes',
+                isLoading: _saving,
+                onPressed: _save,
+              ),
+              const SizedBox(height: 16),
+            ],
+          ),
         ),
       ),
-    ),
-  );
+    );
+  }
 
   Widget _input(
     TextEditingController controller,
@@ -584,34 +595,93 @@ class _TaskEditorState extends State<_TaskEditor> {
       ),
     ),
   );
-  Widget _assetPicker(List<AssetModel> assets) =>
-      DropdownButtonFormField<String?>(
-        initialValue: _assetId,
-        isExpanded: true,
-        decoration: InputDecoration(
-          labelText: 'Related asset (optional)',
-          prefixIcon: const Icon(Icons.inventory_2_outlined),
-          filled: true,
-          fillColor: Colors.white,
-          border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(16),
-            borderSide: const BorderSide(color: AppColors.inputBorder),
-          ),
+
+  Widget _assetPicker(List<AssetModel> assets, bool isLoading) {
+    if (isLoading && assets.isEmpty) {
+      return Container(
+        height: 58,
+        padding: const EdgeInsets.symmetric(horizontal: 16),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: AppColors.inputBorder),
         ),
-        items: [
-          const DropdownMenuItem(value: null, child: Text('No linked asset')),
-          ...assets.map(
-            (asset) => DropdownMenuItem(
-              value: asset.id,
-              child: Text(
-                '${asset.emoji ?? '📦'} ${asset.name}',
-                overflow: TextOverflow.ellipsis,
-              ),
+        child: Row(
+          children: [
+            const Icon(Icons.inventory_2_outlined, color: AppColors.textSecondary),
+            const SizedBox(width: 12),
+            Text(
+              'Loading assets...',
+              style: GoogleFonts.outfit(color: AppColors.textSecondary),
+            ),
+            const Spacer(),
+            const SizedBox(
+              width: 16,
+              height: 16,
+              child: CircularProgressIndicator(strokeWidth: 2),
+            ),
+          ],
+        ),
+      );
+    }
+
+    final validAssetIds = assets.map((a) => a.id).toSet();
+    final selectedAssetId = (_assetId != null && validAssetIds.contains(_assetId)) ? _assetId : null;
+
+    return DropdownButtonFormField<String?>(
+      initialValue: selectedAssetId,
+      isExpanded: true,
+      decoration: InputDecoration(
+        labelText: 'Related asset (optional)',
+        prefixIcon: const Icon(Icons.inventory_2_outlined),
+        filled: true,
+        fillColor: Colors.white,
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(16),
+          borderSide: const BorderSide(color: AppColors.inputBorder),
+        ),
+      ),
+      items: [
+        const DropdownMenuItem(value: null, child: Text('No linked asset')),
+        ...assets.map(
+          (asset) => DropdownMenuItem(
+            value: asset.id,
+            child: Row(
+              children: [
+                AssetAvatar(
+                  imageUrl: asset.imageUrl,
+                  emoji: asset.emoji,
+                  size: 24,
+                  borderRadius: 6,
+                  fontSize: 14,
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    asset.name,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ],
             ),
           ),
-        ],
-        onChanged: (value) => setState(() => _assetId = value),
-      );
+        ),
+      ],
+      onChanged: (value) => setState(() {
+        _assetId = value;
+        if (value != null) {
+          try {
+            _selectedAsset = assets.firstWhere((a) => a.id == value);
+          } catch (_) {
+            _selectedAsset = null;
+          }
+        } else {
+          _selectedAsset = null;
+        }
+      }),
+    );
+  }
+
   Widget _dateButton() => OutlinedButton.icon(
     onPressed: () async {
       final value = await showDatePicker(
@@ -631,6 +701,7 @@ class _TaskEditorState extends State<_TaskEditor> {
       side: const BorderSide(color: AppColors.inputBorder),
     ),
   );
+
   Widget _timeButton() => OutlinedButton.icon(
     onPressed: () async {
       final value = await showTimePicker(
@@ -648,10 +719,11 @@ class _TaskEditorState extends State<_TaskEditor> {
       side: const BorderSide(color: AppColors.inputBorder),
     ),
   );
+
   Widget _visibilityPicker() => Padding(
     padding: const EdgeInsets.only(bottom: 10),
     child: DropdownButtonFormField<String>(
-      initialValue: _visibility,
+      initialValue: ['personal', 'assigned', 'family'].contains(_visibility) ? _visibility : 'personal',
       decoration: InputDecoration(
         labelText: 'Visibility',
         prefixIcon: const Icon(Icons.visibility_outlined),
@@ -677,14 +749,217 @@ class _TaskEditorState extends State<_TaskEditor> {
     ),
   );
 
+  Widget _buildReminderSection() {
+    final isEditing = widget.task != null;
+    final existingReminderId = widget.task?.reminderId;
+
+    // If editing and already has a reminder, show live card via stream
+    if (isEditing && existingReminderId != null && existingReminderId.isNotEmpty) {
+      return StreamBuilder<ReminderModel?>(
+        stream: _reminderStream,
+        builder: (context, snapshot) {
+          final reminder = snapshot.data;
+
+          // Reminder was deleted remotely — sync local toggle
+          if (snapshot.connectionState != ConnectionState.waiting && reminder == null) {
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (mounted && _reminder) setState(() => _reminder = false);
+            });
+          }
+
+          if (_reminder && reminder != null) {
+            return _reminderCard(reminder, existingReminderId);
+          }
+
+          return _reminderToggle();
+        },
+      );
+    }
+
+    return _reminderToggle();
+  }
+
+  Widget _reminderToggle() {
+    return Column(
+      children: [
+        SwitchListTile(
+          contentPadding: EdgeInsets.zero,
+          value: _reminder,
+          activeThumbColor: AppColors.primaryPurple,
+          title: Text(
+            'Add reminder',
+            style: GoogleFonts.outfit(fontWeight: FontWeight.w700),
+          ),
+          subtitle: Text(
+            _reminder
+                ? 'Smart notification will be scheduled for this task.'
+                : 'Optional — you can complete this without one.',
+            style: GoogleFonts.outfit(
+              fontSize: 12,
+              color: AppColors.textSecondary,
+            ),
+          ),
+          onChanged: (value) => setState(() => _reminder = value),
+        ),
+        const SizedBox(height: 10),
+      ],
+    );
+  }
+
+  Widget _reminderCard(ReminderModel reminder, String reminderId) {
+    final dateStr =
+        '${reminder.reminderDate.day}/${reminder.reminderDate.month}/${reminder.reminderDate.year}';
+    final timeStr = reminder.reminderTime != null
+        ? TimeOfDay.fromDateTime(reminder.reminderTime!).format(context)
+        : null;
+
+    return Column(
+      children: [
+        Container(
+          margin: const EdgeInsets.only(bottom: 10),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          decoration: BoxDecoration(
+            color: const Color(0xFFF1EDFC),
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: const Color(0xFFE2D9F8)),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: AppColors.primaryPurple.withAlpha(30),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: const Icon(
+                      Icons.notifications_active_rounded,
+                      color: AppColors.primaryPurple,
+                      size: 20,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Reminder set',
+                          style: GoogleFonts.outfit(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w700,
+                            color: AppColors.textPrimary,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          timeStr != null ? '$dateStr · $timeStr' : dateStr,
+                          style: GoogleFonts.outfit(
+                            fontSize: 12,
+                            color: AppColors.textSecondary,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 10),
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton.icon(
+                  onPressed:
+                      _deletingReminder ? null : () => _deleteReminder(reminderId),
+                  icon: _deletingReminder
+                      ? const SizedBox(
+                          width: 14,
+                          height: 14,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: AppColors.error,
+                          ),
+                        )
+                      : const Icon(
+                          Icons.delete_outline_rounded,
+                          size: 18,
+                          color: AppColors.error,
+                        ),
+                  label: Text(
+                    'Delete Reminder',
+                    style: GoogleFonts.outfit(
+                      fontWeight: FontWeight.w600,
+                      color: AppColors.error,
+                    ),
+                  ),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: AppColors.error,
+                    side: const BorderSide(color: AppColors.error),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    padding: const EdgeInsets.symmetric(vertical: 10),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 10),
+      ],
+    );
+  }
+
+  Future<void> _deleteReminder(String reminderId) async {
+    final taskId = widget.task?.id;
+    if (taskId == null || taskId.isEmpty) return;
+    setState(() => _deletingReminder = true);
+    try {
+      await _service.deleteReminderOnly(reminderId, taskId);
+      if (!mounted) return;
+      setState(() {
+        _deletingReminder = false;
+        _reminder = false;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Reminder deleted',
+            style: GoogleFonts.outfit(),
+          ),
+          backgroundColor: AppColors.success,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    } catch (e) {
+      debugPrint('Error deleting reminder: $e');
+      if (!mounted) return;
+      setState(() => _deletingReminder = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Failed to delete reminder. Please try again.',
+            style: GoogleFonts.outfit(),
+          ),
+          backgroundColor: AppColors.error,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    }
+  }
+
   Widget _assigneePicker() => StreamBuilder<List<UserModel>>(
     stream: _service.streamFamilyMembers(widget.familyId!),
     builder: (context, snapshot) {
       final members = snapshot.data ?? [];
+      final validUids = members.map((m) => m.id).toSet();
+      final selectedAssignee = (_assignedTo != null && validUids.contains(_assignedTo)) ? _assignedTo : null;
+
       return Padding(
         padding: const EdgeInsets.only(bottom: 10),
         child: DropdownButtonFormField<String>(
-          initialValue: _assignedTo,
+          initialValue: selectedAssignee,
           validator: (value) => value == null ? 'Choose an assignee' : null,
           decoration: InputDecoration(
             labelText: 'Assign to',
@@ -727,6 +1002,7 @@ class _TaskEditorState extends State<_TaskEditor> {
             _dueTime!.minute,
           );
     final existing = widget.task;
+
     final task = TaskModel(
       id: existing?.id ?? '',
       familyId: _visibility == 'personal' ? null : widget.familyId,
@@ -734,6 +1010,8 @@ class _TaskEditorState extends State<_TaskEditor> {
       assignedTo: _visibility == 'assigned' ? _assignedTo : null,
       visibility: _visibility,
       title: _title.text.trim(),
+      emoji: _selectedAsset?.emoji ?? existing?.emoji,
+      imageUrl: _selectedAsset?.imageUrl ?? existing?.imageUrl,
       assetId: _assetId,
       dueDate: _dueDate,
       dueTime: dueTime,
@@ -743,6 +1021,7 @@ class _TaskEditorState extends State<_TaskEditor> {
       createdAt: existing?.createdAt ?? now,
       updatedAt: now,
     );
+
     final reminder = _reminder
         ? ReminderModel(
             id: existing?.reminderId ?? '',
@@ -755,25 +1034,26 @@ class _TaskEditorState extends State<_TaskEditor> {
             updatedAt: now,
           )
         : null;
+
     try {
       if (existing == null) {
         await _service.createTask(task, reminder: reminder);
       } else {
         await _service.updateTask(task, reminder: reminder);
       }
-      if (mounted) {
-        Navigator.pop(context);
-      }
-    } catch (_) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Could not save task. Please try again.'),
-          ),
-        );
-      }
-    } finally {
-      if (mounted) setState(() => _saving = false);
+      if (!mounted) return;
+      setState(() => _saving = false);
+      Navigator.pop(context);
+    } catch (e) {
+      debugPrint('Error saving task: $e');
+      if (!mounted) return;
+      setState(() => _saving = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Failed to save task. Please try again.'),
+        ),
+      );
     }
   }
 }
+

@@ -39,6 +39,8 @@ class _EditAssetScreenState extends State<EditAssetScreen> {
   late final TextEditingController _descriptionController;
 
   late String _selectedEmoji;
+  String? _existingImageUrl;
+  File? _newPrimaryImage;
   String? _selectedCategoryId;
   late bool _qrEnabled;
   bool _isSaving = false;
@@ -56,16 +58,8 @@ class _EditAssetScreenState extends State<EditAssetScreen> {
   final StorageService _storageService = StorageService();
   final ImagePicker _imagePicker = ImagePicker();
 
-  // Cached once — see AddAssetScreen for why this must not be created
-  // inline inside build().
   late final Stream<List<CategoryModel>> _categoriesStream;
   late final Stream<List<DocumentModel>> _documentsStream;
-
-  final List<String> _emojis = [
-    '📦', '💻', '📱', '🚗', '🏠', '📺', '⌚', '📄', '💎', '🎮',
-    '🛠️', '🚲', '🎸', '✈️', '💼', '👜', '📷', '🎧', '🔋', '🔑',
-    '🎨', '👟', '💍', '📚'
-  ];
 
   @override
   void initState() {
@@ -75,6 +69,7 @@ class _EditAssetScreenState extends State<EditAssetScreen> {
     _locationController = TextEditingController(text: asset.location ?? '');
     _descriptionController = TextEditingController(text: asset.description ?? '');
     _selectedEmoji = asset.emoji ?? '📦';
+    _existingImageUrl = asset.imageUrl;
     _selectedCategoryId = asset.categoryId;
     _qrEnabled = asset.qrEnabled;
     _customFields = asset.customFields.entries
@@ -90,6 +85,109 @@ class _EditAssetScreenState extends State<EditAssetScreen> {
     _locationController.dispose();
     _descriptionController.dispose();
     super.dispose();
+  }
+
+  Future<void> _pickPrimaryImage(ImageSource source) async {
+    try {
+      final picked = await _imagePicker.pickImage(source: source, imageQuality: 85, maxWidth: 1024);
+      if (picked != null) {
+        setState(() {
+          _newPrimaryImage = File(picked.path);
+        });
+      }
+    } catch (e) {
+      _showSnackBar('Failed to pick image: $e', isError: true);
+    }
+  }
+
+  void _showPrimaryImageSourcePicker() {
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
+      builder: (context) {
+        return Container(
+          padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('Asset Photo',
+                  style: GoogleFonts.outfit(fontSize: 18, fontWeight: FontWeight.w700, color: AppColors.textPrimary)),
+              const SizedBox(height: 16),
+              ListTile(
+                leading: Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(color: AppColors.primaryPurple.withAlpha(20), borderRadius: BorderRadius.circular(10)),
+                  child: const Icon(Icons.camera_alt_rounded, color: AppColors.primaryPurple),
+                ),
+                title: Text('Take Photo', style: GoogleFonts.outfit(fontWeight: FontWeight.w600)),
+                onTap: () {
+                  Navigator.pop(context);
+                  _pickPrimaryImage(ImageSource.camera);
+                },
+              ),
+              ListTile(
+                leading: Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(color: AppColors.primaryBlue.withAlpha(20), borderRadius: BorderRadius.circular(10)),
+                  child: const Icon(Icons.photo_library_rounded, color: AppColors.primaryBlue),
+                ),
+                title: Text('Choose from Gallery', style: GoogleFonts.outfit(fontWeight: FontWeight.w600)),
+                onTap: () {
+                  Navigator.pop(context);
+                  _pickPrimaryImage(ImageSource.gallery);
+                },
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  void _showEmojiPicker() {
+    final emojis = [
+      '📦', '💻', '📱', '🚗', '🏠', '📺', '⌚', '📄', '💎', '🎮',
+      '🛠️', '🚲', '🎸', '✈️', '💼', '👜', '📷', '🎧', '🔋', '🔑',
+      '🎨', '👟', '💍', '📚'
+    ];
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
+      builder: (context) {
+        return Container(
+          padding: const EdgeInsets.all(20),
+          child: GridView.builder(
+            shrinkWrap: true,
+            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: 6,
+              mainAxisSpacing: 12,
+              crossAxisSpacing: 12,
+            ),
+            itemCount: emojis.length,
+            itemBuilder: (context, index) {
+              final em = emojis[index];
+              return InkWell(
+                onTap: () {
+                  setState(() => _selectedEmoji = em);
+                  Navigator.pop(context);
+                },
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: em == _selectedEmoji ? AppColors.primaryPurple.withAlpha(25) : AppColors.scaffoldBg,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                      color: em == _selectedEmoji ? AppColors.primaryPurple : const Color(0xFFE4DFEE),
+                    ),
+                  ),
+                  child: Center(child: Text(em, style: const TextStyle(fontSize: 24))),
+                ),
+              );
+            },
+          ),
+        );
+      },
+    );
   }
 
   Future<void> _pickImage(ImageSource source) async {
@@ -220,17 +318,29 @@ class _EditAssetScreenState extends State<EditAssetScreen> {
                     final name = nameCtrl.text.trim();
                     final user = FirebaseAuth.instance.currentUser;
                     if (name.isNotEmpty && user != null) {
-                      final newCat = CategoryModel(
-                        id: '',
-                        ownerId: user.uid,
-                        name: name,
-                        emoji: catEmoji,
-                        createdAt: DateTime.now(),
-                        updatedAt: DateTime.now(),
-                      );
-                      final catId = await _firestoreService.addCategory(newCat);
-                      setState(() => _selectedCategoryId = catId);
-                      if (context.mounted) Navigator.pop(context);
+                      try {
+                        final newCat = CategoryModel(
+                          id: '',
+                          ownerId: user.uid,
+                          name: name,
+                          emoji: catEmoji,
+                          createdAt: DateTime.now(),
+                          updatedAt: DateTime.now(),
+                        );
+                        final catId = await _firestoreService.addCategory(newCat);
+                        if (!context.mounted) return;
+                        setState(() => _selectedCategoryId = catId);
+                        Navigator.pop(context);
+                      } catch (e) {
+                        debugPrint('Error creating category: $e');
+                        if (context.mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text('Failed to create category. Please try again.'),
+                            ),
+                          );
+                        }
+                      }
                     }
                   },
                   style: ElevatedButton.styleFrom(
@@ -333,9 +443,10 @@ class _EditAssetScreenState extends State<EditAssetScreen> {
         await _storageService.deleteFile(doc.storagePath);
         await _firestoreService.deleteDocument(doc.id);
       } catch (e) {
+        debugPrint('Error removing document: $e');
         if (mounted) {
           setState(() => _pendingDeleteDocIds.remove(doc.id));
-          _showSnackBar('Failed to remove document: $e', isError: true);
+          _showSnackBar('Failed to remove document. Please try again.', isError: true);
         }
       }
     }
@@ -358,11 +469,13 @@ class _EditAssetScreenState extends State<EditAssetScreen> {
       }
 
       final now = DateTime.now();
+
       final updatedAsset = AssetModel(
         id: widget.asset.id,
         ownerId: widget.asset.ownerId,
         name: _nameController.text.trim(),
         emoji: _selectedEmoji,
+        imageUrl: _existingImageUrl,
         categoryId: _selectedCategoryId,
         location: _locationController.text.trim().isNotEmpty ? _locationController.text.trim() : null,
         description: _descriptionController.text.trim().isNotEmpty ? _descriptionController.text.trim() : null,
@@ -372,47 +485,79 @@ class _EditAssetScreenState extends State<EditAssetScreen> {
         updatedAt: now,
       );
 
+      // 1. Update asset in Firestore - must succeed before we navigate
       await _firestoreService.updateAsset(updatedAsset);
 
-      // Upload any newly attached documents.
+      // 2. Upload new cover photo in background if selected
+      if (_newPrimaryImage != null) {
+        _storageService
+            .uploadAssetImage(
+              userId: user.uid,
+              assetId: widget.asset.id,
+              filePath: _newPrimaryImage!.path,
+            )
+            .then((uploadRes) {
+              final url = uploadRes['url'];
+              if (url != null && url.isNotEmpty) {
+                _firestoreService.updateAsset(
+                  updatedAsset.copyWith(imageUrl: url),
+                );
+              }
+            })
+            .catchError((e) {
+              debugPrint('Background update cover photo failed: $e');
+            });
+      }
+
+      // 3. Upload any newly attached documents in background
       for (var file in _newFiles) {
         final rawName = file.path.split('/').last.split('\\').last;
         final extension = rawName.split('.').last.toLowerCase();
-        try {
-          final uploadResult = await _storageService.uploadAssetDocument(
-            userId: user.uid,
-            assetId: widget.asset.id,
-            filePath: file.path,
-            fileName: rawName,
-          );
-          final docModel = DocumentModel(
-            id: '',
-            ownerId: user.uid,
-            assetId: widget.asset.id,
-            fileUrl: uploadResult['url'] ?? '',
-            storagePath: uploadResult['path'] ?? '',
-            fileName: rawName,
-            fileType: extension,
-            createdAt: now,
-            updatedAt: now,
-          );
-          await _firestoreService.addDocument(docModel);
-        } catch (e) {
-          _showSnackBar('Failed to upload file $rawName: $e', isError: true);
-        }
+        _storageService
+            .uploadAssetDocument(
+              userId: user.uid,
+              assetId: widget.asset.id,
+              filePath: file.path,
+              fileName: rawName,
+            )
+            .then((uploadResult) {
+              final docModel = DocumentModel(
+                id: '',
+                ownerId: user.uid,
+                assetId: widget.asset.id,
+                fileUrl: uploadResult['url'] ?? '',
+                storagePath: uploadResult['path'] ?? '',
+                fileName: rawName,
+                fileType: extension,
+                createdAt: now,
+                updatedAt: now,
+              );
+              _firestoreService.addDocument(docModel);
+            })
+            .catchError((e) {
+              debugPrint('Failed to upload file $rawName: $e');
+            });
       }
 
-      _showSnackBar('Asset updated successfully!');
-      if (mounted) Navigator.pop(context);
+      if (!mounted) return;
+
+      setState(() => _isSaving = false);
+
+      Navigator.pop(context);
     } catch (e) {
-      _showSnackBar('Failed to update asset: $e', isError: true);
-    } finally {
-      if (mounted) setState(() => _isSaving = false);
+      debugPrint('Error updating asset: $e');
+      if (!mounted) return;
+
+      setState(() => _isSaving = false);
+
+      _showSnackBar('Failed to save changes. Please try again.', isError: true);
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    final hasPhoto = _newPrimaryImage != null || (_existingImageUrl != null && _existingImageUrl!.isNotEmpty);
+
     return Scaffold(
       backgroundColor: AppColors.scaffoldBg,
       appBar: AppBar(
@@ -433,39 +578,148 @@ class _EditAssetScreenState extends State<EditAssetScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Emoji Picker
-              Text('Asset Emoji',
-                  style: GoogleFonts.outfit(fontWeight: FontWeight.w600, fontSize: 13, color: AppColors.textSecondary)),
+              // Photo & Emoji Selection
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text('Asset Photo & Emoji',
+                      style: GoogleFonts.outfit(fontWeight: FontWeight.w600, fontSize: 13, color: AppColors.textSecondary)),
+                  if (hasPhoto)
+                    Text('Photo active (Emoji optional)',
+                        style: GoogleFonts.outfit(fontWeight: FontWeight.w600, fontSize: 12, color: AppColors.primaryPurple)),
+                ],
+              ),
               const SizedBox(height: 8),
-              SizedBox(
-                height: 48,
-                child: ListView.separated(
-                  scrollDirection: Axis.horizontal,
-                  physics: const BouncingScrollPhysics(),
-                  itemCount: _emojis.length,
-                  separatorBuilder: (context, index) => const SizedBox(width: 8),
-                  itemBuilder: (context, index) {
-                    final em = _emojis[index];
-                    final isSelected = em == _selectedEmoji;
-                    return GestureDetector(
-                      onTap: () => setState(() => _selectedEmoji = em),
-                      child: AnimatedContainer(
-                        duration: const Duration(milliseconds: 150),
-                        width: 48,
-                        decoration: BoxDecoration(
-                          color: isSelected ? AppColors.primaryPurple.withAlpha(20) : Colors.white,
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(
-                            color: isSelected ? AppColors.primaryPurple : const Color(0xFFE4DFEE),
-                            width: isSelected ? 2 : 1.2,
+
+              if (hasPhoto) ...[
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(color: AppColors.primaryPurple.withAlpha(80), width: 1.5),
+                  ),
+                  child: Row(
+                    children: [
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(12),
+                        child: _newPrimaryImage != null
+                            ? Image.file(_newPrimaryImage!, width: 56, height: 56, fit: BoxFit.cover)
+                            : Image.network(_existingImageUrl!, width: 56, height: 56, fit: BoxFit.cover),
+                      ),
+                      const SizedBox(width: 14),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Asset Photo',
+                              style: GoogleFonts.outfit(fontWeight: FontWeight.w700, fontSize: 14, color: AppColors.textPrimary),
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              'Displayed instead of emoji.',
+                              style: GoogleFonts.outfit(fontSize: 11, color: AppColors.textSecondary),
+                            ),
+                          ],
+                        ),
+                      ),
+                      IconButton(
+                        tooltip: 'Change photo',
+                        icon: const Icon(Icons.edit_outlined, color: AppColors.primaryPurple, size: 20),
+                        onPressed: _showPrimaryImageSourcePicker,
+                      ),
+                      IconButton(
+                        tooltip: 'Remove photo',
+                        icon: const Icon(Icons.delete_outline_rounded, color: AppColors.error, size: 20),
+                        onPressed: () {
+                          setState(() {
+                            _newPrimaryImage = null;
+                            _existingImageUrl = null;
+                          });
+                        },
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 10),
+                InkWell(
+                  onTap: _showEmojiPicker,
+                  borderRadius: BorderRadius.circular(12),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+                    child: Row(
+                      children: [
+                        Text(_selectedEmoji, style: const TextStyle(fontSize: 18)),
+                        const SizedBox(width: 8),
+                        Text(
+                          'Fallback emoji: $_selectedEmoji (tap to change)',
+                          style: GoogleFonts.outfit(fontSize: 12, color: AppColors.textSecondary),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ] else ...[
+                Row(
+                  children: [
+                    Expanded(
+                      flex: 3,
+                      child: InkWell(
+                        onTap: _showEmojiPicker,
+                        borderRadius: BorderRadius.circular(14),
+                        child: Container(
+                          height: 58,
+                          padding: const EdgeInsets.symmetric(horizontal: 14),
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(14),
+                            border: Border.all(color: const Color(0xFFE4DFEE)),
+                          ),
+                          child: Row(
+                            children: [
+                              Text(_selectedEmoji, style: const TextStyle(fontSize: 28)),
+                              const SizedBox(width: 10),
+                              Expanded(
+                                child: Text('Choose Emoji',
+                                    style: GoogleFonts.outfit(fontWeight: FontWeight.w600, color: AppColors.textPrimary)),
+                              ),
+                              const Icon(Icons.emoji_emotions_outlined, color: AppColors.primaryPurple, size: 20),
+                            ],
                           ),
                         ),
-                        child: Center(child: Text(em, style: const TextStyle(fontSize: 22))),
                       ),
-                    );
-                  },
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      flex: 2,
+                      child: InkWell(
+                        onTap: _showPrimaryImageSourcePicker,
+                        borderRadius: BorderRadius.circular(14),
+                        child: Container(
+                          height: 58,
+                          padding: const EdgeInsets.symmetric(horizontal: 10),
+                          decoration: BoxDecoration(
+                            color: AppColors.primaryPurple.withAlpha(12),
+                            borderRadius: BorderRadius.circular(14),
+                            border: Border.all(color: AppColors.primaryPurple.withAlpha(60)),
+                          ),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              const Icon(Icons.add_a_photo_outlined, color: AppColors.primaryPurple, size: 18),
+                              const SizedBox(width: 6),
+                              Text('Add Photo',
+                                  style: GoogleFonts.outfit(
+                                      fontWeight: FontWeight.w700, fontSize: 13, color: AppColors.primaryPurple)),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
-              ),
+              ],
               const SizedBox(height: 20),
 
               // Asset Name

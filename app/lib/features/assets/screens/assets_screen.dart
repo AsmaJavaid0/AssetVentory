@@ -5,8 +5,8 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/utils/wave_clipper.dart';
-import '../../../core/widgets/custom_button.dart';
 import '../../../core/widgets/custom_text_field.dart';
+import '../../../core/widgets/asset_avatar.dart';
 import '../models/asset_model.dart';
 import '../models/category_model.dart';
 import '../../auth/services/firestore_service.dart';
@@ -157,20 +157,30 @@ class _AssetsScreenState extends State<AssetsScreen> {
                   onPressed: () async {
                     final name = nameCtrl.text.trim();
                     if (name.isNotEmpty) {
-                      final newCat = CategoryModel(
-                        id: '',
-                        ownerId: user.uid,
-                        name: name,
-                        emoji: catEmoji,
-                        createdAt: DateTime.now(),
-                        updatedAt: DateTime.now(),
-                      );
-                      final catId = await _firestoreService.addCategory(newCat);
-                      setState(() {
-                        _selectedCategoryId = catId;
-                      });
-                      if (context.mounted) {
+                      try {
+                        final newCat = CategoryModel(
+                          id: '',
+                          ownerId: user.uid,
+                          name: name,
+                          emoji: catEmoji,
+                          createdAt: DateTime.now(),
+                          updatedAt: DateTime.now(),
+                        );
+                        final catId = await _firestoreService.addCategory(newCat);
+                        if (!context.mounted) return;
+                        setState(() {
+                          _selectedCategoryId = catId;
+                        });
                         Navigator.pop(context);
+                      } catch (e) {
+                        debugPrint('Error creating category: $e');
+                        if (context.mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text('Failed to create category. Please try again.'),
+                            ),
+                          );
+                        }
                       }
                     }
                   },
@@ -712,7 +722,7 @@ class _AssetsScreenState extends State<AssetsScreen> {
             Text(
               isSearching
                   ? 'Try adjusting your search query or choosing a different category.'
-                  : 'Add your first asset to start organizing your important belongings.',
+                  : 'Tap the "+" button below to add your first asset.',
               textAlign: TextAlign.center,
               style: GoogleFonts.outfit(
                 fontSize: 13,
@@ -720,16 +730,6 @@ class _AssetsScreenState extends State<AssetsScreen> {
                 height: 1.4,
               ),
             ),
-            if (!isSearching) ...[
-              const SizedBox(height: 20),
-              SizedBox(
-                width: 160,
-                child: GradientButton(
-                  text: 'Add Asset',
-                  onPressed: () => AddQuickAssetSheet.show(context),
-                ),
-              ),
-            ],
           ],
         ),
       ),
@@ -786,19 +786,12 @@ class _AssetsScreenState extends State<AssetsScreen> {
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Container(
-                      width: 38,
-                      height: 38,
-                      decoration: BoxDecoration(
-                        color: AppColors.primaryPurple.withAlpha(20),
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                      child: Center(
-                        child: Text(
-                          asset.emoji ?? '📦',
-                          style: const TextStyle(fontSize: 20),
-                        ),
-                      ),
+                    AssetAvatar(
+                      imageUrl: asset.imageUrl,
+                      emoji: asset.emoji,
+                      size: 38,
+                      borderRadius: 10,
+                      fontSize: 20,
                     ),
                     // Linked indicators (custom fields and QR).
                     Row(

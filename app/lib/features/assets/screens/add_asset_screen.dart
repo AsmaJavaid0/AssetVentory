@@ -38,6 +38,7 @@ class _AddAssetScreenState extends State<AddAssetScreen> {
   final _descriptionController = TextEditingController();
 
   String _selectedEmoji = '📦';
+  File? _primaryImage;
   String? _selectedCategoryId; // Nullable if no category
   bool _qrEnabled = false;
   bool _isLoading = false;
@@ -49,39 +50,7 @@ class _AddAssetScreenState extends State<AddAssetScreen> {
   final StorageService _storageService = StorageService();
   final ImagePicker _imagePicker = ImagePicker();
 
-  // Cached once instead of being called inline inside build(), where every
-  // setState (picking an emoji, adding a custom field, toggling QR, etc.)
-  // would otherwise create a brand-new Stream and force this listener to
-  // reconnect from scratch on every keystroke/tap.
   late final Stream<List<CategoryModel>> _categoriesStream;
-
-  // ignore: unused_field
-  final List<String> _emojis = [
-    '📦',
-    '💻',
-    '📱',
-    '🚗',
-    '🏠',
-    '📺',
-    '⌚',
-    '📄',
-    '💎',
-    '🎮',
-    '🛠️',
-    '🚲',
-    '🎸',
-    '✈️',
-    '💼',
-    '👜',
-    '📷',
-    '🎧',
-    '🔋',
-    '🔑',
-    '🎨',
-    '👟',
-    '💍',
-    '📚',
-  ];
 
   @override
   void initState() {
@@ -99,7 +68,96 @@ class _AddAssetScreenState extends State<AddAssetScreen> {
     super.dispose();
   }
 
-  // Pick Image from Gallery or Camera
+  // Pick Main Asset Photo
+  Future<void> _pickPrimaryImage(ImageSource source) async {
+    try {
+      final picked = await _imagePicker.pickImage(
+        source: source,
+        imageQuality: 85,
+        maxWidth: 1024,
+      );
+      if (picked != null) {
+        setState(() {
+          _primaryImage = File(picked.path);
+        });
+      }
+    } catch (e) {
+      _showSnackBar('Failed to pick asset photo: $e', isError: true);
+    }
+  }
+
+  void _showPrimaryImageSourcePicker() {
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (context) {
+        return Container(
+          padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Asset Photo',
+                style: GoogleFonts.outfit(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.textPrimary,
+                ),
+              ),
+              const SizedBox(height: 16),
+              ListTile(
+                leading: Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: AppColors.primaryPurple.withAlpha(20),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: const Icon(
+                    Icons.camera_alt_rounded,
+                    color: AppColors.primaryPurple,
+                  ),
+                ),
+                title: Text(
+                  'Take Photo',
+                  style: GoogleFonts.outfit(fontWeight: FontWeight.w600),
+                ),
+                onTap: () {
+                  Navigator.pop(context);
+                  _pickPrimaryImage(ImageSource.camera);
+                },
+              ),
+              ListTile(
+                leading: Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: AppColors.primaryBlue.withAlpha(20),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: const Icon(
+                    Icons.photo_library_rounded,
+                    color: AppColors.primaryBlue,
+                  ),
+                ),
+                title: Text(
+                  'Choose from Gallery',
+                  style: GoogleFonts.outfit(fontWeight: FontWeight.w600),
+                ),
+                onTap: () {
+                  Navigator.pop(context);
+                  _pickPrimaryImage(ImageSource.gallery);
+                },
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  // Pick Document File / Additional Attachments
   Future<void> _pickImage(ImageSource source) async {
     try {
       final pickedFile = await _imagePicker.pickImage(
@@ -116,7 +174,6 @@ class _AddAssetScreenState extends State<AddAssetScreen> {
     }
   }
 
-  // Pick Document File
   Future<void> _pickFile() async {
     try {
       final file = await FilePicker.pickFile(
@@ -337,20 +394,30 @@ class _AddAssetScreenState extends State<AddAssetScreen> {
                     final name = nameCtrl.text.trim();
                     final user = FirebaseAuth.instance.currentUser;
                     if (name.isNotEmpty && user != null) {
-                      final newCat = CategoryModel(
-                        id: '',
-                        ownerId: user.uid,
-                        name: name,
-                        emoji: catEmoji,
-                        createdAt: DateTime.now(),
-                        updatedAt: DateTime.now(),
-                      );
-                      final catId = await _firestoreService.addCategory(newCat);
-                      setState(() {
-                        _selectedCategoryId = catId;
-                      });
-                      if (context.mounted) {
+                      try {
+                        final newCat = CategoryModel(
+                          id: '',
+                          ownerId: user.uid,
+                          name: name,
+                          emoji: catEmoji,
+                          createdAt: DateTime.now(),
+                          updatedAt: DateTime.now(),
+                        );
+                        final catId = await _firestoreService.addCategory(newCat);
+                        if (!context.mounted) return;
+                        setState(() {
+                          _selectedCategoryId = catId;
+                        });
                         Navigator.pop(context);
+                      } catch (e) {
+                        debugPrint('Error creating category: $e');
+                        if (context.mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text('Failed to create category. Please try again.'),
+                            ),
+                          );
+                        }
                       }
                     }
                   },
@@ -488,11 +555,13 @@ class _AddAssetScreenState extends State<AddAssetScreen> {
       }
 
       final now = DateTime.now();
+
       final newAsset = AssetModel(
         id: '',
         ownerId: user.uid,
         name: _nameController.text.trim(),
-        emoji: _selectedEmoji,
+        emoji: _primaryImage != null && _selectedEmoji.isEmpty ? null : _selectedEmoji,
+        imageUrl: null,
         categoryId: _selectedCategoryId,
         location: _locationController.text.trim().isNotEmpty
             ? _locationController.text.trim()
@@ -509,52 +578,72 @@ class _AddAssetScreenState extends State<AddAssetScreen> {
       // 2. Add Asset to Firestore
       final assetId = await _firestoreService.addAsset(newAsset);
 
-      // The asset is safely created at this point, so return to the list
-      // immediately. Previously the screen stayed in its loading state until
-      // every selected attachment had uploaded, which can take a long time on
-      // a slow connection.
-      if (mounted) {
-        Navigator.of(context).pop();
+      // 3. Background upload for primary cover image if selected
+      if (_primaryImage != null) {
+        _storageService
+            .uploadAssetImage(
+              userId: user.uid,
+              assetId: assetId,
+              filePath: _primaryImage!.path,
+            )
+            .then((uploadRes) {
+              final url = uploadRes['url'];
+              if (url != null && url.isNotEmpty) {
+                _firestoreService.updateAsset(
+                  newAsset.copyWith(id: assetId, imageUrl: url),
+                );
+              }
+            })
+            .catchError((e) {
+              debugPrint('Background asset cover image upload failed: $e');
+            });
       }
 
-      // 3. Upload documents (if any) and write metadata to Firestore in the
-      // background. The new asset is already visible in the previous screen.
-      for (var file in _selectedFiles) {
-        final rawName = file.path.split('/').last.split('\\').last;
-        final extension = rawName.split('.').last.toLowerCase();
+      // 4. Background upload for any extra document attachments
+      if (_selectedFiles.isNotEmpty) {
+        for (var file in _selectedFiles) {
+          final rawName = file.path.split('/').last.split('\\').last;
+          final extension = rawName.split('.').last.toLowerCase();
 
-        try {
-          // Upload to Storage
-          final uploadResult = await _storageService.uploadAssetDocument(
-            userId: user.uid,
-            assetId: assetId,
-            filePath: file.path,
-            fileName: rawName,
-          );
-
-          // Save metadata
-          final docModel = DocumentModel(
-            id: '',
-            ownerId: user.uid,
-            assetId: assetId,
-            fileUrl: uploadResult['url'] ?? '',
-            storagePath: uploadResult['path'] ?? '',
-            fileName: rawName,
-            fileType: extension,
-            createdAt: now,
-            updatedAt: now,
-          );
-          await _firestoreService.addDocument(docModel);
-        } catch (e) {
-          _showSnackBar('Failed to upload file $rawName: $e', isError: true);
+          _storageService
+              .uploadAssetDocument(
+                userId: user.uid,
+                assetId: assetId,
+                filePath: file.path,
+                fileName: rawName,
+              )
+              .then((uploadResult) {
+                final docModel = DocumentModel(
+                  id: '',
+                  ownerId: user.uid,
+                  assetId: assetId,
+                  fileUrl: uploadResult['url'] ?? '',
+                  storagePath: uploadResult['path'] ?? '',
+                  fileName: rawName,
+                  fileType: extension,
+                  createdAt: now,
+                  updatedAt: now,
+                );
+                _firestoreService.addDocument(docModel);
+              })
+              .catchError((e) {
+                debugPrint('Background file upload failed for $rawName: $e');
+              });
         }
       }
+
+      if (!mounted) return;
+
+      setState(() => _isLoading = false);
+
+      Navigator.of(context).pop();
     } catch (e) {
-      _showSnackBar('Failed to create asset: $e', isError: true);
-    } finally {
-      if (mounted) {
-        setState(() => _isLoading = false);
-      }
+      debugPrint('Error saving asset: $e');
+      if (!mounted) return;
+
+      setState(() => _isLoading = false);
+
+      _showSnackBar('Failed to save asset. Please try again.', isError: true);
     }
   }
 
@@ -593,51 +682,221 @@ class _AddAssetScreenState extends State<AddAssetScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // Emoji Picker Section
-                    Text(
-                      'Asset Emoji',
-                      style: GoogleFonts.outfit(
-                        fontWeight: FontWeight.w600,
-                        fontSize: 13,
-                        color: AppColors.textSecondary,
-                      ),
+                    // Asset Icon & Photo Section
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          'Asset Photo & Emoji',
+                          style: GoogleFonts.outfit(
+                            fontWeight: FontWeight.w600,
+                            fontSize: 13,
+                            color: AppColors.textSecondary,
+                          ),
+                        ),
+                        if (_primaryImage != null)
+                          Text(
+                            'Photo active (Emoji optional)',
+                            style: GoogleFonts.outfit(
+                              fontWeight: FontWeight.w600,
+                              fontSize: 12,
+                              color: AppColors.primaryPurple,
+                            ),
+                          ),
+                      ],
                     ),
                     const SizedBox(height: 8),
-                    InkWell(
-                      onTap: _showEmojiPicker,
-                      borderRadius: BorderRadius.circular(14),
-                      child: Container(
-                        height: 58,
-                        padding: const EdgeInsets.symmetric(horizontal: 14),
+
+                    if (_primaryImage != null) ...[
+                      // Uploaded Image View Card
+                      Container(
+                        padding: const EdgeInsets.all(12),
                         decoration: BoxDecoration(
                           color: Colors.white,
-                          borderRadius: BorderRadius.circular(14),
-                          border: Border.all(color: const Color(0xFFE4DFEE)),
+                          borderRadius: BorderRadius.circular(16),
+                          border: Border.all(
+                            color: AppColors.primaryPurple.withAlpha(80),
+                            width: 1.5,
+                          ),
                         ),
                         child: Row(
                           children: [
-                            Text(
-                              _selectedEmoji,
-                              style: const TextStyle(fontSize: 28),
-                            ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: Text(
-                                'Choose an emoji',
-                                style: GoogleFonts.outfit(
-                                  fontWeight: FontWeight.w600,
-                                  color: AppColors.textPrimary,
-                                ),
+                            ClipRRect(
+                              borderRadius: BorderRadius.circular(12),
+                              child: Image.file(
+                                _primaryImage!,
+                                width: 56,
+                                height: 56,
+                                fit: BoxFit.cover,
                               ),
                             ),
-                            const Icon(
-                              Icons.emoji_emotions_outlined,
-                              color: AppColors.primaryPurple,
+                            const SizedBox(width: 14),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    'Asset Photo Selected',
+                                    style: GoogleFonts.outfit(
+                                      fontWeight: FontWeight.w700,
+                                      fontSize: 14,
+                                      color: AppColors.textPrimary,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    'This image will be displayed instead of an emoji.',
+                                    style: GoogleFonts.outfit(
+                                      fontSize: 11,
+                                      color: AppColors.textSecondary,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            IconButton(
+                              tooltip: 'Change photo',
+                              icon: const Icon(
+                                Icons.edit_outlined,
+                                color: AppColors.primaryPurple,
+                                size: 20,
+                              ),
+                              onPressed: _showPrimaryImageSourcePicker,
+                            ),
+                            IconButton(
+                              tooltip: 'Remove photo',
+                              icon: const Icon(
+                                Icons.delete_outline_rounded,
+                                color: AppColors.error,
+                                size: 20,
+                              ),
+                              onPressed: () {
+                                setState(() => _primaryImage = null);
+                              },
                             ),
                           ],
                         ),
                       ),
-                    ),
+                      const SizedBox(height: 10),
+                      // Optional emoji toggle when image is present
+                      InkWell(
+                        onTap: _showEmojiPicker,
+                        borderRadius: BorderRadius.circular(12),
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 4,
+                            vertical: 4,
+                          ),
+                          child: Row(
+                            children: [
+                              Text(_selectedEmoji, style: const TextStyle(fontSize: 18)),
+                              const SizedBox(width: 8),
+                              Text(
+                                'Optional fallback emoji: $_selectedEmoji (tap to change)',
+                                style: GoogleFonts.outfit(
+                                  fontSize: 12,
+                                  color: AppColors.textSecondary,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ] else ...[
+                      // No Photo Uploaded: Emoji is primary, with photo upload option
+                      Row(
+                        children: [
+                          Expanded(
+                            flex: 3,
+                            child: InkWell(
+                              onTap: _showEmojiPicker,
+                              borderRadius: BorderRadius.circular(14),
+                              child: Container(
+                                height: 58,
+                                padding: const EdgeInsets.symmetric(horizontal: 14),
+                                decoration: BoxDecoration(
+                                  color: Colors.white,
+                                  borderRadius: BorderRadius.circular(14),
+                                  border: Border.all(color: const Color(0xFFE4DFEE)),
+                                ),
+                                child: Row(
+                                  children: [
+                                    Text(
+                                      _selectedEmoji,
+                                      style: const TextStyle(fontSize: 28),
+                                    ),
+                                    const SizedBox(width: 10),
+                                    Expanded(
+                                      child: Text(
+                                        'Choose Emoji',
+                                        style: GoogleFonts.outfit(
+                                          fontWeight: FontWeight.w600,
+                                          color: AppColors.textPrimary,
+                                        ),
+                                      ),
+                                    ),
+                                    const Icon(
+                                      Icons.emoji_emotions_outlined,
+                                      color: AppColors.primaryPurple,
+                                      size: 20,
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            flex: 2,
+                            child: InkWell(
+                              onTap: _showPrimaryImageSourcePicker,
+                              borderRadius: BorderRadius.circular(14),
+                              child: Container(
+                                height: 58,
+                                padding: const EdgeInsets.symmetric(horizontal: 10),
+                                decoration: BoxDecoration(
+                                  color: AppColors.primaryPurple.withAlpha(12),
+                                  borderRadius: BorderRadius.circular(14),
+                                  border: Border.all(
+                                    color: AppColors.primaryPurple.withAlpha(60),
+                                  ),
+                                ),
+                                child: Row(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    const Icon(
+                                      Icons.add_a_photo_outlined,
+                                      color: AppColors.primaryPurple,
+                                      size: 18,
+                                    ),
+                                    const SizedBox(width: 6),
+                                    Text(
+                                      'Add Photo',
+                                      style: GoogleFonts.outfit(
+                                        fontWeight: FontWeight.w700,
+                                        fontSize: 13,
+                                        color: AppColors.primaryPurple,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 6),
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 4),
+                        child: Text(
+                          'Upload a photo or choose an emoji to represent your asset.',
+                          style: GoogleFonts.outfit(
+                            fontSize: 11,
+                            color: AppColors.textMuted,
+                          ),
+                        ),
+                      ),
+                    ],
                     const SizedBox(height: 20),
 
                     // Asset Name Field

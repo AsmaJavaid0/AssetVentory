@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import '../../../core/constants/app_colors.dart';
+import '../../../core/widgets/asset_avatar.dart';
 import '../../assets/models/asset_model.dart';
 import '../../assets/models/document_model.dart';
 import '../../assets/screens/edit_asset_screen.dart';
@@ -19,10 +20,16 @@ class AssetDetailModal extends StatefulWidget {
     AssetModel asset, {
     String? categoryName,
   }) {
-    return Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (context) =>
-            AssetDetailModal(asset: asset, categoryName: categoryName),
+    return showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+      ),
+      builder: (context) => AssetDetailModal(
+        asset: asset,
+        categoryName: categoryName,
       ),
     );
   }
@@ -35,8 +42,6 @@ class _AssetDetailModalState extends State<AssetDetailModal> {
   final FirestoreService _firestoreService = FirestoreService();
   bool _showQr = false;
 
-  // Cached once so toggling the QR view (setState) doesn't reopen this
-  // Firestore listener every time.
   late final Stream<List<DocumentModel>> _documentsStream;
 
   @override
@@ -66,11 +71,11 @@ class _AssetDetailModalState extends State<AssetDetailModal> {
       builder: (context) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         title: Text(
-          'Delete asset?',
+          'Delete Asset?',
           style: GoogleFonts.outfit(fontWeight: FontWeight.w700),
         ),
         content: Text(
-          'This will permanently delete "${widget.asset.name}" and its attached documents. This cannot be undone.',
+          'Are you sure you want to delete "${widget.asset.name}"? This cannot be undone.',
           style: GoogleFonts.outfit(color: AppColors.textSecondary),
         ),
         actions: [
@@ -84,13 +89,19 @@ class _AssetDetailModalState extends State<AssetDetailModal> {
               ),
             ),
           ),
-          TextButton(
+          ElevatedButton(
             onPressed: () => Navigator.pop(context, true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.error,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+            ),
             child: Text(
               'Delete',
               style: GoogleFonts.outfit(
-                color: AppColors.error,
-                fontWeight: FontWeight.w700,
+                color: Colors.white,
+                fontWeight: FontWeight.w600,
               ),
             ),
           ),
@@ -104,23 +115,19 @@ class _AssetDetailModalState extends State<AssetDetailModal> {
     final asset = widget.asset;
 
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: Colors.transparent,
       appBar: AppBar(
-        backgroundColor: Colors.white,
+        backgroundColor: Colors.transparent,
         elevation: 0,
-        surfaceTintColor: Colors.white,
-        leading: IconButton(
-          icon: const Icon(
-            Icons.arrow_back_rounded,
-            color: AppColors.textPrimary,
-          ),
-          onPressed: () => Navigator.of(context).pop(),
-        ),
-        title: Text(
-          'Asset Details',
-          style: GoogleFonts.outfit(
-            fontWeight: FontWeight.w700,
-            color: AppColors.textPrimary,
+        automaticallyImplyLeading: false,
+        centerTitle: true,
+        title: Container(
+          width: 40,
+          height: 4,
+          margin: const EdgeInsets.only(top: 8),
+          decoration: BoxDecoration(
+            color: const Color(0xFFDDD8E8),
+            borderRadius: BorderRadius.circular(2),
           ),
         ),
       ),
@@ -135,19 +142,12 @@ class _AssetDetailModalState extends State<AssetDetailModal> {
               // Header
               Row(
                 children: [
-                  Container(
-                    width: 52,
-                    height: 52,
-                    decoration: BoxDecoration(
-                      color: AppColors.primaryPurple.withAlpha(25),
-                      borderRadius: BorderRadius.circular(16),
-                    ),
-                    child: Center(
-                      child: Text(
-                        asset.emoji ?? '📦',
-                        style: const TextStyle(fontSize: 28),
-                      ),
-                    ),
+                  AssetAvatar(
+                    imageUrl: asset.imageUrl,
+                    emoji: asset.emoji,
+                    size: 52,
+                    borderRadius: 16,
+                    fontSize: 28,
                   ),
                   const SizedBox(width: 14),
                   Expanded(
@@ -512,8 +512,12 @@ class _AssetDetailModalState extends State<AssetDetailModal> {
                         if (confirmed != true) return;
                         if (!context.mounted) return;
                         Navigator.of(context).pop();
-                        await _firestoreService.deleteAsset(asset.id);
-                        _showSnackBar('Asset deleted successfully');
+                        try {
+                          await _firestoreService.deleteAsset(asset.id);
+                          _showSnackBar('Asset deleted successfully');
+                        } catch (e) {
+                          debugPrint('Error deleting asset: $e');
+                        }
                       },
                       icon: const Icon(
                         Icons.delete_outline_rounded,

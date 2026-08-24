@@ -5,6 +5,7 @@ import '../../../core/constants/app_colors.dart';
 import '../../../core/utils/wave_clipper.dart';
 import '../../../core/widgets/asset_logo.dart';
 import '../../../core/widgets/custom_button.dart';
+import '../../../core/widgets/asset_avatar.dart';
 
 import '../../auth/services/firestore_service.dart';
 import '../../auth/models/user_model.dart';
@@ -647,7 +648,7 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
             ),
             GestureDetector(
-              onTap: () => widget.onTabSelected?.call(1),
+              onTap: () => widget.onTabSelected?.call(3),
               child: Row(
                 children: [
                   Text(
@@ -725,65 +726,79 @@ class _HomeScreenState extends State<HomeScreen> {
                         ? 'In $daysLeft days'
                         : dateStr;
 
-                return Container(
-                  margin: const EdgeInsets.only(bottom: 10),
-                  padding: const EdgeInsets.all(14),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(16),
-                    border: Border.all(color: const Color(0xFFEFEBF6), width: 1),
-                  ),
-                  child: Row(
-                    children: [
-                      Container(
-                        width: 40,
-                        height: 40,
-                        decoration: BoxDecoration(
-                          color: AppColors.warning.withAlpha(25),
-                          borderRadius: BorderRadius.circular(10),
+                return GestureDetector(
+                  onTap: () => widget.onTabSelected?.call(3),
+                  child: Container(
+                    margin: const EdgeInsets.only(bottom: 10),
+                    padding: const EdgeInsets.all(14),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(color: const Color(0xFFEFEBF6), width: 1),
+                    ),
+                    child: Row(
+                      children: [
+                        Container(
+                          width: 40,
+                          height: 40,
+                          decoration: BoxDecoration(
+                            color: AppColors.warning.withAlpha(25),
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: const Icon(Icons.alarm, color: AppColors.warning, size: 22),
                         ),
-                        child: const Icon(Icons.alarm, color: AppColors.warning, size: 22),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              reminder.title,
-                              style: GoogleFonts.outfit(
-                                fontSize: 14,
-                                fontWeight: FontWeight.w600,
-                                color: AppColors.textPrimary,
-                              ),
-                            ),
-                            if (reminder.notes != null && reminder.notes!.isNotEmpty)
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
                               Text(
-                                reminder.notes!,
+                                reminder.title,
                                 style: GoogleFonts.outfit(
-                                  fontSize: 11,
-                                  color: AppColors.textSecondary,
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w600,
+                                  color: AppColors.textPrimary,
                                 ),
                               ),
-                          ],
-                        ),
-                      ),
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                        decoration: BoxDecoration(
-                          color: AppColors.warning.withAlpha(25),
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: Text(
-                          badgeText,
-                          style: GoogleFonts.outfit(
-                            fontSize: 11,
-                            fontWeight: FontWeight.w600,
-                            color: AppColors.warning,
+                              if (reminder.notes != null && reminder.notes!.isNotEmpty)
+                                Text(
+                                  reminder.notes!,
+                                  style: GoogleFonts.outfit(
+                                    fontSize: 11,
+                                    color: AppColors.textSecondary,
+                                  ),
+                                ),
+                            ],
                           ),
                         ),
-                      ),
-                    ],
+                        Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                              decoration: BoxDecoration(
+                                color: AppColors.warning.withAlpha(25),
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: Text(
+                                badgeText,
+                                style: GoogleFonts.outfit(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w600,
+                                  color: AppColors.warning,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 6),
+                            const Icon(
+                              Icons.chevron_right_rounded,
+                              size: 16,
+                              color: AppColors.primaryPurple,
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
                   ),
                 );
               }).toList(),
@@ -932,19 +947,12 @@ class _HomeScreenState extends State<HomeScreen> {
                         Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
-                            Container(
-                              width: 38,
-                              height: 38,
-                              decoration: BoxDecoration(
-                                color: AppColors.primaryPurple.withAlpha(20),
-                                borderRadius: BorderRadius.circular(10),
-                              ),
-                              child: Center(
-                                child: Text(
-                                  asset.emoji ?? '📦',
-                                  style: const TextStyle(fontSize: 20),
-                                ),
-                              ),
+                            AssetAvatar(
+                              imageUrl: asset.imageUrl,
+                              emoji: asset.emoji,
+                              size: 38,
+                              borderRadius: 10,
+                              fontSize: 20,
                             ),
                             const Icon(Icons.more_horiz_rounded, size: 18, color: AppColors.textMuted),
                           ],

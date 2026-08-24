@@ -22,6 +22,44 @@ class StorageService {
     };
   }
 
+  /// Uploads an asset main cover image
+  Future<Map<String, String>> uploadAssetImage({
+    required String userId,
+    required String assetId,
+    required String filePath,
+  }) async {
+    final file = File(filePath);
+    final ext = filePath.split('.').last.toLowerCase();
+    final fileName = 'cover_${DateTime.now().millisecondsSinceEpoch}.$ext';
+    final storagePath = 'users/$userId/assets/$assetId/images/$fileName';
+    final ref = _storage.ref().child(storagePath);
+    final uploadTask = await ref.putFile(file);
+    final url = await uploadTask.ref.getDownloadURL();
+    return {
+      'url': url,
+      'path': storagePath,
+    };
+  }
+
+  /// Uploads a task image
+  Future<Map<String, String>> uploadTaskImage({
+    required String userId,
+    required String taskId,
+    required String filePath,
+  }) async {
+    final file = File(filePath);
+    final ext = filePath.split('.').last.toLowerCase();
+    final fileName = 'task_${DateTime.now().millisecondsSinceEpoch}.$ext';
+    final storagePath = 'users/$userId/tasks/$taskId/images/$fileName';
+    final ref = _storage.ref().child(storagePath);
+    final uploadTask = await ref.putFile(file);
+    final url = await uploadTask.ref.getDownloadURL();
+    return {
+      'url': url,
+      'path': storagePath,
+    };
+  }
+
   /// Deletes a file from Firebase Storage
   Future<void> deleteFile(String storagePath) async {
     if (storagePath.isEmpty) return;

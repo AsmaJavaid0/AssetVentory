@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import '../../../core/constants/app_colors.dart';
+import '../../../core/widgets/asset_avatar.dart';
 import '../../auth/services/firestore_service.dart';
 import '../../home/widgets/asset_detail_modal.dart';
 import '../models/asset_model.dart';
@@ -84,17 +85,28 @@ class CategoryDetailScreen extends StatelessWidget {
               onPressed: () async {
                 final name = nameController.text.trim();
                 if (name.isEmpty) return;
-                await _firestoreService.updateCategory(
-                  CategoryModel(
-                    id: category.id,
-                    ownerId: category.ownerId,
-                    name: name,
-                    emoji: emoji,
-                    createdAt: category.createdAt,
-                    updatedAt: DateTime.now(),
-                  ),
-                );
-                if (dialogContext.mounted) Navigator.pop(dialogContext, true);
+                try {
+                  await _firestoreService.updateCategory(
+                    CategoryModel(
+                      id: category.id,
+                      ownerId: category.ownerId,
+                      name: name,
+                      emoji: emoji,
+                      createdAt: category.createdAt,
+                      updatedAt: DateTime.now(),
+                    ),
+                  );
+                  if (dialogContext.mounted) Navigator.pop(dialogContext, true);
+                } catch (e) {
+                  debugPrint('Error updating category: $e');
+                  if (dialogContext.mounted) {
+                    ScaffoldMessenger.of(dialogContext).showSnackBar(
+                      const SnackBar(
+                        content: Text('Failed to update category. Please try again.'),
+                      ),
+                    );
+                  }
+                }
               },
               child: const Text('Save'),
             ),
@@ -140,7 +152,11 @@ class CategoryDetailScreen extends StatelessWidget {
     // a noticeable moment to complete (especially with offline persistence),
     // so waiting here made the delete action appear unresponsive.
     Navigator.of(context).pop();
-    await _firestoreService.deleteCategory(category.id);
+    try {
+      await _firestoreService.deleteCategory(category.id);
+    } catch (e) {
+      debugPrint('Error deleting category: $e');
+    }
   }
 
   @override
@@ -197,9 +213,12 @@ class CategoryDetailScreen extends StatelessWidget {
                     final asset = assets[index];
                     return Card(
                       child: ListTile(
-                        leading: Text(
-                          asset.emoji ?? '📦',
-                          style: const TextStyle(fontSize: 28),
+                        leading: AssetAvatar(
+                          imageUrl: asset.imageUrl,
+                          emoji: asset.emoji,
+                          size: 40,
+                          borderRadius: 10,
+                          fontSize: 22,
                         ),
                         title: Text(
                           asset.name,
