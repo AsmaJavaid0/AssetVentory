@@ -1,7 +1,7 @@
 import 'dart:convert';
-
+import 'dart:io';
 import 'package:drift/drift.dart';
-
+import 'package:uuid/uuid.dart';
 import '../../../core/database/app_database.dart';
 import '../../../core/storage/local_file_storage.dart';
 import '../models/local_asset.dart';
@@ -9,7 +9,7 @@ import '../models/local_asset.dart';
 class AssetRepository {
   final AppDatabase _database;
   final LocalFileStorage _fileStorage;
-
+  static const Uuid _uuid = Uuid();
   AssetRepository({
     required this._database,
     required this._fileStorage,
@@ -34,7 +34,59 @@ class AssetRepository {
           ),
         );
   }
+  Future<LocalAsset> createAssetWithImage({
+  required String ownerId,
+  required String name,
+  String? categoryId,
+  String? emoji,
+  File? imageFile,
+  String? location,
+  String? description,
+  bool qrEnabled = false,
+  Map<String, String> customFields = const {},
+}) async {
+  final now = DateTime.now();
+  final assetId = _uuid.v4();
 
+  String? imagePath;
+
+  try {
+    // 1. Save image locally first.
+    if (imageFile != null) {
+      imagePath = await _fileStorage.saveImage(
+        assetId: assetId,
+        sourceFile: imageFile,
+      );
+    }
+
+    // 2. Build local asset.
+    final asset = LocalAsset(
+      id: assetId,
+      ownerId: ownerId,
+      name: name,
+      categoryId: categoryId,
+      emoji: emoji,
+      imagePath: imagePath,
+      location: location,
+      description: description,
+      qrEnabled: qrEnabled,
+      customFields: customFields,
+      createdAt: now,
+      updatedAt: now,
+    );
+
+    // 3. Save asset metadata in SQLite.
+    await createAsset(asset);
+
+    return asset;
+  } catch (e) {
+    // If database saving fails after the image was copied,
+    // remove the orphaned image.
+    await _fileStorage.deleteAssetFiles(assetId);
+
+    rethrow;
+  }
+}
   /// Gets one asset by its ID.
   Future<LocalAsset?> getAsset(String assetId) async {
     final query = _database.select(_database.assets)
