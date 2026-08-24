@@ -13,8 +13,9 @@ void main() async {
   );
 
   // Initialize the service locator
- 
+
   serviceLocator.initialize();
+  
   runApp(const AssetVentoryApp());
 }
 
