@@ -5,14 +5,12 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:emoji_picker_flutter/emoji_picker_flutter.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:file_picker/file_picker.dart';
+import '../../../core/di/service_locator.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/widgets/custom_button.dart';
 import '../../../core/widgets/custom_text_field.dart';
-import '../models/asset_model.dart';
 import '../models/category_model.dart';
-import '../models/document_model.dart';
 import '../../auth/services/firestore_service.dart';
-import '../services/storage_service.dart';
 
 class AddAssetScreen extends StatefulWidget {
   final String? initialCategoryId;
@@ -36,7 +34,7 @@ class _AddAssetScreenState extends State<AddAssetScreen> {
   final _nameController = TextEditingController();
   final _locationController = TextEditingController();
   final _descriptionController = TextEditingController();
-
+  final _assetRepository = serviceLocator.assetRepository;
   String _selectedEmoji = '📦';
   File? _primaryImage;
   String? _selectedCategoryId; // Nullable if no category
@@ -47,7 +45,6 @@ class _AddAssetScreenState extends State<AddAssetScreen> {
   final List<File> _selectedFiles = [];
 
   final FirestoreService _firestoreService = FirestoreService();
-  final StorageService _storageService = StorageService();
   final ImagePicker _imagePicker = ImagePicker();
 
   late final Stream<List<CategoryModel>> _categoriesStream;
@@ -537,115 +534,72 @@ class _AddAssetScreenState extends State<AddAssetScreen> {
   }
 
   // Save Asset Form submission
-  Future<void> _saveAsset() async {
-    if (!_formKey.currentState!.validate()) return;
+ Future<void> _saveAsset() async {
+  if (!_formKey.currentState!.validate()) return;
 
-    final user = FirebaseAuth.instance.currentUser;
-    if (user == null) return;
+  final user = FirebaseAuth.instance.currentUser;
+  if (user == null) return;
 
-    setState(() => _isLoading = true);
+  setState(() => _isLoading = true);
 
-    try {
-      // 1. Build map of custom fields
-      final Map<String, String> fieldsMap = {};
-      for (var f in _customFields) {
-        if (f['name'] != null && f['value'] != null) {
-          fieldsMap[f['name']!] = f['value']!;
-        }
+  try {
+    // Build custom fields map.
+    final Map<String, String> fieldsMap = {};
+
+    for (final field in _customFields) {
+      if (field['name'] != null && field['value'] != null) {
+        fieldsMap[field['name']!] = field['value']!;
       }
-
-      final now = DateTime.now();
-
-      final newAsset = AssetModel(
-        id: '',
-        ownerId: user.uid,
-        name: _nameController.text.trim(),
-        emoji: _primaryImage != null && _selectedEmoji.isEmpty ? null : _selectedEmoji,
-        imageUrl: null,
-        categoryId: _selectedCategoryId,
-        location: _locationController.text.trim().isNotEmpty
-            ? _locationController.text.trim()
-            : null,
-        description: _descriptionController.text.trim().isNotEmpty
-            ? _descriptionController.text.trim()
-            : null,
-        qrEnabled: _qrEnabled,
-        customFields: fieldsMap,
-        createdAt: now,
-        updatedAt: now,
-      );
-
-      // 2. Add Asset to Firestore
-      final assetId = await _firestoreService.addAsset(newAsset);
-
-      // 3. Background upload for primary cover image if selected
-      if (_primaryImage != null) {
-        _storageService
-            .uploadAssetImage(
-              userId: user.uid,
-              assetId: assetId,
-              filePath: _primaryImage!.path,
-            )
-            .then((uploadRes) {
-              final url = uploadRes['url'];
-              if (url != null && url.isNotEmpty) {
-                _firestoreService.updateAsset(
-                  newAsset.copyWith(id: assetId, imageUrl: url),
-                );
-              }
-            })
-            .catchError((e) {
-              debugPrint('Background asset cover image upload failed: $e');
-            });
-      }
-
-      // 4. Background upload for any extra document attachments
-      if (_selectedFiles.isNotEmpty) {
-        for (var file in _selectedFiles) {
-          final rawName = file.path.split('/').last.split('\\').last;
-          final extension = rawName.split('.').last.toLowerCase();
-
-          _storageService
-              .uploadAssetDocument(
-                userId: user.uid,
-                assetId: assetId,
-                filePath: file.path,
-                fileName: rawName,
-              )
-              .then((uploadResult) {
-                final docModel = DocumentModel(
-                  id: '',
-                  ownerId: user.uid,
-                  assetId: assetId,
-                  fileUrl: uploadResult['url'] ?? '',
-                  storagePath: uploadResult['path'] ?? '',
-                  fileName: rawName,
-                  fileType: extension,
-                  createdAt: now,
-                  updatedAt: now,
-                );
-                _firestoreService.addDocument(docModel);
-              })
-              .catchError((e) {
-                debugPrint('Background file upload failed for $rawName: $e');
-              });
-        }
-      }
-
-      if (!mounted) return;
-
-      setState(() => _isLoading = false);
-
-      Navigator.of(context).pop();
-    } catch (e) {
-      debugPrint('Error saving asset: $e');
-      if (!mounted) return;
-
-      setState(() => _isLoading = false);
-
-      _showSnackBar('Failed to save asset. Please try again.', isError: true);
     }
+
+    // Save asset + image locally.
+    final localAsset = await _assetRepository.createAssetWithImage(
+      ownerId: user.uid,
+      name: _nameController.text.trim(),
+      emoji: _primaryImage != null && _selectedEmoji.isEmpty
+          ? null
+          : _selectedEmoji,
+      categoryId: _selectedCategoryId,
+      imageFile: _primaryImage != null
+          ? File(_primaryImage!.path)
+          : null,
+      location: _locationController.text.trim().isNotEmpty
+          ? _locationController.text.trim()
+          : null,
+      description: _descriptionController.text.trim().isNotEmpty
+          ? _descriptionController.text.trim()
+          : null,
+      qrEnabled: _qrEnabled,
+      customFields: fieldsMap,
+    );
+
+    debugPrint(
+      'LOCAL ASSET CREATED: ${localAsset.id}',
+    );
+
+    debugPrint(
+      'LOCAL IMAGE PATH: ${localAsset.imagePath}',
+    );
+
+    if (!mounted) return;
+
+    setState(() => _isLoading = false);
+
+    Navigator.of(context).pop();
+  } catch (e, stackTrace) {
+    debugPrint('Error saving local asset: $e');
+    debugPrintStack(stackTrace: stackTrace);
+
+    if (!mounted) return;
+
+    setState(() => _isLoading = false);
+
+    _showSnackBar(
+      'Failed to save asset. Please try again.',
+      isError: true,
+    );
   }
+}
 
   @override
   Widget build(BuildContext context) {
