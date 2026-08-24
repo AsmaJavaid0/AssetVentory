@@ -57,12 +57,12 @@ class $AssetsTable extends Assets with TableInfo<$AssetsTable, Asset> {
     type: DriftSqlType.string,
     requiredDuringInsert: false,
   );
-  static const VerificationMeta _descriptionMeta = const VerificationMeta(
-    'description',
+  static const VerificationMeta _imagePathMeta = const VerificationMeta(
+    'imagePath',
   );
   @override
-  late final GeneratedColumn<String> description = GeneratedColumn<String>(
-    'description',
+  late final GeneratedColumn<String> imagePath = GeneratedColumn<String>(
+    'image_path',
     aliasedName,
     true,
     type: DriftSqlType.string,
@@ -79,23 +79,12 @@ class $AssetsTable extends Assets with TableInfo<$AssetsTable, Asset> {
     type: DriftSqlType.string,
     requiredDuringInsert: false,
   );
-  static const VerificationMeta _serialNumberMeta = const VerificationMeta(
-    'serialNumber',
+  static const VerificationMeta _descriptionMeta = const VerificationMeta(
+    'description',
   );
   @override
-  late final GeneratedColumn<String> serialNumber = GeneratedColumn<String>(
-    'serial_number',
-    aliasedName,
-    true,
-    type: DriftSqlType.string,
-    requiredDuringInsert: false,
-  );
-  static const VerificationMeta _imagePathMeta = const VerificationMeta(
-    'imagePath',
-  );
-  @override
-  late final GeneratedColumn<String> imagePath = GeneratedColumn<String>(
-    'image_path',
+  late final GeneratedColumn<String> description = GeneratedColumn<String>(
+    'description',
     aliasedName,
     true,
     type: DriftSqlType.string,
@@ -115,6 +104,18 @@ class $AssetsTable extends Assets with TableInfo<$AssetsTable, Asset> {
       'CHECK ("qr_enabled" IN (0, 1))',
     ),
     defaultValue: const Constant(false),
+  );
+  static const VerificationMeta _customFieldsMeta = const VerificationMeta(
+    'customFields',
+  );
+  @override
+  late final GeneratedColumn<String> customFields = GeneratedColumn<String>(
+    'custom_fields',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant('{}'),
   );
   static const VerificationMeta _createdAtMeta = const VerificationMeta(
     'createdAt',
@@ -145,11 +146,11 @@ class $AssetsTable extends Assets with TableInfo<$AssetsTable, Asset> {
     name,
     categoryId,
     emoji,
-    description,
-    location,
-    serialNumber,
     imagePath,
+    location,
+    description,
     qrEnabled,
+    customFields,
     createdAt,
     updatedAt,
   ];
@@ -198,6 +199,18 @@ class $AssetsTable extends Assets with TableInfo<$AssetsTable, Asset> {
         emoji.isAcceptableOrUnknown(data['emoji']!, _emojiMeta),
       );
     }
+    if (data.containsKey('image_path')) {
+      context.handle(
+        _imagePathMeta,
+        imagePath.isAcceptableOrUnknown(data['image_path']!, _imagePathMeta),
+      );
+    }
+    if (data.containsKey('location')) {
+      context.handle(
+        _locationMeta,
+        location.isAcceptableOrUnknown(data['location']!, _locationMeta),
+      );
+    }
     if (data.containsKey('description')) {
       context.handle(
         _descriptionMeta,
@@ -207,31 +220,19 @@ class $AssetsTable extends Assets with TableInfo<$AssetsTable, Asset> {
         ),
       );
     }
-    if (data.containsKey('location')) {
-      context.handle(
-        _locationMeta,
-        location.isAcceptableOrUnknown(data['location']!, _locationMeta),
-      );
-    }
-    if (data.containsKey('serial_number')) {
-      context.handle(
-        _serialNumberMeta,
-        serialNumber.isAcceptableOrUnknown(
-          data['serial_number']!,
-          _serialNumberMeta,
-        ),
-      );
-    }
-    if (data.containsKey('image_path')) {
-      context.handle(
-        _imagePathMeta,
-        imagePath.isAcceptableOrUnknown(data['image_path']!, _imagePathMeta),
-      );
-    }
     if (data.containsKey('qr_enabled')) {
       context.handle(
         _qrEnabledMeta,
         qrEnabled.isAcceptableOrUnknown(data['qr_enabled']!, _qrEnabledMeta),
+      );
+    }
+    if (data.containsKey('custom_fields')) {
+      context.handle(
+        _customFieldsMeta,
+        customFields.isAcceptableOrUnknown(
+          data['custom_fields']!,
+          _customFieldsMeta,
+        ),
       );
     }
     if (data.containsKey('created_at')) {
@@ -279,25 +280,25 @@ class $AssetsTable extends Assets with TableInfo<$AssetsTable, Asset> {
         DriftSqlType.string,
         data['${effectivePrefix}emoji'],
       ),
-      description: attachedDatabase.typeMapping.read(
+      imagePath: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
-        data['${effectivePrefix}description'],
+        data['${effectivePrefix}image_path'],
       ),
       location: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
         data['${effectivePrefix}location'],
       ),
-      serialNumber: attachedDatabase.typeMapping.read(
+      description: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
-        data['${effectivePrefix}serial_number'],
-      ),
-      imagePath: attachedDatabase.typeMapping.read(
-        DriftSqlType.string,
-        data['${effectivePrefix}image_path'],
+        data['${effectivePrefix}description'],
       ),
       qrEnabled: attachedDatabase.typeMapping.read(
         DriftSqlType.bool,
         data['${effectivePrefix}qr_enabled'],
+      )!,
+      customFields: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}custom_fields'],
       )!,
       createdAt: attachedDatabase.typeMapping.read(
         DriftSqlType.dateTime,
@@ -322,11 +323,11 @@ class Asset extends DataClass implements Insertable<Asset> {
   final String name;
   final String? categoryId;
   final String? emoji;
-  final String? description;
-  final String? location;
-  final String? serialNumber;
   final String? imagePath;
+  final String? location;
+  final String? description;
   final bool qrEnabled;
+  final String customFields;
   final DateTime createdAt;
   final DateTime updatedAt;
   const Asset({
@@ -335,11 +336,11 @@ class Asset extends DataClass implements Insertable<Asset> {
     required this.name,
     this.categoryId,
     this.emoji,
-    this.description,
-    this.location,
-    this.serialNumber,
     this.imagePath,
+    this.location,
+    this.description,
     required this.qrEnabled,
+    required this.customFields,
     required this.createdAt,
     required this.updatedAt,
   });
@@ -355,19 +356,17 @@ class Asset extends DataClass implements Insertable<Asset> {
     if (!nullToAbsent || emoji != null) {
       map['emoji'] = Variable<String>(emoji);
     }
-    if (!nullToAbsent || description != null) {
-      map['description'] = Variable<String>(description);
+    if (!nullToAbsent || imagePath != null) {
+      map['image_path'] = Variable<String>(imagePath);
     }
     if (!nullToAbsent || location != null) {
       map['location'] = Variable<String>(location);
     }
-    if (!nullToAbsent || serialNumber != null) {
-      map['serial_number'] = Variable<String>(serialNumber);
-    }
-    if (!nullToAbsent || imagePath != null) {
-      map['image_path'] = Variable<String>(imagePath);
+    if (!nullToAbsent || description != null) {
+      map['description'] = Variable<String>(description);
     }
     map['qr_enabled'] = Variable<bool>(qrEnabled);
+    map['custom_fields'] = Variable<String>(customFields);
     map['created_at'] = Variable<DateTime>(createdAt);
     map['updated_at'] = Variable<DateTime>(updatedAt);
     return map;
@@ -384,19 +383,17 @@ class Asset extends DataClass implements Insertable<Asset> {
       emoji: emoji == null && nullToAbsent
           ? const Value.absent()
           : Value(emoji),
-      description: description == null && nullToAbsent
-          ? const Value.absent()
-          : Value(description),
-      location: location == null && nullToAbsent
-          ? const Value.absent()
-          : Value(location),
-      serialNumber: serialNumber == null && nullToAbsent
-          ? const Value.absent()
-          : Value(serialNumber),
       imagePath: imagePath == null && nullToAbsent
           ? const Value.absent()
           : Value(imagePath),
+      location: location == null && nullToAbsent
+          ? const Value.absent()
+          : Value(location),
+      description: description == null && nullToAbsent
+          ? const Value.absent()
+          : Value(description),
       qrEnabled: Value(qrEnabled),
+      customFields: Value(customFields),
       createdAt: Value(createdAt),
       updatedAt: Value(updatedAt),
     );
@@ -413,11 +410,11 @@ class Asset extends DataClass implements Insertable<Asset> {
       name: serializer.fromJson<String>(json['name']),
       categoryId: serializer.fromJson<String?>(json['categoryId']),
       emoji: serializer.fromJson<String?>(json['emoji']),
-      description: serializer.fromJson<String?>(json['description']),
-      location: serializer.fromJson<String?>(json['location']),
-      serialNumber: serializer.fromJson<String?>(json['serialNumber']),
       imagePath: serializer.fromJson<String?>(json['imagePath']),
+      location: serializer.fromJson<String?>(json['location']),
+      description: serializer.fromJson<String?>(json['description']),
       qrEnabled: serializer.fromJson<bool>(json['qrEnabled']),
+      customFields: serializer.fromJson<String>(json['customFields']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
       updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
     );
@@ -431,11 +428,11 @@ class Asset extends DataClass implements Insertable<Asset> {
       'name': serializer.toJson<String>(name),
       'categoryId': serializer.toJson<String?>(categoryId),
       'emoji': serializer.toJson<String?>(emoji),
-      'description': serializer.toJson<String?>(description),
-      'location': serializer.toJson<String?>(location),
-      'serialNumber': serializer.toJson<String?>(serialNumber),
       'imagePath': serializer.toJson<String?>(imagePath),
+      'location': serializer.toJson<String?>(location),
+      'description': serializer.toJson<String?>(description),
       'qrEnabled': serializer.toJson<bool>(qrEnabled),
+      'customFields': serializer.toJson<String>(customFields),
       'createdAt': serializer.toJson<DateTime>(createdAt),
       'updatedAt': serializer.toJson<DateTime>(updatedAt),
     };
@@ -447,11 +444,11 @@ class Asset extends DataClass implements Insertable<Asset> {
     String? name,
     Value<String?> categoryId = const Value.absent(),
     Value<String?> emoji = const Value.absent(),
-    Value<String?> description = const Value.absent(),
-    Value<String?> location = const Value.absent(),
-    Value<String?> serialNumber = const Value.absent(),
     Value<String?> imagePath = const Value.absent(),
+    Value<String?> location = const Value.absent(),
+    Value<String?> description = const Value.absent(),
     bool? qrEnabled,
+    String? customFields,
     DateTime? createdAt,
     DateTime? updatedAt,
   }) => Asset(
@@ -460,11 +457,11 @@ class Asset extends DataClass implements Insertable<Asset> {
     name: name ?? this.name,
     categoryId: categoryId.present ? categoryId.value : this.categoryId,
     emoji: emoji.present ? emoji.value : this.emoji,
-    description: description.present ? description.value : this.description,
-    location: location.present ? location.value : this.location,
-    serialNumber: serialNumber.present ? serialNumber.value : this.serialNumber,
     imagePath: imagePath.present ? imagePath.value : this.imagePath,
+    location: location.present ? location.value : this.location,
+    description: description.present ? description.value : this.description,
     qrEnabled: qrEnabled ?? this.qrEnabled,
+    customFields: customFields ?? this.customFields,
     createdAt: createdAt ?? this.createdAt,
     updatedAt: updatedAt ?? this.updatedAt,
   );
@@ -477,15 +474,15 @@ class Asset extends DataClass implements Insertable<Asset> {
           ? data.categoryId.value
           : this.categoryId,
       emoji: data.emoji.present ? data.emoji.value : this.emoji,
+      imagePath: data.imagePath.present ? data.imagePath.value : this.imagePath,
+      location: data.location.present ? data.location.value : this.location,
       description: data.description.present
           ? data.description.value
           : this.description,
-      location: data.location.present ? data.location.value : this.location,
-      serialNumber: data.serialNumber.present
-          ? data.serialNumber.value
-          : this.serialNumber,
-      imagePath: data.imagePath.present ? data.imagePath.value : this.imagePath,
       qrEnabled: data.qrEnabled.present ? data.qrEnabled.value : this.qrEnabled,
+      customFields: data.customFields.present
+          ? data.customFields.value
+          : this.customFields,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
       updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
     );
@@ -499,11 +496,11 @@ class Asset extends DataClass implements Insertable<Asset> {
           ..write('name: $name, ')
           ..write('categoryId: $categoryId, ')
           ..write('emoji: $emoji, ')
-          ..write('description: $description, ')
-          ..write('location: $location, ')
-          ..write('serialNumber: $serialNumber, ')
           ..write('imagePath: $imagePath, ')
+          ..write('location: $location, ')
+          ..write('description: $description, ')
           ..write('qrEnabled: $qrEnabled, ')
+          ..write('customFields: $customFields, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt')
           ..write(')'))
@@ -517,11 +514,11 @@ class Asset extends DataClass implements Insertable<Asset> {
     name,
     categoryId,
     emoji,
-    description,
-    location,
-    serialNumber,
     imagePath,
+    location,
+    description,
     qrEnabled,
+    customFields,
     createdAt,
     updatedAt,
   );
@@ -534,11 +531,11 @@ class Asset extends DataClass implements Insertable<Asset> {
           other.name == this.name &&
           other.categoryId == this.categoryId &&
           other.emoji == this.emoji &&
-          other.description == this.description &&
-          other.location == this.location &&
-          other.serialNumber == this.serialNumber &&
           other.imagePath == this.imagePath &&
+          other.location == this.location &&
+          other.description == this.description &&
           other.qrEnabled == this.qrEnabled &&
+          other.customFields == this.customFields &&
           other.createdAt == this.createdAt &&
           other.updatedAt == this.updatedAt);
 }
@@ -549,11 +546,11 @@ class AssetsCompanion extends UpdateCompanion<Asset> {
   final Value<String> name;
   final Value<String?> categoryId;
   final Value<String?> emoji;
-  final Value<String?> description;
-  final Value<String?> location;
-  final Value<String?> serialNumber;
   final Value<String?> imagePath;
+  final Value<String?> location;
+  final Value<String?> description;
   final Value<bool> qrEnabled;
+  final Value<String> customFields;
   final Value<DateTime> createdAt;
   final Value<DateTime> updatedAt;
   final Value<int> rowid;
@@ -563,11 +560,11 @@ class AssetsCompanion extends UpdateCompanion<Asset> {
     this.name = const Value.absent(),
     this.categoryId = const Value.absent(),
     this.emoji = const Value.absent(),
-    this.description = const Value.absent(),
-    this.location = const Value.absent(),
-    this.serialNumber = const Value.absent(),
     this.imagePath = const Value.absent(),
+    this.location = const Value.absent(),
+    this.description = const Value.absent(),
     this.qrEnabled = const Value.absent(),
+    this.customFields = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.updatedAt = const Value.absent(),
     this.rowid = const Value.absent(),
@@ -578,11 +575,11 @@ class AssetsCompanion extends UpdateCompanion<Asset> {
     required String name,
     this.categoryId = const Value.absent(),
     this.emoji = const Value.absent(),
-    this.description = const Value.absent(),
-    this.location = const Value.absent(),
-    this.serialNumber = const Value.absent(),
     this.imagePath = const Value.absent(),
+    this.location = const Value.absent(),
+    this.description = const Value.absent(),
     this.qrEnabled = const Value.absent(),
+    this.customFields = const Value.absent(),
     required DateTime createdAt,
     required DateTime updatedAt,
     this.rowid = const Value.absent(),
@@ -597,11 +594,11 @@ class AssetsCompanion extends UpdateCompanion<Asset> {
     Expression<String>? name,
     Expression<String>? categoryId,
     Expression<String>? emoji,
-    Expression<String>? description,
-    Expression<String>? location,
-    Expression<String>? serialNumber,
     Expression<String>? imagePath,
+    Expression<String>? location,
+    Expression<String>? description,
     Expression<bool>? qrEnabled,
+    Expression<String>? customFields,
     Expression<DateTime>? createdAt,
     Expression<DateTime>? updatedAt,
     Expression<int>? rowid,
@@ -612,11 +609,11 @@ class AssetsCompanion extends UpdateCompanion<Asset> {
       if (name != null) 'name': name,
       if (categoryId != null) 'category_id': categoryId,
       if (emoji != null) 'emoji': emoji,
-      if (description != null) 'description': description,
-      if (location != null) 'location': location,
-      if (serialNumber != null) 'serial_number': serialNumber,
       if (imagePath != null) 'image_path': imagePath,
+      if (location != null) 'location': location,
+      if (description != null) 'description': description,
       if (qrEnabled != null) 'qr_enabled': qrEnabled,
+      if (customFields != null) 'custom_fields': customFields,
       if (createdAt != null) 'created_at': createdAt,
       if (updatedAt != null) 'updated_at': updatedAt,
       if (rowid != null) 'rowid': rowid,
@@ -629,11 +626,11 @@ class AssetsCompanion extends UpdateCompanion<Asset> {
     Value<String>? name,
     Value<String?>? categoryId,
     Value<String?>? emoji,
-    Value<String?>? description,
-    Value<String?>? location,
-    Value<String?>? serialNumber,
     Value<String?>? imagePath,
+    Value<String?>? location,
+    Value<String?>? description,
     Value<bool>? qrEnabled,
+    Value<String>? customFields,
     Value<DateTime>? createdAt,
     Value<DateTime>? updatedAt,
     Value<int>? rowid,
@@ -644,11 +641,11 @@ class AssetsCompanion extends UpdateCompanion<Asset> {
       name: name ?? this.name,
       categoryId: categoryId ?? this.categoryId,
       emoji: emoji ?? this.emoji,
-      description: description ?? this.description,
-      location: location ?? this.location,
-      serialNumber: serialNumber ?? this.serialNumber,
       imagePath: imagePath ?? this.imagePath,
+      location: location ?? this.location,
+      description: description ?? this.description,
       qrEnabled: qrEnabled ?? this.qrEnabled,
+      customFields: customFields ?? this.customFields,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
       rowid: rowid ?? this.rowid,
@@ -673,20 +670,20 @@ class AssetsCompanion extends UpdateCompanion<Asset> {
     if (emoji.present) {
       map['emoji'] = Variable<String>(emoji.value);
     }
-    if (description.present) {
-      map['description'] = Variable<String>(description.value);
+    if (imagePath.present) {
+      map['image_path'] = Variable<String>(imagePath.value);
     }
     if (location.present) {
       map['location'] = Variable<String>(location.value);
     }
-    if (serialNumber.present) {
-      map['serial_number'] = Variable<String>(serialNumber.value);
-    }
-    if (imagePath.present) {
-      map['image_path'] = Variable<String>(imagePath.value);
+    if (description.present) {
+      map['description'] = Variable<String>(description.value);
     }
     if (qrEnabled.present) {
       map['qr_enabled'] = Variable<bool>(qrEnabled.value);
+    }
+    if (customFields.present) {
+      map['custom_fields'] = Variable<String>(customFields.value);
     }
     if (createdAt.present) {
       map['created_at'] = Variable<DateTime>(createdAt.value);
@@ -708,11 +705,11 @@ class AssetsCompanion extends UpdateCompanion<Asset> {
           ..write('name: $name, ')
           ..write('categoryId: $categoryId, ')
           ..write('emoji: $emoji, ')
-          ..write('description: $description, ')
-          ..write('location: $location, ')
-          ..write('serialNumber: $serialNumber, ')
           ..write('imagePath: $imagePath, ')
+          ..write('location: $location, ')
+          ..write('description: $description, ')
           ..write('qrEnabled: $qrEnabled, ')
+          ..write('customFields: $customFields, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt, ')
           ..write('rowid: $rowid')
@@ -739,11 +736,11 @@ typedef $$AssetsTableCreateCompanionBuilder =
       required String name,
       Value<String?> categoryId,
       Value<String?> emoji,
-      Value<String?> description,
-      Value<String?> location,
-      Value<String?> serialNumber,
       Value<String?> imagePath,
+      Value<String?> location,
+      Value<String?> description,
       Value<bool> qrEnabled,
+      Value<String> customFields,
       required DateTime createdAt,
       required DateTime updatedAt,
       Value<int> rowid,
@@ -755,11 +752,11 @@ typedef $$AssetsTableUpdateCompanionBuilder =
       Value<String> name,
       Value<String?> categoryId,
       Value<String?> emoji,
-      Value<String?> description,
-      Value<String?> location,
-      Value<String?> serialNumber,
       Value<String?> imagePath,
+      Value<String?> location,
+      Value<String?> description,
       Value<bool> qrEnabled,
+      Value<String> customFields,
       Value<DateTime> createdAt,
       Value<DateTime> updatedAt,
       Value<int> rowid,
@@ -799,8 +796,8 @@ class $$AssetsTableFilterComposer
     builder: (column) => ColumnFilters(column),
   );
 
-  ColumnFilters<String> get description => $composableBuilder(
-    column: $table.description,
+  ColumnFilters<String> get imagePath => $composableBuilder(
+    column: $table.imagePath,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -809,18 +806,18 @@ class $$AssetsTableFilterComposer
     builder: (column) => ColumnFilters(column),
   );
 
-  ColumnFilters<String> get serialNumber => $composableBuilder(
-    column: $table.serialNumber,
-    builder: (column) => ColumnFilters(column),
-  );
-
-  ColumnFilters<String> get imagePath => $composableBuilder(
-    column: $table.imagePath,
+  ColumnFilters<String> get description => $composableBuilder(
+    column: $table.description,
     builder: (column) => ColumnFilters(column),
   );
 
   ColumnFilters<bool> get qrEnabled => $composableBuilder(
     column: $table.qrEnabled,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get customFields => $composableBuilder(
+    column: $table.customFields,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -869,8 +866,8 @@ class $$AssetsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
-  ColumnOrderings<String> get description => $composableBuilder(
-    column: $table.description,
+  ColumnOrderings<String> get imagePath => $composableBuilder(
+    column: $table.imagePath,
     builder: (column) => ColumnOrderings(column),
   );
 
@@ -879,18 +876,18 @@ class $$AssetsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
-  ColumnOrderings<String> get serialNumber => $composableBuilder(
-    column: $table.serialNumber,
-    builder: (column) => ColumnOrderings(column),
-  );
-
-  ColumnOrderings<String> get imagePath => $composableBuilder(
-    column: $table.imagePath,
+  ColumnOrderings<String> get description => $composableBuilder(
+    column: $table.description,
     builder: (column) => ColumnOrderings(column),
   );
 
   ColumnOrderings<bool> get qrEnabled => $composableBuilder(
     column: $table.qrEnabled,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get customFields => $composableBuilder(
+    column: $table.customFields,
     builder: (column) => ColumnOrderings(column),
   );
 
@@ -931,24 +928,24 @@ class $$AssetsTableAnnotationComposer
   GeneratedColumn<String> get emoji =>
       $composableBuilder(column: $table.emoji, builder: (column) => column);
 
+  GeneratedColumn<String> get imagePath =>
+      $composableBuilder(column: $table.imagePath, builder: (column) => column);
+
+  GeneratedColumn<String> get location =>
+      $composableBuilder(column: $table.location, builder: (column) => column);
+
   GeneratedColumn<String> get description => $composableBuilder(
     column: $table.description,
     builder: (column) => column,
   );
 
-  GeneratedColumn<String> get location =>
-      $composableBuilder(column: $table.location, builder: (column) => column);
-
-  GeneratedColumn<String> get serialNumber => $composableBuilder(
-    column: $table.serialNumber,
-    builder: (column) => column,
-  );
-
-  GeneratedColumn<String> get imagePath =>
-      $composableBuilder(column: $table.imagePath, builder: (column) => column);
-
   GeneratedColumn<bool> get qrEnabled =>
       $composableBuilder(column: $table.qrEnabled, builder: (column) => column);
+
+  GeneratedColumn<String> get customFields => $composableBuilder(
+    column: $table.customFields,
+    builder: (column) => column,
+  );
 
   GeneratedColumn<DateTime> get createdAt =>
       $composableBuilder(column: $table.createdAt, builder: (column) => column);
@@ -990,11 +987,11 @@ class $$AssetsTableTableManager
                 Value<String> name = const Value.absent(),
                 Value<String?> categoryId = const Value.absent(),
                 Value<String?> emoji = const Value.absent(),
-                Value<String?> description = const Value.absent(),
-                Value<String?> location = const Value.absent(),
-                Value<String?> serialNumber = const Value.absent(),
                 Value<String?> imagePath = const Value.absent(),
+                Value<String?> location = const Value.absent(),
+                Value<String?> description = const Value.absent(),
                 Value<bool> qrEnabled = const Value.absent(),
+                Value<String> customFields = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<DateTime> updatedAt = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
@@ -1004,11 +1001,11 @@ class $$AssetsTableTableManager
                 name: name,
                 categoryId: categoryId,
                 emoji: emoji,
-                description: description,
-                location: location,
-                serialNumber: serialNumber,
                 imagePath: imagePath,
+                location: location,
+                description: description,
                 qrEnabled: qrEnabled,
+                customFields: customFields,
                 createdAt: createdAt,
                 updatedAt: updatedAt,
                 rowid: rowid,
@@ -1020,11 +1017,11 @@ class $$AssetsTableTableManager
                 required String name,
                 Value<String?> categoryId = const Value.absent(),
                 Value<String?> emoji = const Value.absent(),
-                Value<String?> description = const Value.absent(),
-                Value<String?> location = const Value.absent(),
-                Value<String?> serialNumber = const Value.absent(),
                 Value<String?> imagePath = const Value.absent(),
+                Value<String?> location = const Value.absent(),
+                Value<String?> description = const Value.absent(),
                 Value<bool> qrEnabled = const Value.absent(),
+                Value<String> customFields = const Value.absent(),
                 required DateTime createdAt,
                 required DateTime updatedAt,
                 Value<int> rowid = const Value.absent(),
@@ -1034,11 +1031,11 @@ class $$AssetsTableTableManager
                 name: name,
                 categoryId: categoryId,
                 emoji: emoji,
-                description: description,
-                location: location,
-                serialNumber: serialNumber,
                 imagePath: imagePath,
+                location: location,
+                description: description,
                 qrEnabled: qrEnabled,
+                customFields: customFields,
                 createdAt: createdAt,
                 updatedAt: updatedAt,
                 rowid: rowid,

@@ -11,16 +11,16 @@ class Assets extends Table {
 
   TextColumn get emoji => text().nullable()();
 
-  TextColumn get description => text().nullable()();
+  TextColumn get imagePath => text().nullable()();
 
   TextColumn get location => text().nullable()();
 
-  TextColumn get serialNumber => text().nullable()();
-
-  TextColumn get imagePath => text().nullable()();
+  TextColumn get description => text().nullable()();
 
   BoolColumn get qrEnabled =>
       boolean().withDefault(const Constant(false))();
+
+  TextColumn get customFields => text().withDefault(const Constant('{}'))();
 
   DateTimeColumn get createdAt => dateTime()();
 
