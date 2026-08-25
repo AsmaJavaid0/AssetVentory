@@ -1,18 +1,19 @@
-import 'package:drift/drift.dart';
 
-class Categories extends Table {
-  TextColumn get id => text()();
 
-  TextColumn get ownerId => text()();
+class LocalCategory {
+  final String id;
+  final String ownerId;
+  final String name;
+  final String? emoji;
+  final DateTime createdAt;
+  final DateTime updatedAt;
 
-  TextColumn get name => text()();
-
-  TextColumn get emoji => text().nullable()();
-
-  DateTimeColumn get createdAt => dateTime()();
-
-  DateTimeColumn get updatedAt => dateTime()();
-
-  @override
-  Set<Column> get primaryKey => {id};
+  const LocalCategory({
+    required this.id,
+    required this.ownerId,
+    required this.name,
+    this.emoji,
+    required this.createdAt,
+    required this.updatedAt,
+  });
 }

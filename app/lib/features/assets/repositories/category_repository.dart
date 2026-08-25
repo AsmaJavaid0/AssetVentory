@@ -10,9 +10,8 @@ class CategoryRepository {
   static const Uuid _uuid = Uuid();
 
   CategoryRepository({
-    required AppDatabase database,
-  }) : _database = database;
-
+  required this._database,
+});
   Future<void> createCategory(LocalCategory category) async {
     await _database.into(_database.categories).insert(
           CategoriesCompanion.insert(
