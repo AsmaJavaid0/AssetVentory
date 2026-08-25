@@ -1125,16 +1125,533 @@ class CategoriesCompanion extends UpdateCompanion<Category> {
   }
 }
 
+class $AssetDocumentsTable extends AssetDocuments
+    with TableInfo<$AssetDocumentsTable, AssetDocument> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $AssetDocumentsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+    'id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _assetIdMeta = const VerificationMeta(
+    'assetId',
+  );
+  @override
+  late final GeneratedColumn<String> assetId = GeneratedColumn<String>(
+    'asset_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _nameMeta = const VerificationMeta('name');
+  @override
+  late final GeneratedColumn<String> name = GeneratedColumn<String>(
+    'name',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _filePathMeta = const VerificationMeta(
+    'filePath',
+  );
+  @override
+  late final GeneratedColumn<String> filePath = GeneratedColumn<String>(
+    'file_path',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _fileTypeMeta = const VerificationMeta(
+    'fileType',
+  );
+  @override
+  late final GeneratedColumn<String> fileType = GeneratedColumn<String>(
+    'file_type',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _fileSizeMeta = const VerificationMeta(
+    'fileSize',
+  );
+  @override
+  late final GeneratedColumn<int> fileSize = GeneratedColumn<int>(
+    'file_size',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _createdAtMeta = const VerificationMeta(
+    'createdAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+    'created_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _updatedAtMeta = const VerificationMeta(
+    'updatedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> updatedAt = GeneratedColumn<DateTime>(
+    'updated_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    assetId,
+    name,
+    filePath,
+    fileType,
+    fileSize,
+    createdAt,
+    updatedAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'asset_documents';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<AssetDocument> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    } else if (isInserting) {
+      context.missing(_idMeta);
+    }
+    if (data.containsKey('asset_id')) {
+      context.handle(
+        _assetIdMeta,
+        assetId.isAcceptableOrUnknown(data['asset_id']!, _assetIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_assetIdMeta);
+    }
+    if (data.containsKey('name')) {
+      context.handle(
+        _nameMeta,
+        name.isAcceptableOrUnknown(data['name']!, _nameMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_nameMeta);
+    }
+    if (data.containsKey('file_path')) {
+      context.handle(
+        _filePathMeta,
+        filePath.isAcceptableOrUnknown(data['file_path']!, _filePathMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_filePathMeta);
+    }
+    if (data.containsKey('file_type')) {
+      context.handle(
+        _fileTypeMeta,
+        fileType.isAcceptableOrUnknown(data['file_type']!, _fileTypeMeta),
+      );
+    }
+    if (data.containsKey('file_size')) {
+      context.handle(
+        _fileSizeMeta,
+        fileSize.isAcceptableOrUnknown(data['file_size']!, _fileSizeMeta),
+      );
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(
+        _createdAtMeta,
+        createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_createdAtMeta);
+    }
+    if (data.containsKey('updated_at')) {
+      context.handle(
+        _updatedAtMeta,
+        updatedAt.isAcceptableOrUnknown(data['updated_at']!, _updatedAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_updatedAtMeta);
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  AssetDocument map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return AssetDocument(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}id'],
+      )!,
+      assetId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}asset_id'],
+      )!,
+      name: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}name'],
+      )!,
+      filePath: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}file_path'],
+      )!,
+      fileType: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}file_type'],
+      ),
+      fileSize: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}file_size'],
+      ),
+      createdAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}created_at'],
+      )!,
+      updatedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}updated_at'],
+      )!,
+    );
+  }
+
+  @override
+  $AssetDocumentsTable createAlias(String alias) {
+    return $AssetDocumentsTable(attachedDatabase, alias);
+  }
+}
+
+class AssetDocument extends DataClass implements Insertable<AssetDocument> {
+  final String id;
+  final String assetId;
+  final String name;
+  final String filePath;
+  final String? fileType;
+  final int? fileSize;
+  final DateTime createdAt;
+  final DateTime updatedAt;
+  const AssetDocument({
+    required this.id,
+    required this.assetId,
+    required this.name,
+    required this.filePath,
+    this.fileType,
+    this.fileSize,
+    required this.createdAt,
+    required this.updatedAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    map['asset_id'] = Variable<String>(assetId);
+    map['name'] = Variable<String>(name);
+    map['file_path'] = Variable<String>(filePath);
+    if (!nullToAbsent || fileType != null) {
+      map['file_type'] = Variable<String>(fileType);
+    }
+    if (!nullToAbsent || fileSize != null) {
+      map['file_size'] = Variable<int>(fileSize);
+    }
+    map['created_at'] = Variable<DateTime>(createdAt);
+    map['updated_at'] = Variable<DateTime>(updatedAt);
+    return map;
+  }
+
+  AssetDocumentsCompanion toCompanion(bool nullToAbsent) {
+    return AssetDocumentsCompanion(
+      id: Value(id),
+      assetId: Value(assetId),
+      name: Value(name),
+      filePath: Value(filePath),
+      fileType: fileType == null && nullToAbsent
+          ? const Value.absent()
+          : Value(fileType),
+      fileSize: fileSize == null && nullToAbsent
+          ? const Value.absent()
+          : Value(fileSize),
+      createdAt: Value(createdAt),
+      updatedAt: Value(updatedAt),
+    );
+  }
+
+  factory AssetDocument.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return AssetDocument(
+      id: serializer.fromJson<String>(json['id']),
+      assetId: serializer.fromJson<String>(json['assetId']),
+      name: serializer.fromJson<String>(json['name']),
+      filePath: serializer.fromJson<String>(json['filePath']),
+      fileType: serializer.fromJson<String?>(json['fileType']),
+      fileSize: serializer.fromJson<int?>(json['fileSize']),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+      updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'assetId': serializer.toJson<String>(assetId),
+      'name': serializer.toJson<String>(name),
+      'filePath': serializer.toJson<String>(filePath),
+      'fileType': serializer.toJson<String?>(fileType),
+      'fileSize': serializer.toJson<int?>(fileSize),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+      'updatedAt': serializer.toJson<DateTime>(updatedAt),
+    };
+  }
+
+  AssetDocument copyWith({
+    String? id,
+    String? assetId,
+    String? name,
+    String? filePath,
+    Value<String?> fileType = const Value.absent(),
+    Value<int?> fileSize = const Value.absent(),
+    DateTime? createdAt,
+    DateTime? updatedAt,
+  }) => AssetDocument(
+    id: id ?? this.id,
+    assetId: assetId ?? this.assetId,
+    name: name ?? this.name,
+    filePath: filePath ?? this.filePath,
+    fileType: fileType.present ? fileType.value : this.fileType,
+    fileSize: fileSize.present ? fileSize.value : this.fileSize,
+    createdAt: createdAt ?? this.createdAt,
+    updatedAt: updatedAt ?? this.updatedAt,
+  );
+  AssetDocument copyWithCompanion(AssetDocumentsCompanion data) {
+    return AssetDocument(
+      id: data.id.present ? data.id.value : this.id,
+      assetId: data.assetId.present ? data.assetId.value : this.assetId,
+      name: data.name.present ? data.name.value : this.name,
+      filePath: data.filePath.present ? data.filePath.value : this.filePath,
+      fileType: data.fileType.present ? data.fileType.value : this.fileType,
+      fileSize: data.fileSize.present ? data.fileSize.value : this.fileSize,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+      updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('AssetDocument(')
+          ..write('id: $id, ')
+          ..write('assetId: $assetId, ')
+          ..write('name: $name, ')
+          ..write('filePath: $filePath, ')
+          ..write('fileType: $fileType, ')
+          ..write('fileSize: $fileSize, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('updatedAt: $updatedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    id,
+    assetId,
+    name,
+    filePath,
+    fileType,
+    fileSize,
+    createdAt,
+    updatedAt,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is AssetDocument &&
+          other.id == this.id &&
+          other.assetId == this.assetId &&
+          other.name == this.name &&
+          other.filePath == this.filePath &&
+          other.fileType == this.fileType &&
+          other.fileSize == this.fileSize &&
+          other.createdAt == this.createdAt &&
+          other.updatedAt == this.updatedAt);
+}
+
+class AssetDocumentsCompanion extends UpdateCompanion<AssetDocument> {
+  final Value<String> id;
+  final Value<String> assetId;
+  final Value<String> name;
+  final Value<String> filePath;
+  final Value<String?> fileType;
+  final Value<int?> fileSize;
+  final Value<DateTime> createdAt;
+  final Value<DateTime> updatedAt;
+  final Value<int> rowid;
+  const AssetDocumentsCompanion({
+    this.id = const Value.absent(),
+    this.assetId = const Value.absent(),
+    this.name = const Value.absent(),
+    this.filePath = const Value.absent(),
+    this.fileType = const Value.absent(),
+    this.fileSize = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  AssetDocumentsCompanion.insert({
+    required String id,
+    required String assetId,
+    required String name,
+    required String filePath,
+    this.fileType = const Value.absent(),
+    this.fileSize = const Value.absent(),
+    required DateTime createdAt,
+    required DateTime updatedAt,
+    this.rowid = const Value.absent(),
+  }) : id = Value(id),
+       assetId = Value(assetId),
+       name = Value(name),
+       filePath = Value(filePath),
+       createdAt = Value(createdAt),
+       updatedAt = Value(updatedAt);
+  static Insertable<AssetDocument> custom({
+    Expression<String>? id,
+    Expression<String>? assetId,
+    Expression<String>? name,
+    Expression<String>? filePath,
+    Expression<String>? fileType,
+    Expression<int>? fileSize,
+    Expression<DateTime>? createdAt,
+    Expression<DateTime>? updatedAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (assetId != null) 'asset_id': assetId,
+      if (name != null) 'name': name,
+      if (filePath != null) 'file_path': filePath,
+      if (fileType != null) 'file_type': fileType,
+      if (fileSize != null) 'file_size': fileSize,
+      if (createdAt != null) 'created_at': createdAt,
+      if (updatedAt != null) 'updated_at': updatedAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  AssetDocumentsCompanion copyWith({
+    Value<String>? id,
+    Value<String>? assetId,
+    Value<String>? name,
+    Value<String>? filePath,
+    Value<String?>? fileType,
+    Value<int?>? fileSize,
+    Value<DateTime>? createdAt,
+    Value<DateTime>? updatedAt,
+    Value<int>? rowid,
+  }) {
+    return AssetDocumentsCompanion(
+      id: id ?? this.id,
+      assetId: assetId ?? this.assetId,
+      name: name ?? this.name,
+      filePath: filePath ?? this.filePath,
+      fileType: fileType ?? this.fileType,
+      fileSize: fileSize ?? this.fileSize,
+      createdAt: createdAt ?? this.createdAt,
+      updatedAt: updatedAt ?? this.updatedAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<String>(id.value);
+    }
+    if (assetId.present) {
+      map['asset_id'] = Variable<String>(assetId.value);
+    }
+    if (name.present) {
+      map['name'] = Variable<String>(name.value);
+    }
+    if (filePath.present) {
+      map['file_path'] = Variable<String>(filePath.value);
+    }
+    if (fileType.present) {
+      map['file_type'] = Variable<String>(fileType.value);
+    }
+    if (fileSize.present) {
+      map['file_size'] = Variable<int>(fileSize.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    if (updatedAt.present) {
+      map['updated_at'] = Variable<DateTime>(updatedAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('AssetDocumentsCompanion(')
+          ..write('id: $id, ')
+          ..write('assetId: $assetId, ')
+          ..write('name: $name, ')
+          ..write('filePath: $filePath, ')
+          ..write('fileType: $fileType, ')
+          ..write('fileSize: $fileSize, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('updatedAt: $updatedAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
 abstract class _$AppDatabase extends GeneratedDatabase {
   _$AppDatabase(QueryExecutor e) : super(e);
   $AppDatabaseManager get managers => $AppDatabaseManager(this);
   late final $AssetsTable assets = $AssetsTable(this);
   late final $CategoriesTable categories = $CategoriesTable(this);
+  late final $AssetDocumentsTable assetDocuments = $AssetDocumentsTable(this);
   @override
   Iterable<TableInfo<Table, Object?>> get allTables =>
       allSchemaEntities.whereType<TableInfo<Table, Object?>>();
   @override
-  List<DatabaseSchemaEntity> get allSchemaEntities => [assets, categories];
+  List<DatabaseSchemaEntity> get allSchemaEntities => [
+    assets,
+    categories,
+    assetDocuments,
+  ];
 }
 
 typedef $$AssetsTableCreateCompanionBuilder =
@@ -1683,6 +2200,265 @@ typedef $$CategoriesTableProcessedTableManager =
       Category,
       PrefetchHooks Function()
     >;
+typedef $$AssetDocumentsTableCreateCompanionBuilder =
+    AssetDocumentsCompanion Function({
+      required String id,
+      required String assetId,
+      required String name,
+      required String filePath,
+      Value<String?> fileType,
+      Value<int?> fileSize,
+      required DateTime createdAt,
+      required DateTime updatedAt,
+      Value<int> rowid,
+    });
+typedef $$AssetDocumentsTableUpdateCompanionBuilder =
+    AssetDocumentsCompanion Function({
+      Value<String> id,
+      Value<String> assetId,
+      Value<String> name,
+      Value<String> filePath,
+      Value<String?> fileType,
+      Value<int?> fileSize,
+      Value<DateTime> createdAt,
+      Value<DateTime> updatedAt,
+      Value<int> rowid,
+    });
+
+class $$AssetDocumentsTableFilterComposer
+    extends Composer<_$AppDatabase, $AssetDocumentsTable> {
+  $$AssetDocumentsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get assetId => $composableBuilder(
+    column: $table.assetId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get name => $composableBuilder(
+    column: $table.name,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get filePath => $composableBuilder(
+    column: $table.filePath,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get fileType => $composableBuilder(
+    column: $table.fileType,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get fileSize => $composableBuilder(
+    column: $table.fileSize,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$AssetDocumentsTableOrderingComposer
+    extends Composer<_$AppDatabase, $AssetDocumentsTable> {
+  $$AssetDocumentsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get assetId => $composableBuilder(
+    column: $table.assetId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get name => $composableBuilder(
+    column: $table.name,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get filePath => $composableBuilder(
+    column: $table.filePath,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get fileType => $composableBuilder(
+    column: $table.fileType,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get fileSize => $composableBuilder(
+    column: $table.fileSize,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$AssetDocumentsTableAnnotationComposer
+    extends Composer<_$AppDatabase, $AssetDocumentsTable> {
+  $$AssetDocumentsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get assetId =>
+      $composableBuilder(column: $table.assetId, builder: (column) => column);
+
+  GeneratedColumn<String> get name =>
+      $composableBuilder(column: $table.name, builder: (column) => column);
+
+  GeneratedColumn<String> get filePath =>
+      $composableBuilder(column: $table.filePath, builder: (column) => column);
+
+  GeneratedColumn<String> get fileType =>
+      $composableBuilder(column: $table.fileType, builder: (column) => column);
+
+  GeneratedColumn<int> get fileSize =>
+      $composableBuilder(column: $table.fileSize, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get updatedAt =>
+      $composableBuilder(column: $table.updatedAt, builder: (column) => column);
+}
+
+class $$AssetDocumentsTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $AssetDocumentsTable,
+          AssetDocument,
+          $$AssetDocumentsTableFilterComposer,
+          $$AssetDocumentsTableOrderingComposer,
+          $$AssetDocumentsTableAnnotationComposer,
+          $$AssetDocumentsTableCreateCompanionBuilder,
+          $$AssetDocumentsTableUpdateCompanionBuilder,
+          (
+            AssetDocument,
+            BaseReferences<_$AppDatabase, $AssetDocumentsTable, AssetDocument>,
+          ),
+          AssetDocument,
+          PrefetchHooks Function()
+        > {
+  $$AssetDocumentsTableTableManager(
+    _$AppDatabase db,
+    $AssetDocumentsTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$AssetDocumentsTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$AssetDocumentsTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$AssetDocumentsTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<String> id = const Value.absent(),
+                Value<String> assetId = const Value.absent(),
+                Value<String> name = const Value.absent(),
+                Value<String> filePath = const Value.absent(),
+                Value<String?> fileType = const Value.absent(),
+                Value<int?> fileSize = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+                Value<DateTime> updatedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => AssetDocumentsCompanion(
+                id: id,
+                assetId: assetId,
+                name: name,
+                filePath: filePath,
+                fileType: fileType,
+                fileSize: fileSize,
+                createdAt: createdAt,
+                updatedAt: updatedAt,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String id,
+                required String assetId,
+                required String name,
+                required String filePath,
+                Value<String?> fileType = const Value.absent(),
+                Value<int?> fileSize = const Value.absent(),
+                required DateTime createdAt,
+                required DateTime updatedAt,
+                Value<int> rowid = const Value.absent(),
+              }) => AssetDocumentsCompanion.insert(
+                id: id,
+                assetId: assetId,
+                name: name,
+                filePath: filePath,
+                fileType: fileType,
+                fileSize: fileSize,
+                createdAt: createdAt,
+                updatedAt: updatedAt,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$AssetDocumentsTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $AssetDocumentsTable,
+      AssetDocument,
+      $$AssetDocumentsTableFilterComposer,
+      $$AssetDocumentsTableOrderingComposer,
+      $$AssetDocumentsTableAnnotationComposer,
+      $$AssetDocumentsTableCreateCompanionBuilder,
+      $$AssetDocumentsTableUpdateCompanionBuilder,
+      (
+        AssetDocument,
+        BaseReferences<_$AppDatabase, $AssetDocumentsTable, AssetDocument>,
+      ),
+      AssetDocument,
+      PrefetchHooks Function()
+    >;
 
 class $AppDatabaseManager {
   final _$AppDatabase _db;
@@ -1691,4 +2467,6 @@ class $AppDatabaseManager {
       $$AssetsTableTableManager(_db, _db.assets);
   $$CategoriesTableTableManager get categories =>
       $$CategoriesTableTableManager(_db, _db.categories);
+  $$AssetDocumentsTableTableManager get assetDocuments =>
+      $$AssetDocumentsTableTableManager(_db, _db.assetDocuments);
 }

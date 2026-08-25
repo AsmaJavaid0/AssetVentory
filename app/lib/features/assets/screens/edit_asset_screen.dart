@@ -18,11 +18,15 @@ class EditAssetScreen extends StatefulWidget {
   });
 
   static Future<void> navigateTo(
-    BuildContext context,
-    LocalAsset asset,
-  ) {
-    return AssetDetailsScreen.navigateTo(context, asset);
-  }
+  BuildContext context,
+  LocalAsset asset,
+) {
+  return Navigator.of(context).push(
+    MaterialPageRoute(
+      builder: (_) => EditAssetScreen(asset: asset),
+    ),
+  );
+}
 
   @override
   State<EditAssetScreen> createState() =>
