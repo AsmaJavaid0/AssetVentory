@@ -1,259 +1,147 @@
-import 'package:firebase_auth/firebase_auth.dart';
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-
 import '../../../core/constants/app_colors.dart';
-import '../../../core/widgets/asset_avatar.dart';
-import '../../auth/services/firestore_service.dart';
+import '../../../core/di/service_locator.dart';
+import '../models/local_asset.dart';
+import '../models/local_category.dart';
 import '../../home/widgets/asset_detail_modal.dart';
-import '../models/asset_model.dart';
-import '../models/category_model.dart';
 import 'add_asset_screen.dart';
 
-class CategoryDetailScreen extends StatelessWidget {
-  final CategoryModel category;
-
+class CategoryDetailScreen extends StatefulWidget {
+  final LocalCategory category;
   const CategoryDetailScreen({super.key, required this.category});
 
-  static Future<void> navigateTo(BuildContext context, CategoryModel category) {
-    return Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (_) => CategoryDetailScreen(category: category),
-      ),
-    );
+  static Future<void> navigateTo(BuildContext context, LocalCategory category) {
+    return Navigator.of(context).push(MaterialPageRoute(
+      builder: (_) => CategoryDetailScreen(category: category),
+    ));
   }
 
-  FirestoreService get _firestoreService => FirestoreService();
+  @override
+  State<CategoryDetailScreen> createState() => _CategoryDetailScreenState();
+}
 
-  Future<void> _editCategory(BuildContext context) async {
-    final nameController = TextEditingController(text: category.name);
-    var emoji = category.emoji ?? '📁';
-    final saved = await showDialog<bool>(
+class _CategoryDetailScreenState extends State<CategoryDetailScreen> {
+  late Future<List<LocalAsset>> _assetsFuture;
+
+  @override
+  void initState() {
+    super.initState();
+    _assetsFuture = serviceLocator.assetRepository.getAssets(widget.category.ownerId);
+  }
+
+  Future<void> _editCategory() async {
+    final controller = TextEditingController(text: widget.category.name);
+    var emoji = widget.category.emoji ?? '📁';
+    final result = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => StatefulBuilder(
         builder: (context, setDialogState) => AlertDialog(
-          title: Text(
-            'Edit Category',
-            style: GoogleFonts.outfit(fontWeight: FontWeight.w700),
-          ),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(
-                controller: nameController,
-                decoration: const InputDecoration(labelText: 'Category name'),
-                autofocus: true,
-              ),
-              const SizedBox(height: 12),
-              DropdownButton<String>(
-                value: emoji,
-                isExpanded: true,
-                items:
-                    const [
-                          '📁',
-                          '🛠️',
-                          '📚',
-                          '👕',
-                          '🎨',
-                          '🍳',
-                          '👟',
-                          '💍',
-                          '🎮',
-                          '🚗',
-                        ]
-                        .map(
-                          (value) => DropdownMenuItem(
-                            value: value,
-                            child: Text(
-                              value,
-                              style: const TextStyle(fontSize: 22),
-                            ),
-                          ),
-                        )
-                        .toList(),
-                onChanged: (value) =>
-                    value == null ? null : setDialogState(() => emoji = value),
-              ),
-            ],
-          ),
+          title: const Text('Edit Category'),
+          content: Column(mainAxisSize: MainAxisSize.min, children: [
+            TextField(controller: controller, autofocus: true,
+              decoration: const InputDecoration(labelText: 'Category name')),
+            const SizedBox(height: 12),
+            DropdownButton<String>(
+              value: emoji, isExpanded: true,
+              items: const ['📁','🛠️','📚','👕','🎨','🍳','👟','💍','🎮','🚗']
+                  .map((value) => DropdownMenuItem(value: value, child: Text(value, style: const TextStyle(fontSize: 22))))
+                  .toList(),
+              onChanged: (value) { if (value != null) setDialogState(() => emoji = value); },
+            ),
+          ]),
           actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(dialogContext),
-              child: const Text('Cancel'),
-            ),
-            ElevatedButton(
-              onPressed: () async {
-                final name = nameController.text.trim();
-                if (name.isEmpty) return;
-                try {
-                  await _firestoreService.updateCategory(
-                    CategoryModel(
-                      id: category.id,
-                      ownerId: category.ownerId,
-                      name: name,
-                      emoji: emoji,
-                      createdAt: category.createdAt,
-                      updatedAt: DateTime.now(),
-                    ),
-                  );
-                  if (dialogContext.mounted) Navigator.pop(dialogContext, true);
-                } catch (e) {
-                  debugPrint('Error updating category: $e');
-                  if (dialogContext.mounted) {
-                    ScaffoldMessenger.of(dialogContext).showSnackBar(
-                      const SnackBar(
-                        content: Text('Failed to update category. Please try again.'),
-                      ),
-                    );
-                  }
-                }
-              },
-              child: const Text('Save'),
-            ),
+            TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('Cancel')),
+            ElevatedButton(onPressed: () async {
+              final name = controller.text.trim();
+              if (name.isEmpty) return;
+              await serviceLocator.categoryRepository.updateCategory(LocalCategory(
+                id: widget.category.id, ownerId: widget.category.ownerId, name: name,
+                emoji: emoji, createdAt: widget.category.createdAt, updatedAt: DateTime.now(),
+              ));
+              if (dialogContext.mounted) Navigator.pop(dialogContext, true);
+            }, child: const Text('Save')),
           ],
         ),
       ),
     );
-    if (saved == true && context.mounted) Navigator.pop(context);
+    controller.dispose();
+    if (result == true && mounted) Navigator.pop(context, true);
   }
 
-  Future<void> _deleteCategory(BuildContext context, int assetCount) async {
+  Future<void> _deleteCategory(int assetCount) async {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        title: Text(
-          'Delete "${category.name}"?',
-          style: GoogleFonts.outfit(fontWeight: FontWeight.w700),
-        ),
-        content: Text(
-          assetCount == 0
-              ? 'This category will be permanently removed.'
-              : '$assetCount asset${assetCount == 1 ? '' : 's'} will become uncategorized. No assets will be deleted.',
-          style: GoogleFonts.outfit(color: AppColors.textSecondary),
-        ),
+        title: Text('Delete "${widget.category.name}"?'),
+        content: Text(assetCount == 0
+            ? 'This category will be permanently removed.'
+            : '$assetCount asset${assetCount == 1 ? '' : 's'} will become uncategorized. No assets will be deleted.'),
         actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext, false),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext, true),
-            child: const Text(
-              'Delete',
-              style: TextStyle(color: AppColors.error),
-            ),
-          ),
+          TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('Cancel')),
+          TextButton(onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text('Delete', style: TextStyle(color: AppColors.error))),
         ],
       ),
     );
-    if (confirmed != true || !context.mounted) return;
-
-    // Return to the category list straight away. A Firestore batch can take
-    // a noticeable moment to complete (especially with offline persistence),
-    // so waiting here made the delete action appear unresponsive.
-    Navigator.of(context).pop();
-    try {
-      await _firestoreService.deleteCategory(category.id);
-    } catch (e) {
-      debugPrint('Error deleting category: $e');
-    }
+    if (confirmed != true || !mounted) return;
+    await serviceLocator.categoryRepository.deleteCategory(widget.category.id);
+    if (mounted) Navigator.pop(context, true);
   }
 
   @override
   Widget build(BuildContext context) {
-    final uid = FirebaseAuth.instance.currentUser?.uid ?? '';
-    return StreamBuilder<List<AssetModel>>(
-      stream: _firestoreService.streamUserAssets(uid),
-      builder: (context, snapshot) {
-        final assets = (snapshot.data ?? [])
-            .where((asset) => asset.categoryId == category.id)
-            .toList();
-        return Scaffold(
-          backgroundColor: AppColors.scaffoldBg,
-          appBar: AppBar(
-            backgroundColor: Colors.white,
-            surfaceTintColor: Colors.white,
-            title: Text(
-              '${category.emoji ?? '📁'} ${category.name}',
-              style: GoogleFonts.outfit(
-                fontWeight: FontWeight.w700,
-                color: AppColors.textPrimary,
-              ),
-            ),
-            actions: [
-              IconButton(
-                icon: const Icon(Icons.edit_outlined),
-                tooltip: 'Edit category',
-                onPressed: () => _editCategory(context),
-              ),
-              IconButton(
-                icon: const Icon(
-                  Icons.delete_outline_rounded,
-                  color: AppColors.error,
-                ),
-                tooltip: 'Delete category',
-                onPressed: () => _deleteCategory(context, assets.length),
-              ),
-            ],
-          ),
-          body: snapshot.connectionState == ConnectionState.waiting
-              ? const Center(child: CircularProgressIndicator())
-              : assets.isEmpty
-              ? Center(
-                  child: Text(
-                    'No assets in this category yet.',
-                    style: GoogleFonts.outfit(color: AppColors.textSecondary),
-                  ),
-                )
-              : ListView.separated(
-                  padding: const EdgeInsets.fromLTRB(20, 16, 20, 100),
-                  itemCount: assets.length,
-                  separatorBuilder: (_, _) => const SizedBox(height: 10),
-                  itemBuilder: (context, index) {
-                    final asset = assets[index];
-                    return Card(
-                      child: ListTile(
-                        leading: AssetAvatar(
-                          imageUrl: asset.imageUrl,
-                          emoji: asset.emoji,
-                          size: 40,
-                          borderRadius: 10,
-                          fontSize: 22,
-                        ),
-                        title: Text(
-                          asset.name,
-                          style: GoogleFonts.outfit(
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
-                        subtitle: asset.location?.isNotEmpty == true
-                            ? Text(asset.location!, style: GoogleFonts.outfit())
-                            : null,
-                        trailing: const Icon(Icons.chevron_right_rounded),
-                        onTap: () => AssetDetailModal.show(
-                          context,
-                          asset,
-                          categoryName: category.name,
-                        ),
-                      ),
-                    );
-                  },
-                ),
-          floatingActionButton: FloatingActionButton.extended(
-            onPressed: () =>
-                AddAssetScreen.navigateTo(context, categoryId: category.id),
-            backgroundColor: AppColors.primaryPurple,
-            icon: const Icon(Icons.add_rounded, color: Colors.white),
-            label: Text(
-              'Add Asset',
-              style: GoogleFonts.outfit(
-                color: Colors.white,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ),
-        );
-      },
+    final category = widget.category;
+    return Scaffold(
+      backgroundColor: AppColors.scaffoldBg,
+      appBar: AppBar(
+        backgroundColor: Colors.white, surfaceTintColor: Colors.white,
+        title: Text('${category.emoji ?? '📁'} ${category.name}', style: GoogleFonts.outfit(fontWeight: FontWeight.w700, color: AppColors.textPrimary)),
+        actions: [
+          IconButton(icon: const Icon(Icons.edit_outlined), onPressed: _editCategory),
+          IconButton(icon: const Icon(Icons.delete_outline_rounded, color: AppColors.error),
+            onPressed: () async { final assets = await _assetsFuture; if (mounted) _deleteCategory(assets.where((a) => a.categoryId == category.id).length); }),
+        ],
+      ),
+      body: FutureBuilder<List<LocalAsset>>(
+        future: _assetsFuture,
+        builder: (context, snapshot) {
+          if (snapshot.connectionState == ConnectionState.waiting) return const Center(child: CircularProgressIndicator());
+          if (snapshot.hasError) return const Center(child: Text('Unable to load assets.'));
+          final assets = (snapshot.data ?? []).where((a) => a.categoryId == category.id).toList();
+          if (assets.isEmpty) return Center(child: Text('No assets in this category yet.', style: GoogleFonts.outfit(color: AppColors.textSecondary)));
+          return ListView.separated(
+            padding: const EdgeInsets.fromLTRB(20, 16, 20, 100),
+            itemCount: assets.length,
+            separatorBuilder: (_, _) => const SizedBox(height: 10),
+            itemBuilder: (context, index) {
+              final asset = assets[index];
+              return Card(child: ListTile(
+                leading: ClipRRect(borderRadius: BorderRadius.circular(10), child: SizedBox(width: 92, height: 62,
+                  child: asset.imagePath?.isNotEmpty == true
+                    ? Image.file(File(asset.imagePath!), fit: BoxFit.cover, errorBuilder: (_, _, _) => _fallback(asset))
+                    : _fallback(asset))),
+                title: Text(asset.name, style: GoogleFonts.outfit(fontWeight: FontWeight.w700)),
+                subtitle: asset.location?.isNotEmpty == true ? Text(asset.location!) : null,
+                trailing: const Icon(Icons.chevron_right_rounded),
+                onTap: () => AssetDetailModal.show(context, asset, categoryName: category.name),
+              ));
+            },
+          );
+        },
+      ),
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: () => AddAssetScreen.navigateTo(context, categoryId: category.id),
+        backgroundColor: AppColors.primaryPurple,
+        icon: const Icon(Icons.add_rounded, color: Colors.white),
+        label: Text('Add Asset', style: GoogleFonts.outfit(color: Colors.white, fontWeight: FontWeight.w600)),
+      ),
     );
   }
+
+  Widget _fallback(LocalAsset asset) => Container(
+    color: AppColors.primaryPurple.withValues(alpha: 0.08), alignment: Alignment.center,
+    child: Text(asset.emoji ?? '📦', style: const TextStyle(fontSize: 25)),
+  );
 }
