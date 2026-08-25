@@ -1,15 +1,14 @@
 import 'dart:io';
-import 'package:uuid/uuid.dart';
+
 import 'package:path_provider/path_provider.dart';
+import 'package:uuid/uuid.dart';
 
 class LocalFileStorage {
   static const String _assetsDirectoryName = 'assets';
   static const Uuid _uuid = Uuid();
-  /// Returns the root directory where AssetVentory stores
-  /// user-generated asset files.
+
   Future<Directory> _getAssetsDirectory() async {
     final appDirectory = await getApplicationDocumentsDirectory();
-
     final assetsDirectory = Directory(
       '${appDirectory.path}/$_assetsDirectoryName',
     );
@@ -21,10 +20,8 @@ class LocalFileStorage {
     return assetsDirectory;
   }
 
-  /// Returns the directory belonging to one asset.
   Future<Directory> _getAssetDirectory(String assetId) async {
     final assetsDirectory = await _getAssetsDirectory();
-
     final assetDirectory = Directory(
       '${assetsDirectory.path}/$assetId',
     );
@@ -36,15 +33,11 @@ class LocalFileStorage {
     return assetDirectory;
   }
 
-  /// Saves an image selected by the user into permanent app storage.
-  ///
-  /// Returns the permanent local path of the copied image.
   Future<String> saveImage({
     required String assetId,
     required File sourceFile,
   }) async {
     final assetDirectory = await _getAssetDirectory(assetId);
-
     final imagesDirectory = Directory(
       '${assetDirectory.path}/images',
     );
@@ -54,21 +47,45 @@ class LocalFileStorage {
     }
 
     final extension = _getExtension(sourceFile.path);
-
-    final fileName = '${_uuid.v4()}$extension';
     final destination = File(
-      '${imagesDirectory.path}/$fileName',
+      '${imagesDirectory.path}/${_uuid.v4()}$extension',
     );
 
     final copiedFile = await sourceFile.copy(destination.path);
-
     return copiedFile.path;
   }
 
-  /// Deletes all locally stored files belonging to an asset.
+  Future<String> saveDocument({
+    required String assetId,
+    required File sourceFile,
+  }) async {
+    final assetDirectory = await _getAssetDirectory(assetId);
+    final documentsDirectory = Directory(
+      '${assetDirectory.path}/documents',
+    );
+
+    if (!await documentsDirectory.exists()) {
+      await documentsDirectory.create(recursive: true);
+    }
+
+    final extension = _getExtension(sourceFile.path);
+    final destination = File(
+      '${documentsDirectory.path}/${_uuid.v4()}$extension',
+    );
+
+    final copiedFile = await sourceFile.copy(destination.path);
+    return copiedFile.path;
+  }
+
+  Future<void> deleteFile(String path) async {
+    final file = File(path);
+    if (await file.exists()) {
+      await file.delete();
+    }
+  }
+
   Future<void> deleteAssetFiles(String assetId) async {
     final assetsDirectory = await _getAssetsDirectory();
-
     final assetDirectory = Directory(
       '${assetsDirectory.path}/$assetId',
     );
@@ -78,7 +95,6 @@ class LocalFileStorage {
     }
   }
 
-  /// Extracts the file extension, including the dot.
   String _getExtension(String path) {
     final fileName = path.split(Platform.pathSeparator).last;
     final dotIndex = fileName.lastIndexOf('.');
