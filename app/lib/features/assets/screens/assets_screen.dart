@@ -8,7 +8,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/utils/wave_clipper.dart';
 import '../../../core/widgets/custom_text_field.dart';
-import '../../../core/widgets/asset_avatar.dart';
+
 import '../models/category_model.dart';
 import '../../auth/services/firestore_service.dart';
 import '../../home/widgets/add_quick_asset_sheet.dart';
@@ -933,11 +933,9 @@ Widget _buildLocalAssetAvatar(LocalAsset asset) {
                               size: 17,
                               color: AppColors.primaryPurple,
                             ),
-                            onPressed: () => AssetDetailModal.show(
-                              context,
-                              asset,
-                              categoryName: cat.name,
-                            ),
+                           onPressed: () {
+  _showLocalAssetPreview(asset, cat.name);
+},
                           ),
                       ],
                     ),
