@@ -7,6 +7,7 @@ import '../../../core/widgets/custom_text_field.dart';
 
 import '../models/local_asset.dart';
 import '../models/local_category.dart';
+import 'asset_details_screen.dart';
 
 class EditAssetScreen extends StatefulWidget {
   final LocalAsset asset;
@@ -20,13 +21,7 @@ class EditAssetScreen extends StatefulWidget {
     BuildContext context,
     LocalAsset asset,
   ) {
-    return Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (_) => EditAssetScreen(
-          asset: asset,
-        ),
-      ),
-    );
+    return AssetDetailsScreen.navigateTo(context, asset);
   }
 
   @override
