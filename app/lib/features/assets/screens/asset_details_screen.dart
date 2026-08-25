@@ -16,7 +16,7 @@ class AssetDetailsScreen extends StatefulWidget {
 
   static Future<void> navigateTo(BuildContext context, LocalAsset asset) {
     return Navigator.of(context).push(
-      MaterialPageRoute(
+      MaterialPageRoute<void>(
         builder: (_) => AssetDetailsScreen(asset: asset),
       ),
     );
@@ -42,7 +42,16 @@ class _AssetDetailsScreenState extends State<AssetDetailsScreen> {
   }
 
   Future<void> _edit() async {
-    await EditAssetScreen.navigateTo(context, _asset);
+    // Capture the route context before awaiting so the edit action always uses
+    // the details page's navigator and does not depend on a stale context.
+    final navigator = Navigator.of(context);
+
+    await navigator.push<void>(
+      MaterialPageRoute<void>(
+        builder: (_) => EditAssetScreen(asset: _asset),
+      ),
+    );
+
     if (!mounted) return;
 
     final updated = await serviceLocator.assetRepository.getAsset(_asset.id);
@@ -174,9 +183,7 @@ class _AssetDetailsScreenState extends State<AssetDetailsScreen> {
     );
   }
 
-  String _categoryName() {
-    return 'Category';
-  }
+  String _categoryName() => 'Category';
 
   Widget _infoRow(String label, String value) {
     return Padding(
@@ -264,7 +271,10 @@ class _AssetDetailsScreenState extends State<AssetDetailsScreen> {
             ),
           ),
           if (document.fileType != null)
-            Text(document.fileType!.toUpperCase(), style: GoogleFonts.outfit(fontSize: 10, color: AppColors.textMuted)),
+            Text(
+              document.fileType!.toUpperCase(),
+              style: GoogleFonts.outfit(fontSize: 10, color: AppColors.textMuted),
+            ),
         ],
       ),
     );
