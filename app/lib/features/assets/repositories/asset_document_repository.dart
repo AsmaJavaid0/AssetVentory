@@ -14,10 +14,9 @@ class AssetDocumentRepository {
   static const Uuid _uuid = Uuid();
 
   AssetDocumentRepository({
-    required AppDatabase database,
-    required LocalFileStorage fileStorage,
-  })  : _database = database,
-        _fileStorage = fileStorage;
+    required this._database,
+    required this._fileStorage,
+  });
 
   Future<List<LocalAssetDocument>> getDocuments(String assetId) async {
     final query = _database.select(_database.assetDocuments)
