@@ -4,15 +4,13 @@ import '../repositories/asset_repository.dart';
 import '../models/local_asset.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/utils/wave_clipper.dart';
 import '../../../core/widgets/custom_text_field.dart';
-
-import '../models/category_model.dart';
-import '../../auth/services/firestore_service.dart';
+import '../models/local_category.dart';
+import '../repositories/category_repository.dart';
 import '../../home/widgets/add_quick_asset_sheet.dart';
-import 'category_detail_screen.dart';
+
 import '../../../core/database/app_database.dart';
 import '../../../core/storage/local_file_storage.dart';
 
@@ -26,18 +24,18 @@ class AssetsScreen extends StatefulWidget {
 }
 
 class _AssetsScreenState extends State<AssetsScreen> {
-  final FirestoreService _firestoreService = FirestoreService();
   final TextEditingController _searchController = TextEditingController();
 
-  late final Stream<List<CategoryModel>> _categoriesStream;
+late final AppDatabase _database;
 
-  final AssetRepository _assetRepository = AssetRepository(
-  database: AppDatabase(),
-  fileStorage: LocalFileStorage(),
-);
+late final AssetRepository _assetRepository;
+late final CategoryRepository _categoryRepository;
 
 List<LocalAsset> _assets = [];
+List<LocalCategory> _categories = [];
+
 bool _isLoadingAssets = true;
+bool _isLoadingCategories = true;
 
   String? _selectedCategoryId; // Null for 'All'
   String _searchQuery = '';
@@ -45,20 +43,53 @@ bool _isLoadingAssets = true;
 
   Timer? _searchDebounce;
 
- @override
+@override
 void initState() {
   super.initState();
 
-  final uid = FirebaseAuth.instance.currentUser?.uid ?? 'local_user';
+  _database = AppDatabase();
 
-  _categoriesStream = _firestoreService.streamUserCategories(uid);
+  _assetRepository = AssetRepository(
+    database: _database,
+    fileStorage: LocalFileStorage(),
+  );
+
+  _categoryRepository = CategoryRepository(
+    database: _database,
+  );
 
   _loadLocalAssets();
+  _loadLocalCategories();
+}
+
+Future<void> _loadLocalCategories() async {
+  try {
+    final categories =
+        await _categoryRepository.getCategories('local_user');
+
+    if (!mounted) return;
+
+    setState(() {
+      _categories = categories;
+      _isLoadingCategories = false;
+    });
+  } catch (e, stackTrace) {
+    debugPrint('Error loading local categories: $e');
+    debugPrintStack(stackTrace: stackTrace);
+
+    if (!mounted) return;
+
+    setState(() {
+      _categories = [];
+      _isLoadingCategories = false;
+    });
+  }
 }
 
 Future<void> _loadLocalAssets() async {
   try {
-    final assets = await _assetRepository.getAssets('local_user');
+    final assets =
+        await _assetRepository.getAssets('local_user');
 
     if (!mounted) return;
 
@@ -99,8 +130,7 @@ Future<void> _loadLocalAssets() async {
   void _showCreateCategoryDialog() {
     final nameCtrl = TextEditingController();
     String catEmoji = '📂';
-    final user = FirebaseAuth.instance.currentUser;
-    if (user == null) return;
+    
 
     showDialog(
       context: context,
@@ -188,15 +218,11 @@ Future<void> _loadLocalAssets() async {
                     final name = nameCtrl.text.trim();
                     if (name.isNotEmpty) {
                       try {
-                        final newCat = CategoryModel(
-                          id: '',
-                          ownerId: user.uid,
-                          name: name,
-                          emoji: catEmoji,
-                          createdAt: DateTime.now(),
-                          updatedAt: DateTime.now(),
-                        );
-                        final catId = await _firestoreService.addCategory(newCat);
+                        final catId = await _categoryRepository.createCategoryIfNotExists(
+  ownerId: 'local_user',
+  name: name,
+  emoji: catEmoji,
+);
                         if (!context.mounted) return;
                         setState(() {
                           _selectedCategoryId = catId;
@@ -240,18 +266,16 @@ Future<void> _loadLocalAssets() async {
 Widget build(BuildContext context) {
   return Scaffold(
     backgroundColor: AppColors.scaffoldBg,
-    body: StreamBuilder<List<CategoryModel>>(
-      stream: _categoriesStream,
-      builder: (context, catSnapshot) {
-        final categories = catSnapshot.data ?? [];
-
-        if (_isLoadingAssets) {
+    body: Builder(
+      builder: (context) {
+        if (_isLoadingAssets || _isLoadingCategories) {
           return const Center(
             child: CircularProgressIndicator(),
           );
         }
 
         final assets = _assets;
+        final categories = _categories;
 
         final filteredAssets = assets.where((asset) {
           final matchesCategory =
@@ -278,7 +302,9 @@ Widget build(BuildContext context) {
             case _AssetSort.location:
               return (a.location ?? '')
                   .toLowerCase()
-                  .compareTo((b.location ?? '').toLowerCase());
+                  .compareTo(
+                    (b.location ?? '').toLowerCase(),
+                  );
 
             case _AssetSort.newest:
               return b.createdAt.compareTo(a.createdAt);
@@ -310,6 +336,7 @@ Widget build(BuildContext context) {
       onPressed: () async {
         await AddQuickAssetSheet.show(context);
         await _loadLocalAssets();
+        await _loadLocalCategories();
       },
       backgroundColor: AppColors.primaryPurple,
       icon: const Icon(
@@ -440,7 +467,7 @@ Widget build(BuildContext context) {
   }
 
   Widget _buildCategorySelector(
-    List<CategoryModel> categories,
+    List<LocalCategory> categories,
     List<LocalAsset> assets,
   ) {
     // Count items per category
@@ -530,7 +557,9 @@ Widget build(BuildContext context) {
             count: count,
             isSelected: isSelected,
             onTap: () {
-              CategoryDetailScreen.navigateTo(context, cat);
+              setState(() {
+                _selectedCategoryId = cat.id;
+              });
             },
           );
         },
@@ -542,7 +571,7 @@ Widget build(BuildContext context) {
   // at this category are unlinked (set to Uncategorized) rather than left
   // dangling — see FirestoreService.deleteCategory.
   // ignore: unused_element
-  void _confirmDeleteCategory(CategoryModel cat, int count) {
+ void _confirmDeleteCategory(LocalCategory cat, int count) {
     showDialog(
       context: context,
       builder: (dialogContext) => AlertDialog(
@@ -577,7 +606,9 @@ Widget build(BuildContext context) {
               if (_selectedCategoryId == cat.id) {
                 setState(() => _selectedCategoryId = null);
               }
-              await _firestoreService.deleteCategory(cat.id);
+              await _categoryRepository.deleteCategory(cat.id);
+await _loadLocalCategories();
+await _loadLocalAssets();
             },
             style: ElevatedButton.styleFrom(
               backgroundColor: AppColors.error,
@@ -856,9 +887,9 @@ Widget _buildLocalAssetAvatar(LocalAsset asset) {
     ),
   );
 }
- Widget _buildAssetGrid(
+Widget _buildAssetGrid(
   List<LocalAsset> assets,
-  List<CategoryModel> categories,
+  List<LocalCategory> categories,
 ) {
     return GridView.builder(
       padding: const EdgeInsets.fromLTRB(20, 8, 20, 88),
@@ -872,16 +903,16 @@ Widget _buildLocalAssetAvatar(LocalAsset asset) {
       itemCount: assets.length,
       itemBuilder: (context, index) {
         final asset = assets[index];
-        final cat = categories.firstWhere(
-          (c) => c.id == asset.categoryId,
-          orElse: () => CategoryModel(
-            id: '',
-            ownerId: '',
-            name: '',
-            createdAt: DateTime.now(),
-            updatedAt: DateTime.now(),
-          ),
-        );
+       final cat = categories.firstWhere(
+  (c) => c.id == asset.categoryId,
+  orElse: () => LocalCategory(
+    id: '',
+    ownerId: '',
+    name: '',
+    createdAt: DateTime.now(),
+    updatedAt: DateTime.now(),
+  ),
+);
 
         return GestureDetector(
           onTap: () {
