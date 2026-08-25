@@ -1,23 +1,28 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:qr_flutter/qr_flutter.dart';
+
 import '../../../core/constants/app_colors.dart';
-import '../../../core/widgets/asset_avatar.dart';
-import '../../assets/models/asset_model.dart';
-import '../../assets/models/document_model.dart';
+import '../../../core/di/service_locator.dart';
+import '../../assets/models/local_asset.dart';
+import '../../assets/models/local_asset_document.dart';
 import '../../assets/screens/edit_asset_screen.dart';
-import '../../auth/services/firestore_service.dart';
 
 class AssetDetailModal extends StatefulWidget {
-  final AssetModel asset;
+  final LocalAsset asset;
   final String? categoryName;
 
-  const AssetDetailModal({super.key, required this.asset, this.categoryName});
+  const AssetDetailModal({
+    super.key,
+    required this.asset,
+    this.categoryName,
+  });
 
   static Future<void> show(
     BuildContext context,
-    AssetModel asset, {
+    LocalAsset asset, {
     String? categoryName,
   }) {
     return showModalBottomSheet(
@@ -27,7 +32,7 @@ class AssetDetailModal extends StatefulWidget {
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
       ),
-      builder: (context) => AssetDetailModal(
+      builder: (_) => AssetDetailModal(
         asset: asset,
         categoryName: categoryName,
       ),
@@ -39,546 +44,337 @@ class AssetDetailModal extends StatefulWidget {
 }
 
 class _AssetDetailModalState extends State<AssetDetailModal> {
-  final FirestoreService _firestoreService = FirestoreService();
-  bool _showQr = false;
+  final _assetRepository = serviceLocator.assetRepository;
+  final _documentRepository = serviceLocator.assetDocumentRepository;
 
-  late final Stream<List<DocumentModel>> _documentsStream;
+  bool _showQr = false;
+  late Future<List<LocalAssetDocument>> _documentsFuture;
 
   @override
   void initState() {
     super.initState();
-    _documentsStream = _firestoreService.streamAssetDocuments(widget.asset.id);
+    _documentsFuture = _documentRepository.getDocuments(widget.asset.id);
   }
 
-  void _showSnackBar(String message) {
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          message,
-          style: GoogleFonts.outfit(fontWeight: FontWeight.w500),
-        ),
-        backgroundColor: AppColors.primaryPurple,
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      ),
-    );
+  void _reloadDocuments() {
+    setState(() {
+      _documentsFuture = _documentRepository.getDocuments(widget.asset.id);
+    });
   }
 
-  Future<bool?> _confirmDeleteAsset(BuildContext context) {
-    return showDialog<bool>(
+  Future<void> _deleteAsset() async {
+    final confirmed = await showDialog<bool>(
       context: context,
-      builder: (context) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      builder: (dialogContext) => AlertDialog(
         title: Text(
           'Delete Asset?',
           style: GoogleFonts.outfit(fontWeight: FontWeight.w700),
         ),
         content: Text(
           'Are you sure you want to delete "${widget.asset.name}"? This cannot be undone.',
-          style: GoogleFonts.outfit(color: AppColors.textSecondary),
+          style: GoogleFonts.outfit(),
         ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: Text(
-              'Cancel',
-              style: GoogleFonts.outfit(
-                color: AppColors.textSecondary,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('Cancel'),
           ),
-          ElevatedButton(
-            onPressed: () => Navigator.pop(context, true),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.error,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
-              ),
-            ),
-            child: Text(
-              'Delete',
-              style: GoogleFonts.outfit(
-                color: Colors.white,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
+          FilledButton(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            style: FilledButton.styleFrom(backgroundColor: AppColors.error),
+            child: const Text('Delete'),
           ),
         ],
       ),
     );
+
+    if (confirmed != true || !mounted) return;
+
+    await serviceLocator.assetDocumentRepository
+        .deleteDocumentsForAsset(widget.asset.id);
+    await _assetRepository.deleteAsset(widget.asset.id);
+
+    if (!mounted) return;
+    Navigator.of(context).pop();
   }
 
   @override
   Widget build(BuildContext context) {
     final asset = widget.asset;
 
-    return Scaffold(
-      backgroundColor: Colors.transparent,
-      appBar: AppBar(
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        automaticallyImplyLeading: false,
-        centerTitle: true,
-        title: Container(
-          width: 40,
-          height: 4,
-          margin: const EdgeInsets.only(top: 8),
-          decoration: BoxDecoration(
-            color: const Color(0xFFDDD8E8),
-            borderRadius: BorderRadius.circular(2),
-          ),
-        ),
-      ),
-      body: SafeArea(
-        top: false,
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.fromLTRB(24, 8, 24, 32),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Header
-              Row(
-                children: [
-                  AssetAvatar(
-                    imageUrl: asset.imageUrl,
-                    emoji: asset.emoji,
-                    size: 52,
-                    borderRadius: 16,
-                    fontSize: 28,
+    return SafeArea(
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.fromLTRB(20, 12, 20, 28),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Center(
+              child: Container(
+                width: 42,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: const Color(0xFFDDD8E8),
+                  borderRadius: BorderRadius.circular(3),
+                ),
+              ),
+            ),
+            const SizedBox(height: 20),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  flex: 5,
+                  child: AspectRatio(
+                    aspectRatio: 16 / 10,
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(18),
+                      child: asset.imagePath != null &&
+                              File(asset.imagePath!).existsSync()
+                          ? Image.file(
+                              File(asset.imagePath!),
+                              fit: BoxFit.cover,
+                            )
+                          : Container(
+                              color: AppColors.scaffoldBg,
+                              alignment: Alignment.center,
+                              child: Text(
+                                asset.emoji ?? '📦',
+                                style: const TextStyle(fontSize: 48),
+                              ),
+                            ),
+                    ),
                   ),
-                  const SizedBox(width: 14),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
+                ),
+                const SizedBox(width: 16),
+                Expanded(
+                  flex: 6,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        asset.name,
+                        style: GoogleFonts.outfit(
+                          fontSize: 22,
+                          fontWeight: FontWeight.w700,
+                          color: AppColors.textPrimary,
+                        ),
+                      ),
+                      if (widget.categoryName?.isNotEmpty == true) ...[
+                        const SizedBox(height: 6),
                         Text(
-                          asset.name,
+                          '${asset.emoji ?? '📦'} ${widget.categoryName}',
                           style: GoogleFonts.outfit(
-                            fontSize: 20,
-                            fontWeight: FontWeight.w700,
-                            color: AppColors.textPrimary,
+                            color: AppColors.primaryPurple,
+                            fontWeight: FontWeight.w600,
                           ),
                         ),
-                        if (widget.categoryName != null &&
-                            widget.categoryName!.isNotEmpty) ...[
-                          const SizedBox(height: 2),
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 8,
-                              vertical: 2,
+                      ],
+                      if (asset.location?.isNotEmpty == true) ...[
+                        const SizedBox(height: 8),
+                        Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Icon(
+                              Icons.location_on_outlined,
+                              size: 18,
+                              color: AppColors.textSecondary,
                             ),
-                            decoration: BoxDecoration(
-                              color: AppColors.primaryPurple.withAlpha(20),
-                              borderRadius: BorderRadius.circular(6),
+                            const SizedBox(width: 5),
+                            Expanded(
+                              child: Text(
+                                asset.location!,
+                                style: GoogleFonts.outfit(
+                                  color: AppColors.textSecondary,
+                                ),
+                              ),
                             ),
+                          ],
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 22),
+            if (asset.description?.isNotEmpty == true) ...[
+              _sectionTitle('Description'),
+              const SizedBox(height: 6),
+              Text(
+                asset.description!,
+                style: GoogleFonts.outfit(
+                  color: AppColors.textSecondary,
+                  height: 1.45,
+                ),
+              ),
+              const SizedBox(height: 18),
+            ],
+            if (asset.customFields.isNotEmpty) ...[
+              _sectionTitle('Custom Fields'),
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: asset.customFields.entries.map((entry) {
+                  return Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 11,
+                      vertical: 8,
+                    ),
+                    decoration: BoxDecoration(
+                      color: AppColors.scaffoldBg,
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Text(
+                      '${entry.key}: ${entry.value}',
+                      style: GoogleFonts.outfit(fontSize: 12),
+                    ),
+                  );
+                }).toList(),
+              ),
+              const SizedBox(height: 18),
+            ],
+            _sectionTitle('Attached Documents'),
+            const SizedBox(height: 8),
+            FutureBuilder<List<LocalAssetDocument>>(
+              future: _documentsFuture,
+              builder: (context, snapshot) {
+                if (snapshot.connectionState == ConnectionState.waiting) {
+                  return const Padding(
+                    padding: EdgeInsets.all(12),
+                    child: Center(child: CircularProgressIndicator()),
+                  );
+                }
+
+                final documents = snapshot.data ?? const [];
+                if (documents.isEmpty) {
+                  return Text(
+                    'No attached documents.',
+                    style: GoogleFonts.outfit(
+                      color: AppColors.textMuted,
+                      fontStyle: FontStyle.italic,
+                    ),
+                  );
+                }
+
+                return Column(
+                  children: documents.map((document) {
+                    return Container(
+                      margin: const EdgeInsets.only(bottom: 8),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 10,
+                      ),
+                      decoration: BoxDecoration(
+                        border: Border.all(color: const Color(0xFFE4DFEE)),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Row(
+                        children: [
+                          const Icon(
+                            Icons.insert_drive_file_outlined,
+                            color: AppColors.primaryPurple,
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
                             child: Text(
-                              widget.categoryName!,
+                              document.name,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
                               style: GoogleFonts.outfit(
-                                fontSize: 11,
                                 fontWeight: FontWeight.w600,
-                                color: AppColors.primaryPurple,
                               ),
                             ),
                           ),
-                        ],
-                      ],
-                    ),
-                  ),
-                  IconButton(
-                    icon: const Icon(
-                      Icons.close_rounded,
-                      color: AppColors.textSecondary,
-                    ),
-                    onPressed: () => Navigator.of(context).pop(),
-                  ),
-                ],
-              ),
-
-              const SizedBox(height: 20),
-              const Divider(height: 1, color: AppColors.lightLavenderBorder),
-              const SizedBox(height: 16),
-
-              // Basic details
-              if (asset.location != null && asset.location!.isNotEmpty) ...[
-                _buildDetailRow(
-                  Icons.location_on_outlined,
-                  'Location',
-                  asset.location!,
-                ),
-                const SizedBox(height: 12),
-              ],
-
-              if (asset.description != null &&
-                  asset.description!.isNotEmpty) ...[
-                _buildDetailRow(
-                  Icons.notes_rounded,
-                  'Description',
-                  asset.description!,
-                ),
-                const SizedBox(height: 12),
-              ],
-
-              _buildDetailRow(
-                Icons.calendar_today_outlined,
-                'Created',
-                '${asset.createdAt.day}/${asset.createdAt.month}/${asset.createdAt.year}',
-              ),
-              const SizedBox(height: 16),
-
-              // Custom Fields Section
-              if (asset.customFields.isNotEmpty) ...[
-                const Divider(height: 1, color: AppColors.lightLavenderBorder),
-                const SizedBox(height: 16),
-                Text(
-                  'Custom Fields',
-                  style: GoogleFonts.outfit(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w700,
-                    color: AppColors.textPrimary,
-                  ),
-                ),
-                const SizedBox(height: 10),
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
-                  children: asset.customFields.entries.map((entry) {
-                    return Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 12,
-                        vertical: 8,
-                      ),
-                      decoration: BoxDecoration(
-                        color: AppColors.scaffoldBg,
-                        borderRadius: BorderRadius.circular(10),
-                        border: Border.all(color: const Color(0xFFE4DFEE)),
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            entry.key.toUpperCase(),
-                            style: GoogleFonts.outfit(
-                              fontSize: 10,
-                              fontWeight: FontWeight.w700,
-                              color: AppColors.textSecondary,
-                            ),
-                          ),
-                          const SizedBox(height: 2),
-                          Text(
-                            entry.value,
-                            style: GoogleFonts.outfit(
-                              fontSize: 13,
-                              fontWeight: FontWeight.w600,
-                              color: AppColors.textPrimary,
-                            ),
+                          IconButton(
+                            tooltip: 'Delete document',
+                            icon: const Icon(Icons.delete_outline_rounded),
+                            color: AppColors.error,
+                            onPressed: () async {
+                              await _documentRepository.deleteDocument(document);
+                              if (mounted) _reloadDocuments();
+                            },
                           ),
                         ],
                       ),
                     );
                   }).toList(),
-                ),
-                const SizedBox(height: 16),
-              ],
-
-              // Linked Documents
-              const Divider(height: 1, color: AppColors.lightLavenderBorder),
-              const SizedBox(height: 16),
-              Text(
-                'Documents & Photos',
-                style: GoogleFonts.outfit(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w700,
-                  color: AppColors.textPrimary,
+                );
+              },
+            ),
+            const SizedBox(height: 18),
+            if (asset.qrEnabled) ...[
+              InkWell(
+                onTap: () => setState(() => _showQr = !_showQr),
+                child: Row(
+                  children: [
+                    const Icon(Icons.qr_code_2_rounded),
+                    const SizedBox(width: 8),
+                    Text(
+                      'QR Code',
+                      style: GoogleFonts.outfit(fontWeight: FontWeight.w700),
+                    ),
+                    const Spacer(),
+                    Icon(
+                      _showQr
+                          ? Icons.keyboard_arrow_up_rounded
+                          : Icons.keyboard_arrow_down_rounded,
+                    ),
+                  ],
                 ),
               ),
-              const SizedBox(height: 10),
-              StreamBuilder<List<DocumentModel>>(
-                stream: _documentsStream,
-                builder: (context, snapshot) {
-                  if (snapshot.connectionState == ConnectionState.waiting) {
-                    return const Center(child: CircularProgressIndicator());
-                  }
-                  final docs = snapshot.data ?? [];
-                  if (docs.isEmpty) {
-                    return Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 8),
-                      child: Text(
-                        'No attached documents.',
-                        style: GoogleFonts.outfit(
-                          color: AppColors.textMuted,
-                          fontSize: 13,
-                          fontStyle: FontStyle.italic,
-                        ),
-                      ),
-                    );
-                  }
-
-                  return ListView.separated(
-                    shrinkWrap: true,
-                    physics: const NeverScrollableScrollPhysics(),
-                    itemCount: docs.length,
-                    separatorBuilder: (context, index) =>
-                        const SizedBox(height: 8),
-                    itemBuilder: (context, index) {
-                      final doc = docs[index];
-                      final isImage = [
-                        'jpg',
-                        'jpeg',
-                        'png',
-                        'heic',
-                      ].contains(doc.fileType.toLowerCase());
-
-                      return Container(
-                        padding: const EdgeInsets.all(10),
-                        decoration: BoxDecoration(
-                          color: Colors.white,
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(color: const Color(0xFFE4DFEE)),
-                        ),
-                        child: Row(
-                          children: [
-                            Icon(
-                              isImage
-                                  ? Icons.image_rounded
-                                  : Icons.insert_drive_file_rounded,
-                              color: AppColors.primaryPurple,
-                              size: 24,
-                            ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: Text(
-                                doc.fileName,
-                                style: GoogleFonts.outfit(
-                                  fontSize: 13,
-                                  fontWeight: FontWeight.w600,
-                                  color: AppColors.textPrimary,
-                                ),
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            ),
-                            IconButton(
-                              icon: const Icon(
-                                Icons.copy_rounded,
-                                color: AppColors.textSecondary,
-                                size: 18,
-                              ),
-                              onPressed: () {
-                                Clipboard.setData(
-                                  ClipboardData(text: doc.fileUrl),
-                                );
-                                _showSnackBar(
-                                  'Document link copied to clipboard!',
-                                );
-                              },
-                              tooltip: 'Copy Link',
-                            ),
-                          ],
-                        ),
-                      );
-                    },
-                  );
-                },
-              ),
-              const SizedBox(height: 16),
-
-              // QR Code Section
-              if (asset.qrEnabled) ...[
-                const Divider(height: 1, color: AppColors.lightLavenderBorder),
-                const SizedBox(height: 16),
-                InkWell(
-                  onTap: () {
-                    setState(() => _showQr = !_showQr);
-                  },
-                  borderRadius: BorderRadius.circular(12),
+              if (_showQr)
+                Center(
                   child: Padding(
-                    padding: const EdgeInsets.symmetric(
-                      vertical: 8.0,
-                      horizontal: 4,
-                    ),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Row(
-                          children: [
-                            const Icon(
-                              Icons.qr_code_2_rounded,
-                              color: AppColors.primaryPurple,
-                            ),
-                            const SizedBox(width: 12),
-                            Text(
-                              'Asset QR Code',
-                              style: GoogleFonts.outfit(
-                                fontSize: 14,
-                                fontWeight: FontWeight.w700,
-                                color: AppColors.textPrimary,
-                              ),
-                            ),
-                          ],
-                        ),
-                        Icon(
-                          _showQr
-                              ? Icons.keyboard_arrow_up_rounded
-                              : Icons.keyboard_arrow_down_rounded,
-                          color: AppColors.textSecondary,
-                        ),
-                      ],
+                    padding: const EdgeInsets.all(16),
+                    child: QrImageView(
+                      data: asset.id,
+                      size: 170,
+                      version: QrVersions.auto,
                     ),
                   ),
                 ),
-                if (_showQr) ...[
-                  const SizedBox(height: 12),
-                  Center(
-                    child: Container(
-                      padding: const EdgeInsets.all(16),
-                      decoration: BoxDecoration(
-                        color: AppColors.scaffoldBg,
-                        borderRadius: BorderRadius.circular(20),
-                        border: Border.all(color: const Color(0xFFE4DFEE)),
-                      ),
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          QrImageView(
-                            data: asset.id,
-                            version: QrVersions.auto,
-                            size: 160.0,
-                            eyeStyle: const QrEyeStyle(
-                              eyeShape: QrEyeShape.square,
-                              color: AppColors.textPrimary,
-                            ),
-                            dataModuleStyle: const QrDataModuleStyle(
-                              dataModuleShape: QrDataModuleShape.square,
-                              color: AppColors.textPrimary,
-                            ),
-                          ),
-                          const SizedBox(height: 8),
-                          Text(
-                            'Scan to view asset details',
-                            style: GoogleFonts.outfit(
-                              fontSize: 11,
-                              fontWeight: FontWeight.w500,
-                              color: AppColors.textSecondary,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ],
-                const SizedBox(height: 16),
-              ],
-
-              const Divider(height: 1, color: AppColors.lightLavenderBorder),
-              const SizedBox(height: 24),
-
-              // Edit / Delete Actions
-              Row(
-                children: [
-                  Expanded(
-                    child: OutlinedButton.icon(
-                      onPressed: () {
-                        Navigator.of(context).pop(); // close this sheet first
-                        EditAssetScreen.navigateTo(context, asset);
-                      },
-                      icon: const Icon(
-                        Icons.edit_outlined,
-                        color: AppColors.primaryPurple,
-                      ),
-                      label: Text(
-                        'Edit',
-                        style: GoogleFonts.outfit(
-                          color: AppColors.primaryPurple,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                      style: OutlinedButton.styleFrom(
-                        side: const BorderSide(color: AppColors.primaryPurple),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(14),
-                        ),
-                        padding: const EdgeInsets.symmetric(vertical: 14),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: OutlinedButton.icon(
-                      onPressed: () async {
-                        final confirmed = await _confirmDeleteAsset(context);
-                        if (confirmed != true) return;
-                        if (!context.mounted) return;
-                        Navigator.of(context).pop();
-                        try {
-                          await _firestoreService.deleteAsset(asset.id);
-                          _showSnackBar('Asset deleted successfully');
-                        } catch (e) {
-                          debugPrint('Error deleting asset: $e');
-                        }
-                      },
-                      icon: const Icon(
-                        Icons.delete_outline_rounded,
-                        color: AppColors.error,
-                      ),
-                      label: Text(
-                        'Delete',
-                        style: GoogleFonts.outfit(
-                          color: AppColors.error,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                      style: OutlinedButton.styleFrom(
-                        side: const BorderSide(color: AppColors.error),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(14),
-                        ),
-                        padding: const EdgeInsets.symmetric(vertical: 14),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
             ],
-          ),
+            const SizedBox(height: 18),
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: () async {
+                      Navigator.of(context).pop();
+                      await EditAssetScreen.navigateTo(context, asset);
+                    },
+                    icon: const Icon(Icons.edit_outlined),
+                    label: const Text('Edit Asset'),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: _deleteAsset,
+                    icon: const Icon(Icons.delete_outline_rounded),
+                    label: const Text('Delete'),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: AppColors.error,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
         ),
       ),
     );
   }
 
-  Widget _buildDetailRow(IconData icon, String label, String value) {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Icon(icon, size: 20, color: AppColors.primaryPurple),
-        const SizedBox(width: 12),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                label,
-                style: GoogleFonts.outfit(
-                  fontSize: 12,
-                  color: AppColors.textSecondary,
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
-              const SizedBox(height: 2),
-              Text(
-                value,
-                style: GoogleFonts.outfit(
-                  fontSize: 14,
-                  color: AppColors.textPrimary,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ],
+  Widget _sectionTitle(String title) {
+    return Text(
+      title,
+      style: GoogleFonts.outfit(
+        fontSize: 15,
+        fontWeight: FontWeight.w700,
+        color: AppColors.textPrimary,
+      ),
     );
   }
 }
