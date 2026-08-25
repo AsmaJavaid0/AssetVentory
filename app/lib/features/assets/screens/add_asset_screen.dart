@@ -555,13 +555,9 @@ class _AddAssetScreenState extends State<AddAssetScreen> {
     final localAsset = await _assetRepository.createAssetWithImage(
       ownerId: user?.uid ?? 'local_user',
       name: _nameController.text.trim(),
-      emoji: _primaryImage != null && _selectedEmoji.isEmpty
-          ? null
-          : _selectedEmoji,
+      emoji: _selectedEmoji.isNotEmpty ? _selectedEmoji : null,
       categoryId: _selectedCategoryId,
-      imageFile: _primaryImage != null
-          ? File(_primaryImage!.path)
-          : null,
+      imageFile: _primaryImage,
       location: _locationController.text.trim().isNotEmpty
           ? _locationController.text.trim()
           : null,
