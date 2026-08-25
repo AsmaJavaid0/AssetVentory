@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 import '../repositories/asset_repository.dart';
 import '../models/local_asset.dart';
 import 'package:flutter/material.dart';
@@ -8,12 +9,12 @@ import '../../../core/constants/app_colors.dart';
 import '../../../core/utils/wave_clipper.dart';
 import '../../../core/widgets/custom_text_field.dart';
 import '../../../core/widgets/asset_avatar.dart';
-import '../models/asset_model.dart';
 import '../models/category_model.dart';
 import '../../auth/services/firestore_service.dart';
 import '../../home/widgets/add_quick_asset_sheet.dart';
-import '../../home/widgets/asset_detail_modal.dart';
 import 'category_detail_screen.dart';
+import '../../../core/database/app_database.dart';
+import '../../../core/storage/local_file_storage.dart';
 
 enum _AssetSort { newest, name, location }
 
@@ -28,13 +29,15 @@ class _AssetsScreenState extends State<AssetsScreen> {
   final FirestoreService _firestoreService = FirestoreService();
   final TextEditingController _searchController = TextEditingController();
 
-  // Created once and reused for the lifetime of this screen. Previously
-  // these were called directly inside build(), so every setState (typing
-  // in the search field, tapping a category, sorting) created a fresh
-  // Stream and forced Firestore to tear down and re-open its listeners —
-  // that repeated churn was the main cause of visible lag on this screen.
   late final Stream<List<CategoryModel>> _categoriesStream;
-  late final Stream<List<AssetModel>> _assetsStream;
+
+  final AssetRepository _assetRepository = AssetRepository(
+  database: AppDatabase(),
+  fileStorage: LocalFileStorage(),
+);
+
+List<LocalAsset> _assets = [];
+bool _isLoadingAssets = true;
 
   String? _selectedCategoryId; // Null for 'All'
   String _searchQuery = '';
@@ -42,13 +45,39 @@ class _AssetsScreenState extends State<AssetsScreen> {
 
   Timer? _searchDebounce;
 
-  @override
-  void initState() {
-    super.initState();
-    final uid = FirebaseAuth.instance.currentUser?.uid ?? '';
-    _categoriesStream = _firestoreService.streamUserCategories(uid);
-    _assetsStream = _firestoreService.streamUserAssets(uid);
+ @override
+void initState() {
+  super.initState();
+
+  final uid = FirebaseAuth.instance.currentUser?.uid ?? 'local_user';
+
+  _categoriesStream = _firestoreService.streamUserCategories(uid);
+
+  _loadLocalAssets();
+}
+
+Future<void> _loadLocalAssets() async {
+  try {
+    final assets = await _assetRepository.getAssets('local_user');
+
+    if (!mounted) return;
+
+    setState(() {
+      _assets = assets;
+      _isLoadingAssets = false;
+    });
+  } catch (e, stackTrace) {
+    debugPrint('Error loading local assets: $e');
+    debugPrintStack(stackTrace: stackTrace);
+
+    if (!mounted) return;
+
+    setState(() {
+      _assets = [];
+      _isLoadingAssets = false;
+    });
   }
+}
 
   @override
   void dispose() {
@@ -207,101 +236,96 @@ class _AssetsScreenState extends State<AssetsScreen> {
     );
   }
 
-  @override
-  Widget build(BuildContext context) {
-    final user = FirebaseAuth.instance.currentUser;
-    if (user == null) {
-      return const Scaffold(
-        backgroundColor: AppColors.scaffoldBg,
-        body: Center(child: CircularProgressIndicator()),
-      );
-    }
+@override
+Widget build(BuildContext context) {
+  return Scaffold(
+    backgroundColor: AppColors.scaffoldBg,
+    body: StreamBuilder<List<CategoryModel>>(
+      stream: _categoriesStream,
+      builder: (context, catSnapshot) {
+        final categories = catSnapshot.data ?? [];
 
-    return Scaffold(
-      backgroundColor: AppColors.scaffoldBg,
-      body: StreamBuilder<List<CategoryModel>>(
-        stream: _categoriesStream,
-        builder: (context, catSnapshot) {
-          final categories = catSnapshot.data ?? [];
-
-          return StreamBuilder<List<AssetModel>>(
-            stream: _assetsStream,
-            builder: (context, assetSnapshot) {
-              if (assetSnapshot.connectionState == ConnectionState.waiting) {
-                return const Center(child: CircularProgressIndicator());
-              }
-
-              final assets = assetSnapshot.data ?? [];
-
-              // Filter by category and search query
-              final filteredAssets = assets.where((asset) {
-                final matchesCategory =
-                    _selectedCategoryId == null ||
-                    asset.categoryId == _selectedCategoryId;
-
-                final matchesSearch =
-                    asset.name.toLowerCase().contains(
-                      _searchQuery.toLowerCase(),
-                    ) ||
-                    (asset.location?.toLowerCase().contains(
-                          _searchQuery.toLowerCase(),
-                        ) ??
-                        false) ||
-                    (asset.description?.toLowerCase().contains(
-                          _searchQuery.toLowerCase(),
-                        ) ??
-                        false);
-
-                return matchesCategory && matchesSearch;
-              }).toList();
-
-              filteredAssets.sort((a, b) {
-                switch (_sort) {
-                  case _AssetSort.name:
-                    return a.name.toLowerCase().compareTo(b.name.toLowerCase());
-                  case _AssetSort.location:
-                    return (a.location ?? '').toLowerCase().compareTo(
-                      (b.location ?? '').toLowerCase(),
-                    );
-                  case _AssetSort.newest:
-                    return b.createdAt.compareTo(a.createdAt);
-                }
-              });
-
-              return Column(
-                children: [
-                  // 1. Premium Top Header (Dark Wave Header)
-                  _buildHeader(),
-
-                  // 2. Horizontal Category Folder selector
-                  _buildCategorySelector(categories, assets),
-
-                  // 3. Asset Grid View
-                  Expanded(
-                    child: filteredAssets.isEmpty
-                        ? _buildEmptyState()
-                        : _buildAssetGrid(filteredAssets, categories),
-                  ),
-                ],
-              );
-            },
+        if (_isLoadingAssets) {
+          return const Center(
+            child: CircularProgressIndicator(),
           );
-        },
+        }
+
+        final assets = _assets;
+
+        final filteredAssets = assets.where((asset) {
+          final matchesCategory =
+              _selectedCategoryId == null ||
+              asset.categoryId == _selectedCategoryId;
+
+          final query = _searchQuery.toLowerCase();
+
+          final matchesSearch =
+              asset.name.toLowerCase().contains(query) ||
+              (asset.location?.toLowerCase().contains(query) ?? false) ||
+              (asset.description?.toLowerCase().contains(query) ?? false);
+
+          return matchesCategory && matchesSearch;
+        }).toList();
+
+        filteredAssets.sort((a, b) {
+          switch (_sort) {
+            case _AssetSort.name:
+              return a.name
+                  .toLowerCase()
+                  .compareTo(b.name.toLowerCase());
+
+            case _AssetSort.location:
+              return (a.location ?? '')
+                  .toLowerCase()
+                  .compareTo((b.location ?? '').toLowerCase());
+
+            case _AssetSort.newest:
+              return b.createdAt.compareTo(a.createdAt);
+          }
+        });
+
+        return Column(
+          children: [
+            _buildHeader(),
+
+            _buildCategorySelector(
+              categories,
+              assets,
+            ),
+
+            Expanded(
+              child: filteredAssets.isEmpty
+                  ? _buildEmptyState()
+                  : _buildAssetGrid(
+                      filteredAssets,
+                      categories,
+                    ),
+            ),
+          ],
+        );
+      },
+    ),
+    floatingActionButton: FloatingActionButton.extended(
+      onPressed: () async {
+        await AddQuickAssetSheet.show(context);
+        await _loadLocalAssets();
+      },
+      backgroundColor: AppColors.primaryPurple,
+      icon: const Icon(
+        Icons.add_rounded,
+        color: Colors.white,
       ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => AddQuickAssetSheet.show(context),
-        backgroundColor: AppColors.primaryPurple,
-        icon: const Icon(Icons.add_rounded, color: Colors.white),
-        label: Text(
-          'Add Asset',
-          style: GoogleFonts.outfit(
-            fontWeight: FontWeight.w600,
-            color: Colors.white,
-          ),
+      label: Text(
+        'Add Asset',
+        style: GoogleFonts.outfit(
+          fontWeight: FontWeight.w600,
+          color: Colors.white,
         ),
       ),
-    );
-  }
+    ),
+  );
+}
 
   Widget _buildHeader() {
     return ClipPath(
@@ -417,7 +441,7 @@ class _AssetsScreenState extends State<AssetsScreen> {
 
   Widget _buildCategorySelector(
     List<CategoryModel> categories,
-    List<AssetModel> assets,
+    List<LocalAsset> assets,
   ) {
     // Count items per category
     final Map<String?, int> counts = {};
@@ -736,11 +760,106 @@ class _AssetsScreenState extends State<AssetsScreen> {
       ),
     );
   }
+void _showLocalAssetPreview(
+  LocalAsset asset,
+  String categoryName,
+) {
+  showModalBottomSheet(
+    context: context,
+    isScrollControlled: true,
+    backgroundColor: Colors.white,
+    shape: const RoundedRectangleBorder(
+      borderRadius: BorderRadius.vertical(
+        top: Radius.circular(28),
+      ),
+    ),
+    builder: (context) {
+      return Padding(
+        padding: const EdgeInsets.fromLTRB(24, 24, 24, 32),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              asset.emoji ?? '📦',
+              style: const TextStyle(fontSize: 48),
+            ),
+            const SizedBox(height: 12),
+            Text(
+              asset.name,
+              style: GoogleFonts.outfit(
+                fontSize: 22,
+                fontWeight: FontWeight.w700,
+                color: AppColors.textPrimary,
+              ),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              categoryName.isNotEmpty
+                  ? categoryName
+                  : 'Uncategorized',
+              style: GoogleFonts.outfit(
+                color: AppColors.textSecondary,
+              ),
+            ),
+            if (asset.location != null &&
+                asset.location!.isNotEmpty) ...[
+              const SizedBox(height: 12),
+              Text(
+                '📍 ${asset.location}',
+                style: GoogleFonts.outfit(),
+              ),
+            ],
+            if (asset.description != null &&
+                asset.description!.isNotEmpty) ...[
+              const SizedBox(height: 12),
+              Text(
+                asset.description!,
+                style: GoogleFonts.outfit(),
+              ),
+            ],
+          ],
+        ),
+      );
+    },
+  );
+}
+Widget _buildLocalAssetAvatar(LocalAsset asset) {
+  if (asset.imagePath != null &&
+      asset.imagePath!.isNotEmpty) {
+    final file = File(asset.imagePath!);
 
-  Widget _buildAssetGrid(
-    List<AssetModel> assets,
-    List<CategoryModel> categories,
-  ) {
+    if (file.existsSync()) {
+      return ClipRRect(
+        borderRadius: BorderRadius.circular(10),
+        child: Image.file(
+          file,
+          width: 38,
+          height: 38,
+          fit: BoxFit.cover,
+        ),
+      );
+    }
+  }
+
+  return Container(
+    width: 38,
+    height: 38,
+    decoration: BoxDecoration(
+      color: AppColors.primaryPurple.withAlpha(20),
+      borderRadius: BorderRadius.circular(10),
+    ),
+    alignment: Alignment.center,
+    child: Text(
+      asset.emoji ?? '📦',
+      style: const TextStyle(fontSize: 20),
+    ),
+  );
+}
+ Widget _buildAssetGrid(
+  List<LocalAsset> assets,
+  List<CategoryModel> categories,
+) {
     return GridView.builder(
       padding: const EdgeInsets.fromLTRB(20, 8, 20, 88),
       physics: const BouncingScrollPhysics(),
@@ -765,8 +884,9 @@ class _AssetsScreenState extends State<AssetsScreen> {
         );
 
         return GestureDetector(
-          onTap: () =>
-              AssetDetailModal.show(context, asset, categoryName: cat.name),
+          onTap: () {
+  _showLocalAssetPreview(asset, cat.name);
+},
           child: Container(
             padding: const EdgeInsets.all(14),
             decoration: BoxDecoration(
@@ -787,13 +907,7 @@ class _AssetsScreenState extends State<AssetsScreen> {
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    AssetAvatar(
-                      imageUrl: asset.imageUrl,
-                      emoji: asset.emoji,
-                      size: 38,
-                      borderRadius: 10,
-                      fontSize: 20,
-                    ),
+                   _buildLocalAssetAvatar(asset),
                     // Linked indicators (custom fields and QR).
                     Row(
                       children: [
