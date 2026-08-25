@@ -2,6 +2,7 @@ import '../database/app_database.dart';
 import '../storage/local_file_storage.dart';
 
 import '../../features/assets/repositories/asset_repository.dart';
+import '../../features/assets/repositories/asset_document_repository.dart';
 import '../../features/assets/repositories/category_repository.dart';
 
 class ServiceLocator {
@@ -9,6 +10,7 @@ class ServiceLocator {
   late final LocalFileStorage fileStorage;
 
   late final AssetRepository assetRepository;
+  late final AssetDocumentRepository assetDocumentRepository;
   late final CategoryRepository categoryRepository;
 
   void initialize() {
@@ -16,6 +18,11 @@ class ServiceLocator {
     fileStorage = LocalFileStorage();
 
     assetRepository = AssetRepository(
+      database: database,
+      fileStorage: fileStorage,
+    );
+
+    assetDocumentRepository = AssetDocumentRepository(
       database: database,
       fileStorage: fileStorage,
     );
