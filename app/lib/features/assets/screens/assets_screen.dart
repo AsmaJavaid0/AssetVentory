@@ -10,7 +10,7 @@ import '../../../core/widgets/custom_text_field.dart';
 import '../models/local_category.dart';
 import '../repositories/category_repository.dart';
 import '../../home/widgets/add_quick_asset_sheet.dart';
-
+import 'edit_asset_screen.dart';
 import '../../../core/database/app_database.dart';
 import '../../../core/storage/local_file_storage.dart';
 
@@ -915,8 +915,16 @@ Widget _buildAssetGrid(
 );
 
         return GestureDetector(
-          onTap: () {
-  _showLocalAssetPreview(asset, cat.name);
+         onTap: () async {
+  await EditAssetScreen.navigateTo(
+    context,
+    asset,
+  );
+
+  if (!mounted) return;
+
+  await _loadLocalAssets();
+  await _loadLocalCategories();
 },
           child: Container(
             padding: const EdgeInsets.all(14),

@@ -1,227 +1,156 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:firebase_auth/firebase_auth.dart';
+
 import '../../../core/constants/app_colors.dart';
 import '../../../core/utils/wave_clipper.dart';
 import '../../../core/widgets/asset_logo.dart';
-import '../../../core/widgets/custom_button.dart';
-import '../../../core/widgets/asset_avatar.dart';
+import '../../../core/di/service_locator.dart';
 
-import '../../auth/services/firestore_service.dart';
-import '../../auth/models/user_model.dart';
-import '../../assets/models/asset_model.dart';
-import '../../tasks/models/reminder_model.dart';
-import '../../tasks/models/task_model.dart';
-
-import '../widgets/add_quick_asset_sheet.dart';
-import '../widgets/asset_detail_modal.dart';
+import '../../assets/models/local_asset.dart';
+import '../../assets/models/local_category.dart';
+import '../../assets/screens/add_asset_screen.dart';
+import '../../assets/screens/edit_asset_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   final ValueChanged<int>? onTabSelected;
 
-  const HomeScreen({super.key, this.onTabSelected});
+  const HomeScreen({
+    super.key,
+    this.onTabSelected,
+  });
 
   @override
   State<HomeScreen> createState() => _HomeScreenState();
 }
 
 class _HomeScreenState extends State<HomeScreen> {
-  final FirestoreService _firestoreService = FirestoreService();
-  bool _showGuidanceBanner = true;
+  final _assetRepository = serviceLocator.assetRepository;
+  final _categoryRepository = serviceLocator.categoryRepository;
 
-  // ---------------------------------------------------------------------
-  // Streams are created ONCE here and reused for the lifetime of this
-  // screen, instead of being called inline inside build(). Calling
-  // `_firestoreService.streamXxx()` inside build() returns a brand-new
-  // Stream object on every rebuild (e.g. every setState), which forces
-  // every StreamBuilder listening to it to tear down its Firestore
-  // listener and open a new one — that churn is what produces the visible
-  // lag/flicker. Keeping the Stream instances stable means Firestore keeps
-  // one long-lived listener per query and just delivers updates to it.
-  // ---------------------------------------------------------------------
-  late final String _uid;
-  late final Stream<UserModel?> _userStream;
-  late final Stream<List<AssetModel>> _assetsStream;
-  late final Stream<List<ReminderModel>> _remindersStream;
+  List<LocalAsset> _assets = [];
+  List<LocalCategory> _categories = [];
 
-  // The tasks/family-count streams depend on familyId, which only becomes
-  // known once the user document loads (and could technically change).
-  // We memoize them keyed by familyId so they are only recreated on an
-  // actual familyId change, not on every rebuild.
-  String? _cachedFamilyId;
-  Stream<List<TaskModel>>? _tasksStream;
-  Stream<int>? _familyCountStream;
+  bool _isLoading = true;
 
   @override
   void initState() {
     super.initState();
-    final user = FirebaseAuth.instance.currentUser;
-    _uid = user?.uid ?? '';
-    _userStream = _firestoreService.streamUser(_uid);
-    _assetsStream = _firestoreService.streamUserAssets(_uid);
-    _remindersStream = _firestoreService.streamUpcomingReminders(_uid);
+    _loadHomeData();
   }
 
-  Stream<List<TaskModel>> _tasksStreamFor(String? familyId) {
-    if (_tasksStream == null || _cachedFamilyId != familyId) {
-      _cachedFamilyId = familyId;
-      _tasksStream = _firestoreService.streamPendingTasks(_uid, familyId: familyId);
-      _familyCountStream = _firestoreService.streamFamilyMembersCount(familyId);
+  Future<void> _loadHomeData() async {
+    try {
+      final assets =
+          await _assetRepository.getAssets('local_user');
+
+      final categories =
+          await _categoryRepository.getCategories('local_user');
+
+      if (!mounted) return;
+
+      setState(() {
+        _assets = assets;
+        _categories = categories;
+        _isLoading = false;
+      });
+    } catch (e, stackTrace) {
+      debugPrint('Home local load error: $e');
+      debugPrintStack(stackTrace: stackTrace);
+
+      if (!mounted) return;
+
+      setState(() {
+        _assets = [];
+        _categories = [];
+        _isLoading = false;
+      });
     }
-    return _tasksStream!;
-  }
-
-  Stream<int> _familyCountStreamFor(String? familyId) {
-    _tasksStreamFor(familyId); // ensures both are (re)created together
-    return _familyCountStream!;
   }
 
   String _getGreeting() {
     final hour = DateTime.now().hour;
+
     if (hour < 12) {
       return 'Good morning,';
-    } else if (hour < 17) {
-      return 'Good afternoon,';
-    } else {
-      return 'Good evening,';
     }
+
+    if (hour < 17) {
+      return 'Good afternoon,';
+    }
+
+    return 'Good evening,';
+  }
+
+  String _categoryName(String? categoryId) {
+    if (categoryId == null) {
+      return 'Uncategorized';
+    }
+
+    for (final category in _categories) {
+      if (category.id == categoryId) {
+        return category.name;
+      }
+    }
+
+    return 'Uncategorized';
   }
 
   @override
   Widget build(BuildContext context) {
-    final user = FirebaseAuth.instance.currentUser;
-    if (user == null) {
+    if (_isLoading) {
       return const Scaffold(
         backgroundColor: AppColors.scaffoldBg,
-        body: Center(child: CircularProgressIndicator()),
+        body: Center(
+          child: CircularProgressIndicator(),
+        ),
       );
     }
 
-    return StreamBuilder<UserModel?>(
-      stream: _userStream,
-      builder: (context, userSnapshot) {
-        final userModel = userSnapshot.data;
-        final userName = userModel?.name.isNotEmpty == true
-            ? userModel!.name
-            : (user.displayName ?? user.email?.split('@').first ?? 'Friend');
-
-        final photoUrl = userModel?.photoUrl.isNotEmpty == true
-            ? userModel!.photoUrl
-            : user.photoURL;
-
-        return Scaffold(
-          backgroundColor: AppColors.scaffoldBg,
-          body: RefreshIndicator(
-            onRefresh: () async {
-              // Streams are live already; this just gives the user
-              // visible feedback without tearing down any listeners.
-              await Future.delayed(const Duration(milliseconds: 400));
-            },
-            color: AppColors.primaryPurple,
-            child: SingleChildScrollView(
-              physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // Reminders are needed by the hero header, the metric
-                  // cards AND the reminders list below. Previously each of
-                  // those subscribed to streamUpcomingReminders()
-                  // independently (3 separate Firestore listeners for the
-                  // same data). Now it's subscribed to once here and the
-                  // result is threaded down to whoever needs it.
-                  StreamBuilder<List<ReminderModel>>(
-                    stream: _remindersStream,
-                    builder: (context, reminderSnapshot) {
-                      final reminders = reminderSnapshot.data ?? [];
-
-                      return Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          // 1. Dark Hero Header
-                          _buildHeroHeader(
-                            context: context,
-                            name: userName,
-                            photoUrl: photoUrl,
-                            unreadCount: reminders.length,
-                          ),
-
-                          Padding(
-                            padding: const EdgeInsets.symmetric(horizontal: 20),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                const SizedBox(height: 16),
-
-                                // 2. Add Asset Quick Action Banner
-                                StreamBuilder<List<AssetModel>>(
-                                  stream: _assetsStream,
-                                  builder: (context, assetSnapshot) {
-                                    final totalAssets = assetSnapshot.data?.length ?? 0;
-                                    final isEmptyState = totalAssets == 0;
-
-                                    return Column(
-                                      children: [
-                                        _buildAddAssetBanner(
-                                          context: context,
-                                          isEmptyState: isEmptyState,
-                                        ),
-                                        const SizedBox(height: 20),
-
-                                        // 3. Metric Summary Cards Row
-                                        _buildMetricCardsSection(
-                                          user: user,
-                                          userModel: userModel,
-                                          totalAssets: totalAssets,
-                                          expiringSoonCount: reminders.length,
-                                        ),
-
-                                        const SizedBox(height: 20),
-
-                                        // 4. Dismissible Guidance Tip Banner
-                                        if (_showGuidanceBanner && totalAssets <= 1)
-                                          _buildGuidanceBanner(),
-
-                                        const SizedBox(height: 24),
-
-                                        // 5. Upcoming Reminders Section
-                                        _buildUpcomingRemindersSection(reminders),
-
-                                        const SizedBox(height: 28),
-
-                                        // 6. Recent Assets Section
-                                        _buildRecentAssetsSection(
-                                          assetSnapshot.data,
-                                          assetSnapshot.connectionState,
-                                        ),
-
-                                        const SizedBox(height: 36),
-                                      ],
-                                    );
-                                  },
-                                ),
-                              ],
-                            ),
-                          ),
-                        ],
-                      );
-                    },
-                  ),
-                ],
-              ),
-            ),
+    return Scaffold(
+      backgroundColor: AppColors.scaffoldBg,
+      body: RefreshIndicator(
+        color: AppColors.primaryPurple,
+        onRefresh: _loadHomeData,
+        child: SingleChildScrollView(
+          physics: const AlwaysScrollableScrollPhysics(
+            parent: BouncingScrollPhysics(),
           ),
-        );
-      },
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _buildHeroHeader(context),
+
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 20),
+                child: Column(
+                  children: [
+                    const SizedBox(height: 18),
+
+                    _buildAddAssetBanner(context),
+
+                    const SizedBox(height: 20),
+
+                    _buildMetrics(),
+
+                    const SizedBox(height: 24),
+
+                    if (_assets.isEmpty)
+                      _buildEmptyGuidance()
+                    else
+                      _buildRecentAssets(),
+
+                    const SizedBox(height: 32),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 
-  // Header Widget
-  Widget _buildHeroHeader({
-    required BuildContext context,
-    required String name,
-    required String? photoUrl,
-    required int unreadCount,
-  }) {
+  Widget _buildHeroHeader(BuildContext context) {
     return ClipPath(
       clipper: WaveClipper(),
       child: Container(
@@ -229,28 +158,35 @@ class _HomeScreenState extends State<HomeScreen> {
         decoration: const BoxDecoration(
           gradient: AppColors.heroGradient,
         ),
-        padding: const EdgeInsets.fromLTRB(20, 52, 20, 36),
+        padding: const EdgeInsets.fromLTRB(
+          20,
+          52,
+          20,
+          38,
+        ),
         child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              mainAxisAlignment:
+                  MainAxisAlignment.spaceBetween,
               children: [
                 Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+                  crossAxisAlignment:
+                      CrossAxisAlignment.start,
                   children: [
                     Text(
                       _getGreeting(),
                       style: GoogleFonts.outfit(
                         fontSize: 16,
                         color: const Color(0xFFC4BAE5),
-                        fontWeight: FontWeight.w400,
                       ),
                     ),
-                    const SizedBox(height: 2),
+                    const SizedBox(height: 3),
                     Row(
                       children: [
                         Text(
-                          name,
+                          'My Collection',
                           style: GoogleFonts.outfit(
                             fontSize: 24,
                             color: Colors.white,
@@ -258,94 +194,41 @@ class _HomeScreenState extends State<HomeScreen> {
                           ),
                         ),
                         const SizedBox(width: 6),
-                        const Text('👋', style: TextStyle(fontSize: 20)),
+                        const Text(
+                          '👋',
+                          style: TextStyle(fontSize: 20),
+                        ),
                       ],
                     ),
                   ],
                 ),
-                Row(
-                  children: [
-                    GestureDetector(
-                      onTap: () {
-                        widget.onTabSelected?.call(1); // Navigate to Assets/Reminders
-                      },
-                      child: Stack(
-                        clipBehavior: Clip.none,
-                        children: [
-                          Container(
-                            width: 42,
-                            height: 42,
-                            decoration: BoxDecoration(
-                              color: Colors.white.withAlpha(25),
-                              shape: BoxShape.circle,
-                            ),
-                            child: const Icon(
-                              Icons.notifications_none_rounded,
-                              color: Colors.white,
-                              size: 22,
-                            ),
-                          ),
-                          if (unreadCount > 0)
-                            Positioned(
-                              right: 2,
-                              top: 2,
-                              child: Container(
-                                padding: const EdgeInsets.all(4),
-                                decoration: const BoxDecoration(
-                                  color: AppColors.error,
-                                  shape: BoxShape.circle,
-                                ),
-                                constraints: const BoxConstraints(
-                                  minWidth: 16,
-                                  minHeight: 16,
-                                ),
-                                child: Text(
-                                  unreadCount > 9 ? '9+' : '$unreadCount',
-                                  textAlign: TextAlign.center,
-                                  style: GoogleFonts.outfit(
-                                    color: Colors.white,
-                                    fontSize: 10,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
-                              ),
-                            ),
-                        ],
-                      ),
+                GestureDetector(
+                  onTap: () {
+                    widget.onTabSelected?.call(4);
+                  },
+                  child: Container(
+                    width: 44,
+                    height: 44,
+                    decoration: BoxDecoration(
+                      color: Colors.white.withAlpha(25),
+                      shape: BoxShape.circle,
                     ),
-                    const SizedBox(width: 12),
-                    GestureDetector(
-                      onTap: () {
-                        widget.onTabSelected?.call(4); // Navigate to Profile
-                      },
-                      child: CircleAvatar(
-                        radius: 21,
-                        backgroundColor: AppColors.primaryPurple,
-                        backgroundImage: photoUrl != null && photoUrl.isNotEmpty
-                            ? NetworkImage(photoUrl)
-                            : null,
-                        child: photoUrl == null || photoUrl.isEmpty
-                            ? Text(
-                                name.isNotEmpty ? name[0].toUpperCase() : 'U',
-                                style: const TextStyle(
-                                  color: Colors.white,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              )
-                            : null,
-                      ),
+                    child: const Icon(
+                      Icons.person_outline_rounded,
+                      color: Colors.white,
                     ),
-                  ],
+                  ),
                 ),
               ],
             ),
-            const SizedBox(height: 16),
+
+            const SizedBox(height: 18),
+
             Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Expanded(
                   child: Text(
-                    "Here's what's happening\nwith your assets today.",
+                    "Everything you own,\norganized in one place.",
                     style: GoogleFonts.outfit(
                       fontSize: 14,
                       color: const Color(0xFFB8AED6),
@@ -364,26 +247,33 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
               ],
             ),
-            const SizedBox(height: 8),
           ],
         ),
       ),
     );
   }
 
-  // Quick Action Banner
-  Widget _buildAddAssetBanner({required BuildContext context, required bool isEmptyState}) {
+  Widget _buildAddAssetBanner(BuildContext context) {
     return GestureDetector(
-      onTap: () => AddQuickAssetSheet.show(context),
+      onTap: () async {
+        await AddAssetScreen.navigateTo(context);
+
+        if (!mounted) return;
+
+        await _loadHomeData();
+      },
       child: Container(
         width: double.infinity,
-        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
+        padding: const EdgeInsets.symmetric(
+          horizontal: 18,
+          vertical: 16,
+        ),
         decoration: BoxDecoration(
           gradient: AppColors.primaryGradient,
           borderRadius: BorderRadius.circular(22),
           boxShadow: [
             BoxShadow(
-              color: const Color(0xFF7E43F8).withAlpha(80),
+              color: const Color(0xFF7E43F8).withAlpha(70),
               blurRadius: 16,
               offset: const Offset(0, 6),
             ),
@@ -398,30 +288,33 @@ class _HomeScreenState extends State<HomeScreen> {
                 color: Colors.white.withAlpha(50),
                 shape: BoxShape.circle,
               ),
-              child: const Center(
-                child: Icon(Icons.add_rounded, color: Colors.white, size: 28),
+              child: const Icon(
+                Icons.add_rounded,
+                color: Colors.white,
+                size: 28,
               ),
             ),
             const SizedBox(width: 14),
             Expanded(
               child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+                crossAxisAlignment:
+                    CrossAxisAlignment.start,
                 children: [
                   Text(
-                    isEmptyState ? 'Add Your First Asset' : 'Add Asset',
+                    _assets.isEmpty
+                        ? 'Add Your First Asset'
+                        : 'Add Asset',
                     style: GoogleFonts.outfit(
                       fontSize: 17,
                       fontWeight: FontWeight.w700,
                       color: Colors.white,
                     ),
                   ),
-                  const SizedBox(height: 2),
+                  const SizedBox(height: 3),
                   Text(
-                    isEmptyState
-                        ? 'Start by adding an asset to keep all its details, documents and dates organized.'
-                        : 'Add a new asset and keep everything organized',
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
+                    _assets.isEmpty
+                        ? 'Start organizing your belongings.'
+                        : 'Add another asset to your collection.',
                     style: GoogleFonts.outfit(
                       fontSize: 12,
                       color: Colors.white.withAlpha(220),
@@ -430,76 +323,53 @@ class _HomeScreenState extends State<HomeScreen> {
                 ],
               ),
             ),
-            const SizedBox(width: 8),
-            const Icon(Icons.chevron_right_rounded, color: Colors.white, size: 28),
+            const Icon(
+              Icons.chevron_right_rounded,
+              color: Colors.white,
+              size: 28,
+            ),
           ],
         ),
       ),
     );
   }
 
-  // Metric Cards Section
-  Widget _buildMetricCardsSection({
-    required User user,
-    required UserModel? userModel,
-    required int totalAssets,
-    required int expiringSoonCount,
-  }) {
-    return StreamBuilder<List<TaskModel>>(
-      stream: _tasksStreamFor(userModel?.familyId),
-      builder: (context, taskSnapshot) {
-        final pendingTasksCount = taskSnapshot.data?.length ?? 0;
-
-        return StreamBuilder<int>(
-          stream: _familyCountStreamFor(userModel?.familyId),
-          builder: (context, familySnapshot) {
-            final familyMembersCount = familySnapshot.data ?? 0;
-
-            return Row(
-              children: [
-                _buildMetricCard(
-                  icon: Icons.inventory_2_rounded,
-                  iconColor: const Color(0xFF8B47FA),
-                  count: '$totalAssets',
-                  label: 'Total Assets',
-                  onTap: () => widget.onTabSelected?.call(1),
-                ),
-                const SizedBox(width: 8),
-                _buildMetricCard(
-                  icon: Icons.access_time_filled_rounded,
-                  iconColor: const Color(0xFFFF9500),
-                  count: '$expiringSoonCount',
-                  label: 'Expiring Soon',
-                  onTap: () => widget.onTabSelected?.call(1),
-                ),
-                const SizedBox(width: 8),
-                _buildMetricCard(
-                  icon: Icons.task_alt_rounded,
-                  iconColor: const Color(0xFF10B981),
-                  count: '$pendingTasksCount',
-                  label: 'Pending Tasks',
-                  onTap: () => widget.onTabSelected?.call(3),
-                ),
-                const SizedBox(width: 8),
-                _buildMetricCard(
-                  icon: Icons.group_rounded,
-                  iconColor: const Color(0xFF3B82F6),
-                  count: '$familyMembersCount',
-                  label: 'Family Members',
-                  onTap: () => widget.onTabSelected?.call(2),
-                ),
-              ],
-            );
-          },
-        );
-      },
+  Widget _buildMetrics() {
+    return Row(
+      children: [
+        _buildMetricCard(
+          icon: Icons.inventory_2_rounded,
+          count: '${_assets.length}',
+          label: 'Assets',
+          onTap: () => widget.onTabSelected?.call(1),
+        ),
+        const SizedBox(width: 8),
+        _buildMetricCard(
+          icon: Icons.folder_rounded,
+          count: '${_categories.length}',
+          label: 'Categories',
+          onTap: () => widget.onTabSelected?.call(1),
+        ),
+        const SizedBox(width: 8),
+        _buildMetricCard(
+          icon: Icons.task_alt_rounded,
+          count: '0',
+          label: 'Tasks',
+          onTap: () => widget.onTabSelected?.call(3),
+        ),
+        const SizedBox(width: 8),
+        _buildMetricCard(
+          icon: Icons.group_rounded,
+          count: '—',
+          label: 'Family',
+          onTap: () => widget.onTabSelected?.call(2),
+        ),
+      ],
     );
   }
 
   Widget _buildMetricCard({
-
     required IconData icon,
-    required Color iconColor,
     required String count,
     required String label,
     required VoidCallback onTap,
@@ -508,34 +378,29 @@ class _HomeScreenState extends State<HomeScreen> {
       child: GestureDetector(
         onTap: onTap,
         child: Container(
-          padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 6),
+          padding: const EdgeInsets.symmetric(
+            vertical: 13,
+            horizontal: 5,
+          ),
           decoration: BoxDecoration(
             color: Colors.white,
             borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: const Color(0xFFEFEBF6), width: 1),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withAlpha(8),
-                blurRadius: 8,
-                offset: const Offset(0, 2),
-              ),
-            ],
+            border: Border.all(
+              color: const Color(0xFFEFEBF6),
+            ),
           ),
           child: Column(
             children: [
-              Container(
-                padding: const EdgeInsets.all(7),
-                decoration: BoxDecoration(
-                  color: iconColor.withAlpha(25),
-                  shape: BoxShape.circle,
-                ),
-                child: Icon(icon, color: iconColor, size: 18),
+              Icon(
+                icon,
+                color: AppColors.primaryPurple,
+                size: 22,
               ),
-              const SizedBox(height: 6),
+              const SizedBox(height: 7),
               Text(
                 count,
                 style: GoogleFonts.outfit(
-                  fontSize: 18,
+                  fontSize: 17,
                   fontWeight: FontWeight.w700,
                   color: AppColors.textPrimary,
                 ),
@@ -543,34 +408,10 @@ class _HomeScreenState extends State<HomeScreen> {
               const SizedBox(height: 2),
               Text(
                 label,
-                textAlign: TextAlign.center,
                 style: GoogleFonts.outfit(
-                  fontSize: 10,
-                  fontWeight: FontWeight.w500,
+                  fontSize: 9,
                   color: AppColors.textSecondary,
                 ),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
-              const SizedBox(height: 4),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Text(
-                    'View all',
-                    style: GoogleFonts.outfit(
-                      fontSize: 9,
-                      fontWeight: FontWeight.w600,
-                      color: AppColors.primaryPurple,
-                    ),
-                  ),
-                  const SizedBox(width: 2),
-                  const Icon(
-                    Icons.chevron_right_rounded,
-                    size: 10,
-                    color: AppColors.primaryPurple,
-                  ),
-                ],
               ),
             ],
           ),
@@ -579,414 +420,175 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  // Guidance Tip Banner
-  Widget _buildGuidanceBanner() {
+  Widget _buildEmptyGuidance() {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      width: double.infinity,
+      padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: const Color(0xFFF1EDFC),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: const Color(0xFFE2D9F8)),
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(
+          color: const Color(0xFFEFEBF6),
+        ),
       ),
-      child: Row(
+      child: Column(
         children: [
-          Container(
-            padding: const EdgeInsets.all(8),
-            decoration: BoxDecoration(
-              color: AppColors.primaryPurple.withAlpha(30),
-              borderRadius: BorderRadius.circular(10),
-            ),
-            child: const Icon(Icons.assignment_outlined, color: AppColors.primaryPurple, size: 22),
+          const Icon(
+            Icons.inventory_2_outlined,
+            size: 42,
+            color: AppColors.primaryPurple,
           ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Keep Everything in One Place',
-                  style: GoogleFonts.outfit(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w700,
-                    color: AppColors.textPrimary,
-                  ),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  'Add assets, set reminders, store documents and share with family.',
-                  style: GoogleFonts.outfit(
-                    fontSize: 11,
-                    color: AppColors.textSecondary,
-                  ),
-                ),
-              ],
+          const SizedBox(height: 12),
+          Text(
+            'Your collection is empty',
+            style: GoogleFonts.outfit(
+              fontSize: 17,
+              fontWeight: FontWeight.w700,
+              color: AppColors.textPrimary,
             ),
           ),
-          IconButton(
-            icon: const Icon(Icons.close_rounded, size: 18, color: AppColors.textMuted),
-            onPressed: () => setState(() => _showGuidanceBanner = false),
+          const SizedBox(height: 5),
+          Text(
+            'Add your first asset to start managing your belongings.',
+            textAlign: TextAlign.center,
+            style: GoogleFonts.outfit(
+              fontSize: 13,
+              color: AppColors.textSecondary,
+            ),
           ),
         ],
       ),
     );
   }
 
-  // Upcoming Reminders Section
-  Widget _buildUpcomingRemindersSection(List<ReminderModel> reminders) {
+  Widget _buildRecentAssets() {
+    final recent =
+        _assets.take(5).toList();
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          mainAxisAlignment:
+              MainAxisAlignment.spaceBetween,
           children: [
             Text(
-              'Upcoming Reminders',
+              'Recent Assets',
               style: GoogleFonts.outfit(
-                fontSize: 17,
+                fontSize: 18,
                 fontWeight: FontWeight.w700,
                 color: AppColors.textPrimary,
               ),
             ),
-            GestureDetector(
-              onTap: () => widget.onTabSelected?.call(3),
-              child: Row(
-                children: [
-                  Text(
-                    'View All',
-                    style: GoogleFonts.outfit(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w600,
-                      color: AppColors.primaryPurple,
-                    ),
-                  ),
-                  const Icon(Icons.chevron_right_rounded, size: 16, color: AppColors.primaryPurple),
-                ],
+            TextButton(
+              onPressed: () =>
+                  widget.onTabSelected?.call(1),
+              child: Text(
+                'View all',
+                style: GoogleFonts.outfit(
+                  color: AppColors.primaryPurple,
+                  fontWeight: FontWeight.w600,
+                ),
               ),
             ),
           ],
         ),
-        const SizedBox(height: 12),
-        Builder(
-          builder: (context) {
-            if (reminders.isEmpty) {
-              return Container(
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(16),
-                  border: Border.all(color: const Color(0xFFEFEBF6), width: 1),
-                ),
-                child: Row(
-                  children: [
-                    Container(
-                      width: 40,
-                      height: 40,
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFEDE8FB),
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                      child: const Icon(Icons.alarm_on_rounded, color: AppColors.primaryPurple, size: 22),
-                    ),
-                    const SizedBox(width: 14),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'No upcoming reminders',
-                            style: GoogleFonts.outfit(
-                              fontSize: 14,
-                              fontWeight: FontWeight.w600,
-                              color: AppColors.textPrimary,
-                            ),
-                          ),
-                          const SizedBox(height: 2),
-                          Text(
-                            'Warranties & due dates will appear here',
-                            style: GoogleFonts.outfit(
-                              fontSize: 12,
-                              color: AppColors.textSecondary,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-              );
-            }
 
-            return Column(
-              children: reminders.map((reminder) {
-                final dateStr = '${reminder.reminderDate.day}/${reminder.reminderDate.month}/${reminder.reminderDate.year}';
-                final daysLeft = reminder.reminderDate.difference(DateTime.now()).inDays;
-                final badgeText = daysLeft == 0
-                    ? 'Due Today'
-                    : daysLeft > 0
-                        ? 'In $daysLeft days'
-                        : dateStr;
+        const SizedBox(height: 8),
 
-                return GestureDetector(
-                  onTap: () => widget.onTabSelected?.call(3),
-                  child: Container(
-                    margin: const EdgeInsets.only(bottom: 10),
-                    padding: const EdgeInsets.all(14),
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(16),
-                      border: Border.all(color: const Color(0xFFEFEBF6), width: 1),
-                    ),
-                    child: Row(
-                      children: [
-                        Container(
-                          width: 40,
-                          height: 40,
-                          decoration: BoxDecoration(
-                            color: AppColors.warning.withAlpha(25),
-                            borderRadius: BorderRadius.circular(10),
-                          ),
-                          child: const Icon(Icons.alarm, color: AppColors.warning, size: 22),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                reminder.title,
-                                style: GoogleFonts.outfit(
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.w600,
-                                  color: AppColors.textPrimary,
-                                ),
-                              ),
-                              if (reminder.notes != null && reminder.notes!.isNotEmpty)
-                                Text(
-                                  reminder.notes!,
-                                  style: GoogleFonts.outfit(
-                                    fontSize: 11,
-                                    color: AppColors.textSecondary,
-                                  ),
-                                ),
-                            ],
-                          ),
-                        ),
-                        Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                              decoration: BoxDecoration(
-                                color: AppColors.warning.withAlpha(25),
-                                borderRadius: BorderRadius.circular(8),
-                              ),
-                              child: Text(
-                                badgeText,
-                                style: GoogleFonts.outfit(
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.w600,
-                                  color: AppColors.warning,
-                                ),
-                              ),
-                            ),
-                            const SizedBox(width: 6),
-                            const Icon(
-                              Icons.chevron_right_rounded,
-                              size: 16,
-                              color: AppColors.primaryPurple,
-                            ),
-                          ],
-                        ),
-                      ],
-                    ),
-                  ),
-                );
-              }).toList(),
-            );
-          },
+        ...recent.map(
+          (asset) => _buildAssetTile(asset),
         ),
       ],
     );
   }
 
-  // Recent Assets Section
-  Widget _buildRecentAssetsSection(
-    List<AssetModel>? assets,
-    ConnectionState connectionState,
-  ) {
-    final assetList = assets ?? [];
+  Widget _buildAssetTile(LocalAsset asset) {
+    return GestureDetector(
+      onTap: () async {
+        await EditAssetScreen.navigateTo(
+          context,
+          asset,
+        );
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        if (!mounted) return;
+
+        await _loadHomeData();
+      },
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 10),
+        padding: const EdgeInsets.all(13),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+            color: const Color(0xFFEFEBF6),
+          ),
+        ),
+        child: Row(
           children: [
-            Text(
-              'Recent Assets',
-              style: GoogleFonts.outfit(
-                fontSize: 17,
-                fontWeight: FontWeight.w700,
-                color: AppColors.textPrimary,
+            Container(
+              width: 46,
+              height: 46,
+              decoration: BoxDecoration(
+                color: AppColors.primaryPurple.withAlpha(18),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Center(
+                child: Text(
+                  asset.emoji ?? '📦',
+                  style: const TextStyle(fontSize: 23),
+                ),
               ),
             ),
-            GestureDetector(
-              onTap: () => widget.onTabSelected?.call(1),
-              child: Row(
+
+            const SizedBox(width: 12),
+
+            Expanded(
+              child: Column(
+                crossAxisAlignment:
+                    CrossAxisAlignment.start,
                 children: [
                   Text(
-                    'View All',
+                    asset.name,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                     style: GoogleFonts.outfit(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w600,
-                      color: AppColors.primaryPurple,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.textPrimary,
                     ),
                   ),
-                  const Icon(Icons.chevron_right_rounded, size: 16, color: AppColors.primaryPurple),
+                  const SizedBox(height: 3),
+                  Text(
+                    _categoryName(asset.categoryId),
+                    style: GoogleFonts.outfit(
+                      fontSize: 11,
+                      color: AppColors.textSecondary,
+                    ),
+                  ),
+                  if (asset.location != null &&
+                      asset.location!.isNotEmpty)
+                    Text(
+                      '📍 ${asset.location}',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: GoogleFonts.outfit(
+                        fontSize: 11,
+                        color: AppColors.textMuted,
+                      ),
+                    ),
                 ],
               ),
             ),
+
+            const Icon(
+              Icons.chevron_right_rounded,
+              color: AppColors.textMuted,
+            ),
           ],
         ),
-        const SizedBox(height: 12),
-
-        if (connectionState == ConnectionState.waiting && assetList.isEmpty)
-          const Center(
-            child: Padding(
-              padding: EdgeInsets.all(24.0),
-              child: CircularProgressIndicator(),
-            ),
-          )
-        else if (assetList.isEmpty)
-          // PDF Page 9 Exact Empty State
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.symmetric(vertical: 28, horizontal: 20),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(20),
-              border: Border.all(color: const Color(0xFFEFEBF6), width: 1),
-            ),
-            child: Column(
-              children: [
-                Container(
-                  width: 64,
-                  height: 64,
-                  decoration: const BoxDecoration(
-                    color: Color(0xFFF1EEFB),
-                    shape: BoxShape.circle,
-                  ),
-                  child: const Icon(
-                    Icons.inventory_2_outlined,
-                    color: AppColors.primaryPurple,
-                    size: 32,
-                  ),
-                ),
-                const SizedBox(height: 14),
-                Text(
-                  'Your collection is empty',
-                  style: GoogleFonts.outfit(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w700,
-                    color: AppColors.textPrimary,
-                  ),
-                ),
-                const SizedBox(height: 6),
-                Text(
-                  'Add your first asset to start organizing\nyour important belongings.',
-                  textAlign: TextAlign.center,
-                  style: GoogleFonts.outfit(
-                    fontSize: 13,
-                    color: AppColors.textSecondary,
-                    height: 1.4,
-                  ),
-                ),
-                const SizedBox(height: 18),
-                SizedBox(
-                  width: 160,
-                  child: GradientButton(
-                    height: 44,
-                    text: '+ Add Asset',
-                    onPressed: () => AddQuickAssetSheet.show(context),
-                  ),
-                ),
-              ],
-            ),
-          )
-        else
-          // Populated State Horizontal List
-          SizedBox(
-            height: 138,
-            child: ListView.separated(
-              scrollDirection: Axis.horizontal,
-              physics: const BouncingScrollPhysics(),
-              itemCount: assetList.length,
-              separatorBuilder: (context, index) => const SizedBox(width: 12),
-              itemBuilder: (context, index) {
-                final asset = assetList[index];
-                return GestureDetector(
-                  onTap: () => AssetDetailModal.show(context, asset),
-                  child: Container(
-                    width: 140,
-                    padding: const EdgeInsets.all(14),
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(18),
-                      border: Border.all(color: const Color(0xFFEFEBF6), width: 1),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withAlpha(6),
-                          blurRadius: 10,
-                          offset: const Offset(0, 4),
-                        ),
-                      ],
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            AssetAvatar(
-                              imageUrl: asset.imageUrl,
-                              emoji: asset.emoji,
-                              size: 38,
-                              borderRadius: 10,
-                              fontSize: 20,
-                            ),
-                            const Icon(Icons.more_horiz_rounded, size: 18, color: AppColors.textMuted),
-                          ],
-                        ),
-                        const Spacer(),
-                        Text(
-                          asset.name,
-                          style: GoogleFonts.outfit(
-                            fontSize: 14,
-                            fontWeight: FontWeight.w700,
-                            color: AppColors.textPrimary,
-                          ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                        const SizedBox(height: 2),
-                        Text(
-                          asset.categoryId ?? asset.location ?? 'Asset',
-                          style: GoogleFonts.outfit(
-                            fontSize: 11,
-                            color: AppColors.textSecondary,
-                            fontWeight: FontWeight.w500,
-                          ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ],
-                    ),
-                  ),
-                );
-              },
-            ),
-          ),
-      ],
+      ),
     );
   }
 }
