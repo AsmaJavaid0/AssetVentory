@@ -7,17 +7,14 @@ class TasksScreen extends StatefulWidget {
   const TasksScreen({super.key});
 
   @override
-  State<TasksScreen> createState() =>
-      _TasksScreenState();
+  State<TasksScreen> createState() => _TasksScreenState();
 }
 
-class _TasksScreenState
-    extends State<TasksScreen> {
+class _TasksScreenState extends State<TasksScreen> {
   final List<_LocalTask> _tasks = [];
 
   void _showAddTaskDialog() {
-    final controller =
-        TextEditingController();
+    final controller = TextEditingController();
 
     showDialog(
       context: context,
@@ -25,9 +22,7 @@ class _TasksScreenState
         return AlertDialog(
           title: Text(
             'Add Task',
-            style: GoogleFonts.outfit(
-              fontWeight: FontWeight.w700,
-            ),
+            style: GoogleFonts.outfit(fontWeight: FontWeight.w700),
           ),
           content: TextField(
             controller: controller,
@@ -38,22 +33,16 @@ class _TasksScreenState
           ),
           actions: [
             TextButton(
-              onPressed: () {
-                Navigator.pop(dialogContext);
-              },
+              onPressed: () => Navigator.pop(dialogContext),
               child: const Text('Cancel'),
             ),
             ElevatedButton(
               onPressed: () {
-                final text =
-                    controller.text.trim();
-
+                final text = controller.text.trim();
                 if (text.isEmpty) return;
 
                 setState(() {
-                  _tasks.add(
-                    _LocalTask(title: text),
-                  );
+                  _tasks.add(_LocalTask(title: text));
                 });
 
                 Navigator.pop(dialogContext);
@@ -68,27 +57,15 @@ class _TasksScreenState
 
   @override
   Widget build(BuildContext context) {
-    final pending = _tasks
-        .where((task) => !task.completed)
-        .toList();
-
-    final completed = _tasks
-        .where((task) => task.completed)
-        .toList();
+    final pending = _tasks.where((task) => !task.completed).toList();
+    final completed = _tasks.where((task) => task.completed).toList();
 
     return Scaffold(
-      backgroundColor:
-          AppColors.scaffoldBg,
-
-      floatingActionButton:
-          FloatingActionButton.extended(
+      backgroundColor: AppColors.scaffoldBg,
+      floatingActionButton: FloatingActionButton.extended(
         onPressed: _showAddTaskDialog,
-        backgroundColor:
-            AppColors.primaryPurple,
-        icon: const Icon(
-          Icons.add_rounded,
-          color: Colors.white,
-        ),
+        backgroundColor: AppColors.primaryPurple,
+        icon: const Icon(Icons.add_rounded, color: Colors.white),
         label: Text(
           'Add Task',
           style: GoogleFonts.outfit(
@@ -97,7 +74,6 @@ class _TasksScreenState
           ),
         ),
       ),
-
       appBar: AppBar(
         title: Text(
           'Tasks',
@@ -109,18 +85,15 @@ class _TasksScreenState
         backgroundColor: Colors.white,
         elevation: 0,
       ),
-
       body: _tasks.isEmpty
           ? Center(
               child: Column(
-                mainAxisAlignment:
-                    MainAxisAlignment.center,
+                mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   Icon(
                     Icons.task_alt_rounded,
                     size: 64,
-                    color: AppColors.primaryPurple
-                        .withAlpha(150),
+                    color: AppColors.primaryPurple.withAlpha(150),
                   ),
                   const SizedBox(height: 16),
                   Text(
@@ -128,28 +101,19 @@ class _TasksScreenState
                     style: GoogleFonts.outfit(
                       fontSize: 19,
                       fontWeight: FontWeight.w700,
-                      color:
-                          AppColors.textPrimary,
+                      color: AppColors.textPrimary,
                     ),
                   ),
                   const SizedBox(height: 6),
                   Text(
                     'Tap + to create your first task.',
-                    style: GoogleFonts.outfit(
-                      color:
-                          AppColors.textSecondary,
-                    ),
+                    style: GoogleFonts.outfit(color: AppColors.textSecondary),
                   ),
                 ],
               ),
             )
           : ListView(
-              padding: const EdgeInsets.fromLTRB(
-                20,
-                20,
-                20,
-                100,
-              ),
+              padding: const EdgeInsets.fromLTRB(20, 20, 20, 100),
               children: [
                 if (pending.isNotEmpty) ...[
                   _sectionTitle('To Do'),
@@ -167,9 +131,7 @@ class _TasksScreenState
 
   Widget _sectionTitle(String title) {
     return Padding(
-      padding: const EdgeInsets.only(
-        bottom: 10,
-      ),
+      padding: const EdgeInsets.only(bottom: 10),
       child: Text(
         title,
         style: GoogleFonts.outfit(
@@ -183,22 +145,16 @@ class _TasksScreenState
 
   Widget _taskTile(_LocalTask task) {
     return Container(
-      margin: const EdgeInsets.only(
-        bottom: 10,
-      ),
+      margin: const EdgeInsets.only(bottom: 10),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius:
-            BorderRadius.circular(16),
-        border: Border.all(
-          color: const Color(0xFFEFEBF6),
-        ),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: const Color(0xFFEFEBF6)),
       ),
       child: ListTile(
         leading: Checkbox(
           value: task.completed,
-          activeColor:
-              AppColors.primaryPurple,
+          activeColor: AppColors.primaryPurple,
           onChanged: (value) {
             setState(() {
               task.completed = value ?? false;
@@ -209,9 +165,7 @@ class _TasksScreenState
           task.title,
           style: GoogleFonts.outfit(
             fontWeight: FontWeight.w600,
-            decoration: task.completed
-                ? TextDecoration.lineThrough
-                : null,
+            decoration: task.completed ? TextDecoration.lineThrough : null,
           ),
         ),
         trailing: IconButton(
@@ -232,10 +186,7 @@ class _TasksScreenState
 
 class _LocalTask {
   final String title;
-  bool completed;
+  bool completed = false;
 
-  _LocalTask({
-    required this.title,
-    this.completed = false,
-  });
+  _LocalTask({required this.title});
 }
