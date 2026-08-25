@@ -537,10 +537,9 @@ class _AddAssetScreenState extends State<AddAssetScreen> {
  Future<void> _saveAsset() async {
   if (!_formKey.currentState!.validate()) return;
 
-  final user = FirebaseAuth.instance.currentUser;
-  if (user == null) return;
-
-  setState(() => _isLoading = true);
+ final user = FirebaseAuth.instance.currentUser;
+ if (!mounted) return;
+ setState(() => _isLoading = true);
 
   try {
     // Build custom fields map.
@@ -554,7 +553,7 @@ class _AddAssetScreenState extends State<AddAssetScreen> {
 
     // Save asset + image locally.
     final localAsset = await _assetRepository.createAssetWithImage(
-      ownerId: user.uid,
+      ownerId: user?.uid ?? 'local_user',
       name: _nameController.text.trim(),
       emoji: _primaryImage != null && _selectedEmoji.isEmpty
           ? null
