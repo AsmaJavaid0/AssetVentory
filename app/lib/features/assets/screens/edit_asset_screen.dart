@@ -220,5 +220,20 @@ class _EditAssetScreenState extends State<EditAssetScreen> {
     ]);
   }
 
-  Widget _imageFallback() => Center(child: Text(_emoji, style: const TextStyle(fontSize: 56)));
+  Widget _imageFallback() => InkWell(
+        onTap: _chooseEmoji,
+        child: Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(_emoji, style: const TextStyle(fontSize: 56)),
+              const SizedBox(height: 6),
+              Text(
+                'Tap to change emoji',
+                style: GoogleFonts.outfit(fontSize: 12, color: AppColors.textSecondary),
+              ),
+            ],
+          ),
+        ),
+      );
 }

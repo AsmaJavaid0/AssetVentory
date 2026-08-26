@@ -438,9 +438,9 @@ class _AddAssetScreenState extends State<AddAssetScreen> {
 
     showDialog(
       context: context,
-      builder: (context) {
+      builder: (dialogCtx) {
         return StatefulBuilder(
-          builder: (context, setDialogState) {
+          builder: (dialogInnerCtx, setDialogState) {
             return AlertDialog(
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(20),
@@ -512,7 +512,7 @@ class _AddAssetScreenState extends State<AddAssetScreen> {
               actions: [
                 TextButton(
                   onPressed: () {
-                    Navigator.pop(context);
+                    Navigator.pop(dialogInnerCtx);
                   },
                   child: Text(
                     'Cancel',
@@ -547,7 +547,9 @@ class _AddAssetScreenState extends State<AddAssetScreen> {
                         _selectedCategoryId = categoryId;
                       });
 
-                      Navigator.pop(context);
+                      if (dialogInnerCtx.mounted) {
+                        Navigator.pop(dialogInnerCtx);
+                      }
                     } catch (e, stackTrace) {
                       debugPrint(
                         'Error creating local category: $e',
