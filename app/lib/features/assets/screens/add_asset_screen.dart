@@ -4,12 +4,10 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:emoji_picker_flutter/emoji_picker_flutter.dart';
 import 'package:image_picker/image_picker.dart';
-import 'package:file_picker/file_picker.dart';
 
 import '../../../core/database/app_database.dart';
 import '../../../core/storage/local_file_storage.dart';
 import '../../../core/constants/app_colors.dart';
-import '../../../core/widgets/custom_button.dart';
 import '../../../core/widgets/custom_text_field.dart';
 import '../models/local_category.dart';
 import '../repositories/category_repository.dart';
@@ -40,7 +38,6 @@ class _AddAssetScreenState extends State<AddAssetScreen> {
   bool _qrEnabled = false;
   bool _isLoading = false;
   final List<Map<String, String>> _customFields = [];
-  final List<File> _selectedFiles = [];
 
   @override
   void initState() {
@@ -80,33 +77,16 @@ class _AddAssetScreenState extends State<AddAssetScreen> {
     try {
       final picked = await _imagePicker.pickImage(source: source, imageQuality: 90, maxWidth: 2048, maxHeight: 2048);
       if (picked != null && mounted) setState(() => _primaryImage = File(picked.path));
-    } catch (e) {
-      _showSnackBar('Failed to pick asset photo.', isError: true);
-    }
+    } catch (e) { _showSnackBar('Failed to pick asset photo.', isError: true); }
   }
 
   Future<void> _showPrimaryImageSourcePicker() async {
     await showModalBottomSheet<void>(context: context, shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))), builder: (sheetContext) => SafeArea(child: Column(mainAxisSize: MainAxisSize.min, children: [
-      const SizedBox(height: 12),
-      Text('Asset Photo', style: GoogleFonts.outfit(fontSize: 18, fontWeight: FontWeight.w700)),
+      const SizedBox(height: 12), Text('Asset Photo', style: GoogleFonts.outfit(fontSize: 18, fontWeight: FontWeight.w700)),
       ListTile(leading: const Icon(Icons.camera_alt_rounded), title: const Text('Take Photo'), onTap: () { Navigator.pop(sheetContext); _pickPrimaryImage(ImageSource.camera); }),
       ListTile(leading: const Icon(Icons.photo_library_rounded), title: const Text('Choose from Gallery'), onTap: () { Navigator.pop(sheetContext); _pickPrimaryImage(ImageSource.gallery); }),
       const SizedBox(height: 8),
     ])));
-  }
-
-  Future<void> _pickImage(ImageSource source) async {
-    try {
-      final picked = await _imagePicker.pickImage(source: source, imageQuality: 90, maxWidth: 2048, maxHeight: 2048);
-      if (picked != null && mounted) setState(() => _selectedFiles.add(File(picked.path)));
-    } catch (e) { _showSnackBar('Failed to pick image.', isError: true); }
-  }
-
-  Future<void> _pickFile() async {
-    try {
-      final files = await FilePicker.pickFiles(type: FileType.custom, allowedExtensions: ['pdf', 'doc', 'docx', 'txt', 'xls', 'xlsx']);
-      if (files.isNotEmpty && files.first.path != null && mounted) setState(() => _selectedFiles.add(File(files.first.path!)));
-    } catch (e) { _showSnackBar('Failed to pick document.', isError: true); }
   }
 
   void _showSnackBar(String message, {bool isError = false}) {
@@ -176,16 +156,14 @@ class _AddAssetScreenState extends State<AddAssetScreen> {
         CustomTextField(controller: _nameController, hintText: 'e.g. My Laptop, Toyota Camry', labelText: 'Asset Name *', prefixIcon: Icons.drive_file_rename_outline_rounded, validator: (v) => v == null || v.trim().isEmpty ? 'Name is required' : null),
         const SizedBox(height: 18),
         Row(crossAxisAlignment: CrossAxisAlignment.center, children: [Expanded(child: Text('Category', style: GoogleFonts.outfit(fontWeight: FontWeight.w600, fontSize: 13, color: AppColors.textSecondary))), TextButton.icon(onPressed: _showCreateCategoryDialog, icon: const Icon(Icons.add_circle_outline_rounded, size: 16), label: const Text('Create New'), style: TextButton.styleFrom(padding: EdgeInsets.zero, minimumSize: const Size(50, 32), tapTargetSize: MaterialTapTargetSize.shrinkWrap))]),
-        const SizedBox(height: 6),
-        _categoryDropdown(),
+        const SizedBox(height: 6), _categoryDropdown(),
         const SizedBox(height: 18),
         CustomTextField(controller: _locationController, hintText: 'e.g. Master Bedroom, Garage', labelText: 'Location (Optional)', prefixIcon: Icons.location_on_outlined),
         const SizedBox(height: 18),
         CustomTextField(controller: _descriptionController, hintText: 'Warranty details, purchase info...', labelText: 'Description / Notes (Optional)', prefixIcon: Icons.notes_rounded),
+        const SizedBox(height: 24), _customFieldsPlaceholder(),
         const SizedBox(height: 24),
-        _customFieldsPlaceholder(),
-        const SizedBox(height: 24),
-        SwitchListTile(contentPadding: EdgeInsets.zero, value: _qrEnabled, onChanged: (v) => setState(() => _qrEnabled = v), activeThumbColor: AppColors.primaryPurple, title: Text('Generate QR Code', style: GoogleFonts.outfit(fontWeight: FontWeight.w700)), subtitle: Text('Enable QR identification for this asset.', style: GoogleFonts.outfit(fontSize: 12, color: AppColors.textSecondary))),
+        SwitchListTile(contentPadding: EdgeInsets.zero, value: _qrEnabled, onChanged: (v) => setState(() => _qrEnabled = v), activeThumbColor: AppColors.primaryPurple, title: Text('Generate QR Code', style: GoogleFonts.outfit(fontWeight: FontWeight.w700)), subtitle: Text('Enable QR identification for this asset.', style: GoogleFonts.outfit(fontSize: 12, color: AppColors.textSecondary)),),
         const SizedBox(height: 22),
         SizedBox(width: double.infinity, height: 52, child: ElevatedButton(onPressed: _isLoading ? null : _saveAsset, style: ElevatedButton.styleFrom(backgroundColor: AppColors.primaryPurple, foregroundColor: Colors.white, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14))), child: _isLoading ? const SizedBox(width: 22, height: 22, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white)) : const Text('Save Asset'))),
       ]))),
@@ -207,6 +185,6 @@ class _AddAssetScreenState extends State<AddAssetScreen> {
 
   void _showAddCustomFieldDialog() {
     final name = TextEditingController(); final value = TextEditingController();
-    showDialog(context: context, builder: (ctx) => AlertDialog(title: const Text('Add Custom Field'), content: Column(mainAxisSize: MainAxisSize.min, children: [CustomTextField(controller: name, labelText: 'Field Name'), const SizedBox(height: 12), CustomTextField(controller: value, labelText: 'Field Value')]), actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')), ElevatedButton(onPressed: () { if (name.text.trim().isNotEmpty && value.text.trim().isNotEmpty) { setState(() => _customFields.add({'name': name.text.trim(), 'value': value.text.trim()})); Navigator.pop(ctx); } }, child: const Text('Add'))]));
+    showDialog(context: context, builder: (ctx) => AlertDialog(title: const Text('Add Custom Field'), content: Column(mainAxisSize: MainAxisSize.min, children: [CustomTextField(controller: name, hintText: 'e.g. RAM', labelText: 'Field Name'), const SizedBox(height: 12), CustomTextField(controller: value, hintText: 'e.g. 16 GB', labelText: 'Field Value')]), actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')), ElevatedButton(onPressed: () { if (name.text.trim().isNotEmpty && value.text.trim().isNotEmpty) { setState(() => _customFields.add({'name': name.text.trim(), 'value': value.text.trim()})); Navigator.pop(ctx); } }, child: const Text('Add'))]));
   }
 }
