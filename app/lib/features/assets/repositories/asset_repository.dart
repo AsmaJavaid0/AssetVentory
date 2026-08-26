@@ -5,8 +5,9 @@ import 'package:uuid/uuid.dart';
 import '../../../core/database/app_database.dart';
 import '../../../core/storage/local_file_storage.dart';
 import '../models/local_asset.dart';
+import 'interfaces/i_asset_repository.dart';
 
-class AssetRepository {
+class AssetRepository implements IAssetRepository {
   final AppDatabase _database;
   final LocalFileStorage _fileStorage;
   static const Uuid _uuid = Uuid();
@@ -17,7 +18,7 @@ class AssetRepository {
       id: asset.id, ownerId: asset.ownerId, name: asset.name,
       categoryId: Value(asset.categoryId), emoji: Value(asset.emoji), imagePath: Value(asset.imagePath),
       location: Value(asset.location), description: Value(asset.description), qrEnabled: Value(asset.qrEnabled),
-      customFields: Value(jsonEncode(asset.customFields)), createdAt: asset.createdAt, updatedAt: asset.updatedAt,
+      customFields: Value(asset.customFields), createdAt: asset.createdAt, updatedAt: asset.updatedAt,
     ));
   }
 
@@ -63,7 +64,7 @@ class AssetRepository {
     await (_database.update(_database.assets)..where((row) => row.id.equals(asset.id))).write(AssetsCompanion(
       ownerId: Value(asset.ownerId), name: Value(asset.name), categoryId: Value(asset.categoryId), emoji: Value(asset.emoji),
       imagePath: Value(asset.imagePath), location: Value(asset.location), description: Value(asset.description), qrEnabled: Value(asset.qrEnabled),
-      customFields: Value(jsonEncode(asset.customFields)), createdAt: Value(asset.createdAt), updatedAt: Value(asset.updatedAt),
+      customFields: Value(asset.customFields), createdAt: Value(asset.createdAt), updatedAt: Value(asset.updatedAt),
     ));
   }
 
@@ -88,14 +89,8 @@ class AssetRepository {
 
   LocalAsset _toLocalAsset(Asset row) => LocalAsset(id: row.id, ownerId: row.ownerId, name: row.name,
     categoryId: row.categoryId, emoji: row.emoji, imagePath: row.imagePath, location: row.location,
-    description: row.description, qrEnabled: row.qrEnabled, customFields: _decodeCustomFields(row.customFields),
+    description: row.description, qrEnabled: row.qrEnabled, customFields: row.customFields,
     createdAt: row.createdAt, updatedAt: row.updatedAt);
 
-  Map<String, String> _decodeCustomFields(String value) {
-    try {
-      final decoded = jsonDecode(value);
-      if (decoded is Map<String, dynamic>) return decoded.map((k, v) => MapEntry(k, v.toString()));
-    } catch (_) {}
-    return {};
-  }
+  // _decodeCustomFields is no longer needed as Drift handles it via TypeConverter
 }

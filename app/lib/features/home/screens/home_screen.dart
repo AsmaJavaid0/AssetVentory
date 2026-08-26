@@ -304,6 +304,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 '${_assets.length}',
                 'Assets',
                 () => widget.onTabSelected?.call(1),
+                isPrimary: true,
               ),
             ),
             SizedBox(
@@ -339,20 +340,24 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  Widget _metric(IconData icon, String count, String label, VoidCallback onTap) {
+  Widget _metric(IconData icon, String count, String label, VoidCallback onTap, {bool isPrimary = false}) {
     return GestureDetector(
       onTap: onTap,
       child: Container(
         constraints: const BoxConstraints(minHeight: 90),
         padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 6),
         decoration: BoxDecoration(
-          color: Colors.white,
+          color: isPrimary ? AppColors.primaryPurple : Colors.white,
           borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: const Color(0xFFEFEBF6)),
+          border: Border.all(
+            color: isPrimary ? AppColors.primaryPurple : const Color(0xFFEFEBF6),
+          ),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withAlpha(4),
-              blurRadius: 8,
+              color: isPrimary
+                ? AppColors.primaryPurple.withAlpha(60)
+                : Colors.black.withAlpha(4),
+              blurRadius: isPrimary ? 12 : 8,
               offset: const Offset(0, 2),
             ),
           ],
@@ -360,16 +365,20 @@ class _HomeScreenState extends State<HomeScreen> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(icon, color: AppColors.primaryPurple, size: 22),
+            Icon(
+              icon,
+              color: isPrimary ? Colors.white : AppColors.primaryPurple,
+              size: isPrimary ? 26 : 22
+            ),
             const SizedBox(height: 6),
             Text(
               count,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: GoogleFonts.outfit(
-                fontSize: 16,
+                fontSize: isPrimary ? 18 : 16,
                 fontWeight: FontWeight.w700,
-                color: AppColors.textPrimary,
+                color: isPrimary ? Colors.white : AppColors.textPrimary,
               ),
             ),
             const SizedBox(height: 2),
@@ -380,7 +389,7 @@ class _HomeScreenState extends State<HomeScreen> {
               textAlign: TextAlign.center,
               style: GoogleFonts.outfit(
                 fontSize: 10,
-                color: AppColors.textSecondary,
+                color: isPrimary ? Colors.white70 : AppColors.textSecondary,
               ),
             ),
           ],
@@ -400,21 +409,47 @@ class _HomeScreenState extends State<HomeScreen> {
       ),
       child: Column(
         children: [
-          const Icon(Icons.inventory_2_outlined, size: 44, color: AppColors.primaryPurple),
-          const SizedBox(height: 12),
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: AppColors.lightLavender,
+              shape: BoxShape.circle,
+            ),
+            child: const Icon(
+              Icons.inventory_2_outlined,
+              size: 44,
+              color: AppColors.primaryPurple,
+            ),
+          ),
+          const SizedBox(height: 16),
           Text(
             'Your collection is empty',
             style: GoogleFonts.outfit(
-              fontSize: 16,
+              fontSize: 18,
               fontWeight: FontWeight.w700,
               color: AppColors.textPrimary,
             ),
           ),
-          const SizedBox(height: 6),
+          const SizedBox(height: 8),
           Text(
-            'Add your first asset to start managing your belongings.',
+            'Add your first asset to start managing your belongings and keeping them secure.',
             textAlign: TextAlign.center,
-            style: GoogleFonts.outfit(fontSize: 13, color: AppColors.textSecondary),
+            style: GoogleFonts.outfit(
+              fontSize: 14,
+              color: AppColors.textSecondary,
+            ),
+          ),
+          const SizedBox(height: 20),
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton.icon(
+              onPressed: () async {
+                await AddQuickAssetSheet.show(context);
+                if (mounted) _loadHomeData();
+              },
+              icon: const Icon(Icons.add_rounded),
+              label: const Text('Get Started Now'),
+            ),
           ),
         ],
       ),

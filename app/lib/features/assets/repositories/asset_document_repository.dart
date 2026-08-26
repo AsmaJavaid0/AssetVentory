@@ -6,8 +6,9 @@ import 'package:uuid/uuid.dart';
 import '../../../core/database/app_database.dart';
 import '../../../core/storage/local_file_storage.dart';
 import '../models/local_asset_document.dart';
+import 'interfaces/i_asset_document_repository.dart';
 
-class AssetDocumentRepository {
+class AssetDocumentRepository implements IAssetDocumentRepository {
   final AppDatabase _database;
   final LocalFileStorage _fileStorage;
 

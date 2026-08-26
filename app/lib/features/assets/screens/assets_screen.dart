@@ -145,19 +145,29 @@ class _AssetsScreenState extends State<AssetsScreen>
     final assets = _filteredAssets;
     return Scaffold(
       backgroundColor: AppColors.scaffoldBg,
-      body: Column(
+      body: Stack(
         children: [
-          _buildHeader(),
-          // Animated search bar below header
-          SizeTransition(
-            sizeFactor: _searchAnimation,
-            alignment: Alignment.topCenter,
-            child: _buildSearchBar(),
+          Column(
+            children: [
+              _buildHeader(),
+              _buildFilterPills(),
+              Expanded(
+                child: assets.isEmpty ? _buildEmptyState() : _buildAssetList(assets),
+              ),
+            ],
           ),
-          _buildFilterPills(),
-          Expanded(
-            child: assets.isEmpty ? _buildEmptyState() : _buildAssetList(assets),
-          ),
+          // Floating Search Overlay
+          if (_searchVisible)
+            Positioned(
+              top: MediaQuery.of(context).padding.top + 60,
+              left: 16,
+              right: 16,
+              child: Material(
+                elevation: 8,
+                borderRadius: BorderRadius.circular(14),
+                child: _buildSearchBar(),
+              ),
+            ),
         ],
       ),
       floatingActionButton: FloatingActionButton.extended(
@@ -178,69 +188,67 @@ class _AssetsScreenState extends State<AssetsScreen>
 
   Widget _buildHeader() {
     final topPad = MediaQuery.of(context).padding.top;
-    return ClipPath(
-      clipper: WaveClipper(),
-      child: Container(
-        width: double.infinity,
-        decoration: const BoxDecoration(gradient: AppColors.heroGradient),
-        padding: EdgeInsets.fromLTRB(20, topPad + 16, 12, 30),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.center,
-          children: [
-            // Title column
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    'My Assets',
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: GoogleFonts.outfit(
-                      fontSize: 24,
-                      color: Colors.white,
-                      fontWeight: FontWeight.w700,
-                    ),
+    return Container(
+      width: double.infinity,
+      decoration: const BoxDecoration(
+        color: AppColors.heroDarkBg,
+        borderRadius: BorderRadius.vertical(bottom: Radius.circular(24)),
+      ),
+      padding: EdgeInsets.fromLTRB(20, topPad + 16, 12, 24),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  'My Assets',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: GoogleFonts.outfit(
+                    fontSize: 24,
+                    color: Colors.white,
+                    fontWeight: FontWeight.w700,
                   ),
-                  const SizedBox(height: 4),
-                  Text(
-                    '${_assets.length} item${_assets.length == 1 ? '' : 's'} in your collection',
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: GoogleFonts.outfit(
-                      fontSize: 12,
-                      color: const Color(0xFFB8AED6),
-                    ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  '${_assets.length} item${_assets.length == 1 ? '' : 's'} in your collection',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: GoogleFonts.outfit(
+                    fontSize: 12,
+                    color: const Color(0xFFB8AED6),
                   ),
-                ],
-              ),
-            ),
-            // Action icons — compact, no overlap
-            _headerIconBtn(
-              icon: _searchVisible ? Icons.search_off_rounded : Icons.search_rounded,
-              tooltip: _searchVisible ? 'Close search' : 'Search assets',
-              onTap: _toggleSearch,
-              active: _searchVisible,
-            ),
-            _headerIconBtn(
-              icon: Icons.folder_outlined,
-              tooltip: 'Categories',
-              onTap: _openCategories,
-            ),
-            PopupMenuButton<_AssetSort>(
-              tooltip: 'Sort',
-              icon: const Icon(Icons.sort_rounded, color: Colors.white, size: 22),
-              color: Colors.white,
-              onSelected: (value) => setState(() => _sort = value),
-              itemBuilder: (_) => const [
-                PopupMenuItem(value: _AssetSort.newest, child: Text('Newest first')),
-                PopupMenuItem(value: _AssetSort.name, child: Text('Name A–Z')),
-                PopupMenuItem(value: _AssetSort.location, child: Text('Location A–Z')),
+                ),
               ],
             ),
-          ],
-        ),
+          ),
+          _headerIconBtn(
+            icon: _searchVisible ? Icons.search_off_rounded : Icons.search_rounded,
+            tooltip: _searchVisible ? 'Close search' : 'Search assets',
+            onTap: _toggleSearch,
+            active: _searchVisible,
+          ),
+          _headerIconBtn(
+            icon: Icons.folder_outlined,
+            tooltip: 'Categories',
+            onTap: _openCategories,
+          ),
+          PopupMenuButton<_AssetSort>(
+            tooltip: 'Sort',
+            icon: const Icon(Icons.sort_rounded, color: Colors.white, size: 22),
+            color: Colors.white,
+            onSelected: (value) => setState(() => _sort = value),
+            itemBuilder: (_) => const [
+              PopupMenuItem(value: _AssetSort.newest, child: Text('Newest first')),
+              PopupMenuItem(value: _AssetSort.name, child: Text('Name A–Z')),
+              PopupMenuItem(value: _AssetSort.location, child: Text('Location A–Z')),
+            ],
+          ),
+        ],
       ),
     );
   }
@@ -482,23 +490,56 @@ class _AssetsScreenState extends State<AssetsScreen>
         physics: const AlwaysScrollableScrollPhysics(),
         children: [
           const SizedBox(height: 80),
-          const Icon(Icons.inventory_2_outlined, size: 56, color: AppColors.primaryPurple),
-          const SizedBox(height: 16),
           Center(
-            child: Text(
-              label,
-              style: GoogleFonts.outfit(
-                fontSize: 17,
-                fontWeight: FontWeight.w600,
-                color: AppColors.textPrimary,
+            child: Padding(
+              padding: const EdgeInsets.all(32),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(24),
+                    decoration: BoxDecoration(
+                      color: AppColors.lightLavender,
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(
+                      Icons.inventory_2_outlined,
+                      size: 64,
+                      color: AppColors.primaryPurple,
+                    ),
+                  ),
+                  const SizedBox(height: 24),
+                  Text(
+                    label,
+                    style: GoogleFonts.outfit(
+                      fontSize: 20,
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.textPrimary,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Your inventory is looking a bit empty. Start adding your belongings to keep everything organized!',
+                    textAlign: TextAlign.center,
+                    style: GoogleFonts.outfit(
+                      fontSize: 14,
+                      color: AppColors.textSecondary,
+                    ),
+                  ),
+                  const SizedBox(height: 24),
+                  ElevatedButton.icon(
+                    onPressed: () async {
+                      await AddQuickAssetSheet.show(context);
+                      if (mounted) await _load();
+                    },
+                    icon: const Icon(Icons.add_rounded),
+                    label: const Text('Add Your First Asset'),
+                    style: ElevatedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                    ),
+                  ),
+                ],
               ),
-            ),
-          ),
-          const SizedBox(height: 6),
-          Center(
-            child: Text(
-              'Add an asset to see it here.',
-              style: GoogleFonts.outfit(color: AppColors.textSecondary),
             ),
           ),
         ],

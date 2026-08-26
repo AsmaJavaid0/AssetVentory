@@ -1,40 +1,43 @@
+import 'package:get_it/get_it.dart';
 import '../database/app_database.dart';
 import '../storage/local_file_storage.dart';
 
 import '../../features/assets/repositories/asset_repository.dart';
 import '../../features/assets/repositories/asset_document_repository.dart';
 import '../../features/assets/repositories/category_repository.dart';
+import '../../features/assets/repositories/interfaces/i_asset_repository.dart';
+import '../../features/assets/repositories/interfaces/i_category_repository.dart';
+import '../../features/assets/repositories/interfaces/i_asset_document_repository.dart';
 
-class ServiceLocator {
-  late final AppDatabase database;
-  late final LocalFileStorage fileStorage;
+final getIt = GetIt.instance;
 
-  late final AssetRepository assetRepository;
-  late final AssetDocumentRepository assetDocumentRepository;
-  late final CategoryRepository categoryRepository;
+Future<void> setupServiceLocator() async {
+  // Core Services
+  getIt.registerLazySingleton<AppDatabase>(() => AppDatabase());
+  getIt.registerLazySingleton<LocalFileStorage>(() => LocalFileStorage());
 
-  void initialize() {
-    database = AppDatabase();
-    fileStorage = LocalFileStorage();
+  // Repositories - Registered as their interfaces for better testability
+  getIt.registerLazySingleton<IAssetRepository>(
+    () => AssetRepository(
+      database: getIt<AppDatabase>(),
+      fileStorage: getIt<LocalFileStorage>(),
+    ),
+  );
 
-    assetRepository = AssetRepository(
-      database: database,
-      fileStorage: fileStorage,
-    );
+  getIt.registerLazySingleton<IAssetDocumentRepository>(
+    () => AssetDocumentRepository(
+      database: getIt<AppDatabase>(),
+      fileStorage: getIt<LocalFileStorage>(),
+    ),
+  );
 
-    assetDocumentRepository = AssetDocumentRepository(
-      database: database,
-      fileStorage: fileStorage,
-    );
-
-    categoryRepository = CategoryRepository(
-      database: database,
-    );
-  }
-
-  Future<void> dispose() async {
-    await database.close();
-  }
+  getIt.registerLazySingleton<ICategoryRepository>(
+    () => CategoryRepository(
+      database: getIt<AppDatabase>(),
+    ),
+  );
 }
 
-final serviceLocator = ServiceLocator();
+void disposeServiceLocator() {
+  getIt.reset();
+}

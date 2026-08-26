@@ -1,4 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import '../../core/utils/result.dart';
 import '../models/user_model.dart';
 import '../../assets/models/asset_model.dart';
 import '../../assets/models/category_model.dart';
@@ -75,15 +76,15 @@ class FirestoreService {
   }
 
   /// Fetches the user profile by UID
-  Future<UserModel?> getUser(String uid) async {
+  Future<Result<UserModel>> getUser(String uid) async {
     try {
       final doc = await _usersCollection.doc(uid).get();
       if (doc.exists) {
-        return UserModel.fromFirestore(doc);
+        return Result.success(UserModel.fromFirestore(doc));
       }
-      return null;
+      return Result.failure(StorageException('User not found'));
     } catch (e) {
-      return null;
+      return Result.failure(StorageException(e.toString()));
     }
   }
 
@@ -101,13 +102,12 @@ class FirestoreService {
   Stream<List<AssetModel>> streamUserAssets(String ownerId) {
     return _assetsCollection
         .where('ownerId', isEqualTo: ownerId)
+        .orderBy('createdAt', descending: true)
         .snapshots()
         .map((snapshot) {
-          final list = snapshot.docs
+          return snapshot.docs
               .map((doc) => AssetModel.fromFirestore(doc))
               .toList();
-          list.sort((a, b) => b.createdAt.compareTo(a.createdAt));
-          return list;
         });
   }
 
@@ -115,13 +115,13 @@ class FirestoreService {
   Stream<List<AssetModel>> streamRecentAssets(String ownerId, {int limit = 5}) {
     return _assetsCollection
         .where('ownerId', isEqualTo: ownerId)
+        .orderBy('createdAt', descending: true)
+        .limit(limit)
         .snapshots()
         .map((snapshot) {
-          final list = snapshot.docs
+          return snapshot.docs
               .map((doc) => AssetModel.fromFirestore(doc))
               .toList();
-          list.sort((a, b) => b.createdAt.compareTo(a.createdAt));
-          return list.take(limit).toList();
         });
   }
 
