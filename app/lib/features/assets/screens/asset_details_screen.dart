@@ -46,17 +46,14 @@ class _AssetDetailsScreenState extends State<AssetDetailsScreen> {
   }
 
   Future<void> _edit() async {
-    final navigator = Navigator.of(context);
-    await navigator.push<void>(MaterialPageRoute<void>(builder: (_) => EditAssetScreen(asset: _asset)));
+    await Navigator.of(context).push<void>(MaterialPageRoute<void>(builder: (_) => EditAssetScreen(asset: _asset)));
     if (!mounted) return;
-
     final updated = await serviceLocator.assetRepository.getAsset(_asset.id);
     if (!mounted) return;
     if (updated == null) {
       Navigator.of(context).pop();
       return;
     }
-
     setState(() {
       _asset = updated;
       _documentsFuture = _loadDocuments();
@@ -85,7 +82,7 @@ class _AssetDetailsScreenState extends State<AssetDetailsScreen> {
         backgroundColor: Colors.white,
         surfaceTintColor: Colors.white,
         elevation: 0,
-        title: Text('Asset Details', style: GoogleFonts.outfit(fontWeight: FontWeight.w700, color: AppColors.textPrimary)),
+        title: Text('Asset Details', maxLines: 1, overflow: TextOverflow.ellipsis, style: GoogleFonts.outfit(fontWeight: FontWeight.w700, color: AppColors.textPrimary)),
         actions: [IconButton(tooltip: 'Edit asset', onPressed: _edit, icon: const Icon(Icons.edit_outlined))],
       ),
       body: RefreshIndicator(
@@ -93,16 +90,13 @@ class _AssetDetailsScreenState extends State<AssetDetailsScreen> {
         onRefresh: _refresh,
         child: ListView(
           physics: const AlwaysScrollableScrollPhysics(),
-          padding: const EdgeInsets.fromLTRB(20, 20, 20, 40),
+          padding: const EdgeInsets.fromLTRB(20, 16, 20, 40),
           children: [
             _buildPhoto(),
-            const SizedBox(height: 20),
-            Text(_asset.name, style: GoogleFonts.outfit(fontSize: 28, fontWeight: FontWeight.w800, color: AppColors.textPrimary)),
             const SizedBox(height: 18),
-            FutureBuilder<List<LocalCategory>>(
-              future: _categoriesFuture,
-              builder: (context, snapshot) => _buildInfoCard(snapshot.data ?? const <LocalCategory>[]),
-            ),
+            Text(_asset.name, maxLines: 3, overflow: TextOverflow.ellipsis, style: GoogleFonts.outfit(fontSize: 26, height: 1.15, fontWeight: FontWeight.w800, color: AppColors.textPrimary)),
+            const SizedBox(height: 16),
+            FutureBuilder<List<LocalCategory>>(future: _categoriesFuture, builder: (context, snapshot) => _buildInfoCard(snapshot.data ?? const <LocalCategory>[])),
             const SizedBox(height: 18),
             _buildDocumentsCard(),
           ],
@@ -115,57 +109,48 @@ class _AssetDetailsScreenState extends State<AssetDetailsScreen> {
     final path = _asset.imagePath;
     return ClipRRect(
       borderRadius: BorderRadius.circular(22),
-      child: AspectRatio(
-        aspectRatio: 16 / 8,
+      child: Container(
+        width: double.infinity,
+        constraints: const BoxConstraints(minHeight: 180, maxHeight: 360),
+        color: AppColors.primaryPurple.withValues(alpha: 0.06),
         child: path != null && path.isNotEmpty
-            ? Image.file(File(path), fit: BoxFit.cover, errorBuilder: (_, _, _) => _emojiPlaceholder())
+            ? Image.file(File(path), fit: BoxFit.contain, errorBuilder: (_, _, _) => _emojiPlaceholder())
             : _emojiPlaceholder(),
       ),
     );
   }
 
-  Widget _emojiPlaceholder() => Container(
-        color: AppColors.primaryPurple.withValues(alpha: 0.08),
-        alignment: Alignment.center,
-        child: Text(_asset.emoji ?? '📦', style: const TextStyle(fontSize: 64)),
-      );
+  Widget _emojiPlaceholder() => Container(color: AppColors.primaryPurple.withValues(alpha: 0.08), alignment: Alignment.center, child: Text(_asset.emoji ?? '📦', style: const TextStyle(fontSize: 64)));
 
   Widget _buildInfoCard(List<LocalCategory> categories) {
     final category = _categoryName(categories);
     return Container(
       decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(20), border: Border.all(color: const Color(0xFFEFEBF6))),
-      child: Column(
-        children: [
-          _infoRow('Category', category),
+      child: Column(children: [
+        _infoRow('Category', category), _divider(),
+        _infoRow('Location', _asset.location?.isNotEmpty == true ? _asset.location! : 'Not specified'), _divider(),
+        _infoRow('Description', _asset.description?.isNotEmpty == true ? _asset.description! : 'No description'), _divider(),
+        _infoRow('QR Code', _asset.qrEnabled ? 'Enabled' : 'Disabled'),
+        if (_asset.customFields.isNotEmpty) ...[
           _divider(),
-          _infoRow('Location', _asset.location?.isNotEmpty == true ? _asset.location! : 'Not specified'),
-          _divider(),
-          _infoRow('Description', _asset.description?.isNotEmpty == true ? _asset.description! : 'No description'),
-          _divider(),
-          _infoRow('QR Code', _asset.qrEnabled ? 'Enabled' : 'Disabled'),
-          if (_asset.customFields.isNotEmpty) ...[
-            _divider(),
-            ..._asset.customFields.entries.map((entry) => Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
-              child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Expanded(child: Text(entry.key, style: GoogleFonts.outfit(fontWeight: FontWeight.w600))),
-                const SizedBox(width: 16),
-                Expanded(child: Text(entry.value, textAlign: TextAlign.right, style: GoogleFonts.outfit(color: AppColors.textSecondary))),
-              ]),
-            )),
-          ],
+          ..._asset.customFields.entries.map((entry) => Padding(padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12), child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Expanded(child: Text(entry.key, maxLines: 3, overflow: TextOverflow.ellipsis, style: GoogleFonts.outfit(fontWeight: FontWeight.w600))),
+            const SizedBox(width: 12),
+            Expanded(child: Text(entry.value, textAlign: TextAlign.right, style: GoogleFonts.outfit(color: AppColors.textSecondary))),
+          ]))),
         ],
-      ),
+      ]),
     );
   }
 
   Widget _infoRow(String label, String value) => Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 15),
-        child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          SizedBox(width: 105, child: Text(label, style: GoogleFonts.outfit(fontWeight: FontWeight.w600, color: AppColors.textSecondary))),
-          Expanded(child: Text(value, style: GoogleFonts.outfit(fontWeight: FontWeight.w600, color: AppColors.textPrimary))),
-        ]),
-      );
+    padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 15),
+    child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      SizedBox(width: 96, child: Text(label, maxLines: 2, overflow: TextOverflow.ellipsis, style: GoogleFonts.outfit(fontWeight: FontWeight.w600, color: AppColors.textSecondary))),
+      const SizedBox(width: 10),
+      Expanded(child: Text(value, style: GoogleFonts.outfit(fontWeight: FontWeight.w600, color: AppColors.textPrimary))),
+    ]),
+  );
 
   Widget _divider() => const Divider(height: 1, indent: 18, endIndent: 18);
 
@@ -193,15 +178,13 @@ class _AssetDetailsScreenState extends State<AssetDetailsScreen> {
   }
 
   Widget _documentTile(LocalAssetDocument document) => Container(
-        margin: const EdgeInsets.only(bottom: 8),
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
-        decoration: BoxDecoration(color: AppColors.scaffoldBg, borderRadius: BorderRadius.circular(12)),
-        child: Row(children: [
-          const Icon(Icons.description_outlined, color: AppColors.primaryPurple),
-          const SizedBox(width: 10),
-          Expanded(child: Text(document.name, maxLines: 2, overflow: TextOverflow.ellipsis, style: GoogleFonts.outfit(fontWeight: FontWeight.w600))),
-          if (document.fileType != null)
-            Padding(padding: const EdgeInsets.only(left: 8), child: Text(document.fileType!.toUpperCase(), style: GoogleFonts.outfit(fontSize: 10, color: AppColors.textMuted))),
-        ]),
-      );
+    margin: const EdgeInsets.only(bottom: 8),
+    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
+    decoration: BoxDecoration(color: AppColors.scaffoldBg, borderRadius: BorderRadius.circular(12)),
+    child: Row(children: [
+      const Icon(Icons.description_outlined, color: AppColors.primaryPurple), const SizedBox(width: 10),
+      Expanded(child: Text(document.name, maxLines: 2, overflow: TextOverflow.ellipsis, style: GoogleFonts.outfit(fontWeight: FontWeight.w600))),
+      if (document.fileType != null) Padding(padding: const EdgeInsets.only(left: 8), child: Text(document.fileType!.toUpperCase(), maxLines: 1, overflow: TextOverflow.ellipsis, style: GoogleFonts.outfit(fontSize: 10, color: AppColors.textMuted))),
+    ]),
+  );
 }
