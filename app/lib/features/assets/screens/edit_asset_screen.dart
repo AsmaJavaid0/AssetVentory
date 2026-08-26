@@ -59,11 +59,25 @@ class _EditAssetScreenState extends State<EditAssetScreen> {
     try {
       final categories = await _categoryRepository.getCategories('local_user');
       if (!mounted) return;
-      setState(() { _categories = categories; _loading = false; });
-    } catch (e) {
+      final validIds = categories.map((category) => category.id).toSet();
+      setState(() {
+        _categories = categories;
+        // An asset can outlive a deleted category. Never give DropdownButton
+        // a value that isn't represented by exactly one menu item.
+        if (_categoryId != null && !validIds.contains(_categoryId)) {
+          _categoryId = null;
+        }
+        _loading = false;
+      });
+    } catch (e, stackTrace) {
       debugPrint('Error loading categories: $e');
+      debugPrintStack(stackTrace: stackTrace);
       if (!mounted) return;
-      setState(() { _categories = []; _loading = false; });
+      setState(() {
+        _categories = [];
+        _categoryId = null;
+        _loading = false;
+      });
     }
   }
 
@@ -80,7 +94,9 @@ class _EditAssetScreenState extends State<EditAssetScreen> {
       final picked = await _imagePicker.pickImage(source: source, imageQuality: 90, maxWidth: 2048, maxHeight: 2048);
       if (picked == null || !mounted) return;
       setState(() => _newImage = File(picked.path));
-    } catch (e) {
+    } catch (e, stackTrace) {
+      debugPrint('Error selecting image: $e');
+      debugPrintStack(stackTrace: stackTrace);
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Could not select the image.')));
     }
@@ -183,7 +199,16 @@ class _EditAssetScreenState extends State<EditAssetScreen> {
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 14),
                 decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16), border: Border.all(color: const Color(0xFFE4DFEE))),
-                child: DropdownButtonHideUnderline(child: DropdownButton<String?>(value: _categoryId, isExpanded: true, hint: const Text('Select category'), items: [const DropdownMenuItem<String?>(value: null, child: Text('Uncategorized')), ..._categories.map((category) => DropdownMenuItem<String?>(value: category.id, child: Text('${category.emoji ?? '📂'}  ${category.name}', maxLines: 1, overflow: TextOverflow.ellipsis)))], onChanged: (value) => setState(() => _categoryId = value))),
+                child: DropdownButtonHideUnderline(child: DropdownButton<String?>(
+                  value: _categoryId,
+                  isExpanded: true,
+                  hint: const Text('Select category'),
+                  items: [
+                    const DropdownMenuItem<String?>(value: null, child: Text('Uncategorized')),
+                    ..._categories.map((category) => DropdownMenuItem<String?>(value: category.id, child: Text('${category.emoji ?? '📂'}  ${category.name}', maxLines: 1, overflow: TextOverflow.ellipsis))),
+                  ],
+                  onChanged: (value) => setState(() => _categoryId = value),
+                )),
               ),
               const SizedBox(height: 18),
               CustomTextField(controller: _locationController, labelText: 'Location', hintText: 'e.g. Bedroom, Garage', prefixIcon: Icons.location_on_outlined),
