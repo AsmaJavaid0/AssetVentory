@@ -10,12 +10,12 @@ class AssetRepository {
   final AppDatabase _database;
   final LocalFileStorage _fileStorage;
   static const Uuid _uuid = Uuid();
+
   AssetRepository({
     required this._database,
     required this._fileStorage,
   });
 
-  /// Creates a new asset in the local database.
   Future<void> createAsset(LocalAsset asset) async {
     await _database.into(_database.assets).insert(
           AssetsCompanion.insert(
@@ -34,87 +34,68 @@ class AssetRepository {
           ),
         );
   }
+
   Future<LocalAsset> createAssetWithImage({
-  required String ownerId,
-  required String name,
-  String? categoryId,
-  String? emoji,
-  File? imageFile,
-  String? location,
-  String? description,
-  bool qrEnabled = false,
-  Map<String, String> customFields = const {},
-}) async {
-  final now = DateTime.now();
-  final assetId = _uuid.v4();
+    required String ownerId,
+    required String name,
+    String? categoryId,
+    String? emoji,
+    File? imageFile,
+    String? location,
+    String? description,
+    bool qrEnabled = false,
+    Map<String, String> customFields = const {},
+  }) async {
+    final now = DateTime.now();
+    final assetId = _uuid.v4();
+    String? imagePath;
 
-  String? imagePath;
+    try {
+      if (imageFile != null) {
+        imagePath = await _fileStorage.saveImage(
+          assetId: assetId,
+          sourceFile: imageFile,
+        );
+      }
 
-  try {
-    // 1. Save image locally first.
-    if (imageFile != null) {
-      imagePath = await _fileStorage.saveImage(
-        assetId: assetId,
-        sourceFile: imageFile,
+      final asset = LocalAsset(
+        id: assetId,
+        ownerId: ownerId,
+        name: name,
+        categoryId: categoryId,
+        emoji: emoji,
+        imagePath: imagePath,
+        location: location,
+        description: description,
+        qrEnabled: qrEnabled,
+        customFields: customFields,
+        createdAt: now,
+        updatedAt: now,
       );
+
+      await createAsset(asset);
+      return asset;
+    } catch (e) {
+      await _fileStorage.deleteAssetFiles(assetId);
+      rethrow;
     }
-
-    // 2. Build local asset.
-    final asset = LocalAsset(
-      id: assetId,
-      ownerId: ownerId,
-      name: name,
-      categoryId: categoryId,
-      emoji: emoji,
-      imagePath: imagePath,
-      location: location,
-      description: description,
-      qrEnabled: qrEnabled,
-      customFields: customFields,
-      createdAt: now,
-      updatedAt: now,
-    );
-
-    // 3. Save asset metadata in SQLite.
-    await createAsset(asset);
-
-    return asset;
-  } catch (e) {
-    // If database saving fails after the image was copied,
-    // remove the orphaned image.
-    await _fileStorage.deleteAssetFiles(assetId);
-
-    rethrow;
   }
-}
-  /// Gets one asset by its ID.
+
   Future<LocalAsset?> getAsset(String assetId) async {
     final query = _database.select(_database.assets)
       ..where((asset) => asset.id.equals(assetId));
-
     final row = await query.getSingleOrNull();
-
-    if (row == null) {
-      return null;
-    }
-
-    return _toLocalAsset(row);
+    return row == null ? null : _toLocalAsset(row);
   }
 
-  /// Gets all locally stored assets for an owner.
   Future<List<LocalAsset>> getAssets(String ownerId) async {
     final query = _database.select(_database.assets)
       ..where((asset) => asset.ownerId.equals(ownerId))
-      ..orderBy([
-        (asset) => OrderingTerm.desc(asset.createdAt),
-      ]);
-
+      ..orderBy([(asset) => OrderingTerm.desc(asset.createdAt)]);
     final rows = await query.get();
-
     return rows.map(_toLocalAsset).toList();
   }
 
-  /// Updates an existing local asset.
   Future<void> updateAsset(LocalAsset asset) async {
     await (_database.update(_database.assets)
           ..where((row) => row.id.equals(asset.id)))
@@ -135,12 +116,39 @@ class AssetRepository {
     );
   }
 
-  /// Deletes an asset and its locally stored files.
+  /// Replaces the primary image while keeping the asset metadata unchanged.
+  /// The old image is removed only after the database points to the new file.
+  Future<LocalAsset> updateAssetImage({
+    required LocalAsset asset,
+    required File imageFile,
+  }) async {
+    final oldPath = asset.imagePath;
+    final newPath = await _fileStorage.saveImage(
+      assetId: asset.id,
+      sourceFile: imageFile,
+    );
+
+    final updated = asset.copyWith(
+      imagePath: newPath,
+      updatedAt: DateTime.now(),
+    );
+
+    try {
+      await updateAsset(updated);
+      if (oldPath != null && oldPath.isNotEmpty && oldPath != newPath) {
+        await _fileStorage.deleteFile(oldPath);
+      }
+      return updated;
+    } catch (e) {
+      await _fileStorage.deleteFile(newPath);
+      rethrow;
+    }
+  }
+
   Future<void> deleteAsset(String assetId) async {
     await (_database.delete(_database.assets)
           ..where((asset) => asset.id.equals(assetId)))
         .go();
-
     await _fileStorage.deleteAssetFiles(assetId);
   }
 
@@ -164,16 +172,10 @@ class AssetRepository {
   Map<String, String> _decodeCustomFields(String value) {
     try {
       final decoded = jsonDecode(value);
-
       if (decoded is Map<String, dynamic>) {
-        return decoded.map(
-          (key, value) => MapEntry(key, value.toString()),
-        );
+        return decoded.map((key, value) => MapEntry(key, value.toString()));
       }
-
-      return {};
-    } catch (_) {
-      return {};
-    }
+    } catch (_) {}
+    return {};
   }
 }
