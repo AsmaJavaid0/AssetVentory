@@ -5,6 +5,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 
 import '../../../core/constants/app_colors.dart';
+import '../../../core/constants/app_palette.dart';
 import '../../../core/di/service_locator.dart';
 import '../../assets/models/local_asset.dart';
 import '../../assets/models/local_asset_document.dart';
@@ -25,10 +26,11 @@ class AssetDetailModal extends StatefulWidget {
     LocalAsset asset, {
     String? categoryName,
   }) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return showModalBottomSheet(
       context: context,
       isScrollControlled: true,
-      backgroundColor: Colors.white,
+      backgroundColor: isDark ? AppColors.heroCardBg : Colors.white,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
       ),
@@ -100,6 +102,7 @@ class _AssetDetailModalState extends State<AssetDetailModal> {
 
   @override
   Widget build(BuildContext context) {
+    final palette = AppPalette.of(context);
     final asset = widget.asset;
 
     return SafeArea(
@@ -113,7 +116,7 @@ class _AssetDetailModalState extends State<AssetDetailModal> {
                 width: 42,
                 height: 4,
                 decoration: BoxDecoration(
-                  color: const Color(0xFFDDD8E8),
+                  color: palette.handle,
                   borderRadius: BorderRadius.circular(3),
                 ),
               ),
@@ -135,7 +138,7 @@ class _AssetDetailModalState extends State<AssetDetailModal> {
                               fit: BoxFit.cover,
                             )
                           : Container(
-                              color: AppColors.scaffoldBg,
+                              color: palette.surfaceContainer,
                               alignment: Alignment.center,
                               child: Text(
                                 asset.emoji ?? '📦',
@@ -156,7 +159,7 @@ class _AssetDetailModalState extends State<AssetDetailModal> {
                         style: GoogleFonts.outfit(
                           fontSize: 22,
                           fontWeight: FontWeight.w700,
-                          color: AppColors.textPrimary,
+                          color: palette.onSurface,
                         ),
                       ),
                       if (widget.categoryName?.isNotEmpty == true) ...[
@@ -177,7 +180,7 @@ class _AssetDetailModalState extends State<AssetDetailModal> {
                             const Icon(
                               Icons.location_on_outlined,
                               size: 18,
-                              color: AppColors.textSecondary,
+                              color: palette.onSurfaceMuted,
                             ),
                             const SizedBox(width: 5),
                             Expanded(
@@ -203,7 +206,7 @@ class _AssetDetailModalState extends State<AssetDetailModal> {
               Text(
                 asset.description!,
                 style: GoogleFonts.outfit(
-                  color: AppColors.textSecondary,
+                  color: palette.onSurfaceMuted,
                   height: 1.45,
                 ),
               ),
@@ -222,7 +225,7 @@ class _AssetDetailModalState extends State<AssetDetailModal> {
                       vertical: 8,
                     ),
                     decoration: BoxDecoration(
-                      color: AppColors.scaffoldBg,
+                      color: palette.surfaceVariant,
                       borderRadius: BorderRadius.circular(10),
                     ),
                     child: Text(
@@ -266,7 +269,7 @@ class _AssetDetailModalState extends State<AssetDetailModal> {
                         vertical: 10,
                       ),
                       decoration: BoxDecoration(
-                        border: Border.all(color: const Color(0xFFE4DFEE)),
+                        border: Border.all(color: palette.inputBorder),
                         borderRadius: BorderRadius.circular(12),
                       ),
                       child: Row(
@@ -373,7 +376,7 @@ class _AssetDetailModalState extends State<AssetDetailModal> {
       style: GoogleFonts.outfit(
         fontSize: 15,
         fontWeight: FontWeight.w700,
-        color: AppColors.textPrimary,
+        color: palette.onSurface,
       ),
     );
   }

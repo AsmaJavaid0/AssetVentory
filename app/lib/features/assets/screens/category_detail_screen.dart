@@ -1,8 +1,13 @@
 import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+
 import '../../../core/constants/app_colors.dart';
+import '../../../core/constants/app_palette.dart';
 import '../../../core/di/service_locator.dart';
+import '../../../core/widgets/app_header.dart';
+import '../../../core/widgets/empty_state.dart';
 import '../models/local_asset.dart';
 import '../models/local_category.dart';
 import 'asset_details_screen.dart';
@@ -12,11 +17,10 @@ class CategoryDetailScreen extends StatefulWidget {
   final LocalCategory category;
   const CategoryDetailScreen({super.key, required this.category});
 
-  static Future<void> navigateTo(BuildContext context, LocalCategory category) {
-    return Navigator.of(context).push(
-      MaterialPageRoute(builder: (_) => CategoryDetailScreen(category: category)),
-    );
-  }
+  static Future<void> navigateTo(BuildContext context, LocalCategory category) =>
+      Navigator.of(context).push(
+        MaterialPageRoute(builder: (_) => CategoryDetailScreen(category: category)),
+      );
 
   @override
   State<CategoryDetailScreen> createState() => _CategoryDetailScreenState();
@@ -59,7 +63,13 @@ class _CategoryDetailScreenState extends State<CategoryDetailScreen> {
                 controller: controller,
                 autofocus: true,
                 maxLength: 40,
-                decoration: const InputDecoration(labelText: 'Category name'),
+                decoration: InputDecoration(
+                  labelText: 'Category name',
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: BorderSide(color: AppPalette.of(context).inputBorder),
+                  ),
+                ),
               ),
               const SizedBox(height: 8),
               DropdownButton<String>(
@@ -78,10 +88,7 @@ class _CategoryDetailScreenState extends State<CategoryDetailScreen> {
             ],
           ),
           actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(dialogContext, false),
-              child: const Text('Cancel'),
-            ),
+            TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('Cancel')),
             ElevatedButton(
               onPressed: () async {
                 final name = controller.text.trim();
@@ -112,26 +119,21 @@ class _CategoryDetailScreenState extends State<CategoryDetailScreen> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        title: Text(
-          'Delete "${widget.category.name}"?',
-          style: GoogleFonts.outfit(fontWeight: FontWeight.w700),
-        ),
+        title: Text('Delete "${widget.category.name}"?',
+            style: GoogleFonts.outfit(fontWeight: FontWeight.w700)),
         content: Text(
           assetCount == 0
               ? 'This category will be permanently removed.'
               : '$assetCount asset${assetCount == 1 ? '' : 's'} will become uncategorized. No assets will be deleted.',
+          style: GoogleFonts.outfit(),
         ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(dialogContext, false),
-            child: const Text('Cancel'),
-          ),
+              onPressed: () => Navigator.pop(dialogContext, false),
+              child: const Text('Cancel')),
           TextButton(
             onPressed: () => Navigator.pop(dialogContext, true),
-            child: const Text(
-              'Delete',
-              style: TextStyle(color: AppColors.error, fontWeight: FontWeight.w700),
-            ),
+            child: const Text('Delete', style: TextStyle(color: AppColors.error, fontWeight: FontWeight.w700)),
           ),
         ],
       ),
@@ -144,123 +146,54 @@ class _CategoryDetailScreenState extends State<CategoryDetailScreen> {
   @override
   Widget build(BuildContext context) {
     final category = widget.category;
+    final palette = AppPalette.of(context);
     return Scaffold(
-      backgroundColor: AppColors.scaffoldBg,
-      appBar: AppBar(
-        backgroundColor: Colors.white,
-        surfaceTintColor: Colors.white,
-        elevation: 0,
-        titleSpacing: 16,
-        title: Row(
-          children: [
-            Text(category.emoji ?? '📁', style: const TextStyle(fontSize: 22)),
-            const SizedBox(width: 8),
-            Expanded(
-              child: Text(
-                category.name,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: GoogleFonts.outfit(
-                  fontWeight: FontWeight.w700,
-                  color: AppColors.textPrimary,
-                ),
-              ),
-            ),
-          ],
-        ),
-        actions: [
-          IconButton(
-            tooltip: 'Edit category',
-            icon: const Icon(Icons.edit_outlined),
-            onPressed: _editCategory,
-          ),
-          IconButton(
-            tooltip: 'Delete category',
-            icon: const Icon(Icons.delete_outline_rounded, color: AppColors.error),
-            onPressed: () async {
-              final assets = await _assetsFuture;
-              if (mounted) _deleteCategory(assets.length);
-            },
-          ),
-        ],
-      ),
+      backgroundColor: palette.isDark ? AppColors.heroDarkBg : AppColors.scaffoldBg,
       body: FutureBuilder<List<LocalAsset>>(
         future: _assetsFuture,
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
             return const Center(child: CircularProgressIndicator());
           }
-          if (snapshot.hasError) {
-            return Center(
-              child: Padding(
-                padding: const EdgeInsets.all(24),
-                child: Text(
-                  'Unable to load assets in this category.',
-                  textAlign: TextAlign.center,
-                  style: GoogleFonts.outfit(color: AppColors.textSecondary),
-                ),
-              ),
-            );
-          }
-
           final assets = snapshot.data ?? const <LocalAsset>[];
-          if (assets.isEmpty) {
-            return RefreshIndicator(
-              color: AppColors.primaryPurple,
-              onRefresh: _refreshAssets,
-              child: ListView(
-                physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
-                children: [
-                  SizedBox(height: MediaQuery.sizeOf(context).height * 0.22),
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 28),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Container(
-                          width: 82,
-                          height: 82,
-                          decoration: BoxDecoration(
-                            color: AppColors.primaryPurple.withAlpha(15),
-                            shape: BoxShape.circle,
-                          ),
-                          alignment: Alignment.center,
-                          child: Text(category.emoji ?? '📁', style: const TextStyle(fontSize: 38)),
-                        ),
-                        const SizedBox(height: 16),
-                        Text(
-                          'No assets here yet',
-                          textAlign: TextAlign.center,
-                          style: GoogleFonts.outfit(
-                            fontSize: 18,
-                            fontWeight: FontWeight.w700,
-                            color: AppColors.textPrimary,
-                          ),
-                        ),
-                        const SizedBox(height: 6),
-                        Text(
-                          'Add an asset and assign it to ${category.name}.',
-                          textAlign: TextAlign.center,
-                          style: GoogleFonts.outfit(fontSize: 13, color: AppColors.textSecondary),
-                        ),
-                      ],
-                    ),
+          return Column(
+            children: [
+              AppHeader.solid(
+                leading: IconButton(
+                  icon: const Icon(Icons.arrow_back_rounded, color: Colors.white),
+                  onPressed: () => Navigator.pop(context, true),
+                ),
+                title: category.name,
+                subtitle: '${assets.length} item${assets.length == 1 ? '' : 's'}',
+                actions: [
+                  HeaderIconButton(
+                    icon: Icons.edit_outlined,
+                    tooltip: 'Edit category',
+                    onTap: _editCategory,
+                  ),
+                  HeaderIconButton(
+                    icon: Icons.delete_outline_rounded,
+                    tooltip: 'Delete category',
+                    onTap: () => _deleteCategory(assets.length),
                   ),
                 ],
               ),
-            );
-          }
-
-          return RefreshIndicator(
-            color: AppColors.primaryPurple,
-            onRefresh: _refreshAssets,
-            child: ListView.separated(
-              physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
-              padding: const EdgeInsets.fromLTRB(16, 16, 16, 100),
-              itemCount: assets.length,
-              separatorBuilder: (_, _) => const SizedBox(height: 10),
-              itemBuilder: (context, index) => _buildAssetCard(context, assets[index]),
-            ),
+              Expanded(
+                child: assets.isEmpty
+                    ? _buildEmpty(palette, category)
+                    : RefreshIndicator(
+                        color: AppColors.primaryPurple,
+                        onRefresh: _refreshAssets,
+                        child: ListView.separated(
+                          physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
+                          padding: const EdgeInsets.fromLTRB(16, 16, 16, 100),
+                          itemCount: assets.length,
+                          separatorBuilder: (_, _) => const SizedBox(height: 10),
+                          itemBuilder: (context, index) => _buildAssetCard(palette, assets[index]),
+                        ),
+                      ),
+              ),
+            ],
           );
         },
       ),
@@ -271,17 +204,40 @@ class _CategoryDetailScreenState extends State<CategoryDetailScreen> {
         },
         backgroundColor: AppColors.primaryPurple,
         icon: const Icon(Icons.add_rounded, color: Colors.white),
-        label: Text(
-          'Add Asset',
-          style: GoogleFonts.outfit(color: Colors.white, fontWeight: FontWeight.w600),
-        ),
+        label: Text('Add Asset',
+            style: GoogleFonts.outfit(color: Colors.white, fontWeight: FontWeight.w600)),
       ),
     );
   }
 
-  Widget _buildAssetCard(BuildContext context, LocalAsset asset) {
+  Widget _buildEmpty(AppPalette palette, LocalCategory category) {
+    return RefreshIndicator(
+      color: AppColors.primaryPurple,
+      onRefresh: _refreshAssets,
+      child: ListView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        children: [
+          SizedBox(
+            height: MediaQuery.of(context).size.height * 0.55,
+            child: EmptyState(
+              icon: Icons.inventory_2_outlined,
+              title: 'No assets here yet',
+              message: 'Add an asset and assign it to ${category.name}.',
+              actionLabel: 'Add Asset',
+              onAction: () async {
+                await AddAssetScreen.navigateTo(context, categoryId: category.id);
+                if (mounted) _refreshAssets();
+              },
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildAssetCard(AppPalette palette, LocalAsset asset) {
     return Material(
-      color: Colors.white,
+      color: palette.surface,
       borderRadius: BorderRadius.circular(18),
       child: InkWell(
         borderRadius: BorderRadius.circular(18),
@@ -323,7 +279,7 @@ class _CategoryDetailScreenState extends State<CategoryDetailScreen> {
                       style: GoogleFonts.outfit(
                         fontSize: 15,
                         fontWeight: FontWeight.w700,
-                        color: AppColors.textPrimary,
+                        color: palette.onSurface,
                       ),
                     ),
                     if (asset.location?.isNotEmpty == true) ...[
@@ -337,7 +293,7 @@ class _CategoryDetailScreenState extends State<CategoryDetailScreen> {
                               asset.location!,
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
-                              style: GoogleFonts.outfit(fontSize: 11, color: AppColors.textMuted),
+                              style: GoogleFonts.outfit(fontSize: 12, color: palette.onSurfaceMuted),
                             ),
                           ),
                         ],
@@ -356,5 +312,5 @@ class _CategoryDetailScreenState extends State<CategoryDetailScreen> {
   }
 
   Widget _fallback(LocalAsset asset) =>
-      Center(child: Text(asset.emoji ?? '📦', style: const TextStyle(fontSize: 28)));
+      Center(child: Text(asset.emoji ?? '📦', style: const TextStyle(fontSize: 30)));
 }

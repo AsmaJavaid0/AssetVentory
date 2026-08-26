@@ -4,14 +4,16 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import '../../../core/constants/app_colors.dart';
+import '../../../core/constants/app_palette.dart';
+import '../../../core/di/service_locator.dart';
 import '../../../core/utils/wave_clipper.dart';
 import '../../../core/widgets/asset_logo.dart';
-import '../../../core/di/service_locator.dart';
 
 import '../../assets/models/local_asset.dart';
 import '../../assets/models/local_category.dart';
 import '../../assets/screens/add_asset_screen.dart';
 import '../../assets/screens/asset_details_screen.dart';
+import '../../assets/screens/assets_screen.dart';
 import '../../assets/screens/categories_screen.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -24,8 +26,10 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   final _assetRepository = serviceLocator.assetRepository;
   final _categoryRepository = serviceLocator.categoryRepository;
+  final _documentRepository = serviceLocator.assetDocumentRepository;
   List<LocalAsset> _assets = [];
   List<LocalCategory> _categories = [];
+  int _documentCount = 0;
   bool _isLoading = true;
 
   @override
@@ -38,10 +42,12 @@ class _HomeScreenState extends State<HomeScreen> {
     try {
       final assets = await _assetRepository.getAssets('local_user');
       final categories = await _categoryRepository.getCategories('local_user');
+      final docs = await _documentRepository.countDocuments('local_user');
       if (!mounted) return;
       setState(() {
         _assets = assets;
         _categories = categories;
+        _documentCount = docs;
         _isLoading = false;
       });
     } catch (e, stackTrace) {
@@ -51,6 +57,7 @@ class _HomeScreenState extends State<HomeScreen> {
       setState(() {
         _assets = [];
         _categories = [];
+        _documentCount = 0;
         _isLoading = false;
       });
     }
@@ -83,15 +90,16 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final palette = AppPalette.of(context);
     if (_isLoading) {
-      return const Scaffold(
-        backgroundColor: AppColors.scaffoldBg,
-        body: Center(child: CircularProgressIndicator()),
+      return Scaffold(
+        backgroundColor: palette.isDark ? AppColors.heroDarkBg : AppColors.scaffoldBg,
+        body: const Center(child: CircularProgressIndicator()),
       );
     }
 
     return Scaffold(
-      backgroundColor: AppColors.scaffoldBg,
+      backgroundColor: palette.isDark ? AppColors.heroDarkBg : AppColors.scaffoldBg,
       body: RefreshIndicator(
         color: AppColors.primaryPurple,
         onRefresh: _loadHomeData,
@@ -114,9 +122,9 @@ class _HomeScreenState extends State<HomeScreen> {
                     _buildMetrics(context),
                     const SizedBox(height: 24),
                     if (_assets.isEmpty)
-                      _buildEmptyGuidance()
+                      _buildEmptyGuidance(context)
                     else
-                      _buildRecentAssets(),
+                      _buildRecentAssets(palette),
                     const SizedBox(height: 32),
                   ],
                 ),
@@ -129,6 +137,7 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _buildHeroHeader(BuildContext context) {
+    final palette = AppPalette.of(context);
     final topPad = MediaQuery.of(context).padding.top;
     return ClipPath(
       clipper: WaveClipper(),
@@ -147,8 +156,6 @@ class _HomeScreenState extends State<HomeScreen> {
                     children: [
                       Text(
                         _getGreeting(),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
                         style: GoogleFonts.outfit(
                           fontSize: 15,
                           color: const Color(0xFFC4BAE5),
@@ -157,8 +164,6 @@ class _HomeScreenState extends State<HomeScreen> {
                       const SizedBox(height: 3),
                       Text(
                         'My Collection 👋',
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
                         style: GoogleFonts.outfit(
                           fontSize: 22,
                           color: Colors.white,
@@ -193,8 +198,6 @@ class _HomeScreenState extends State<HomeScreen> {
                 Expanded(
                   child: Text(
                     'Everything you own,\norganized in one place.',
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
                     style: GoogleFonts.outfit(
                       fontSize: 13,
                       color: const Color(0xFFB8AED6),
@@ -254,8 +257,6 @@ class _HomeScreenState extends State<HomeScreen> {
                 children: [
                   Text(
                     _assets.isEmpty ? 'Add Your First Asset' : 'Add Asset',
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
                     style: GoogleFonts.outfit(
                       fontSize: 15,
                       fontWeight: FontWeight.w700,
@@ -267,8 +268,6 @@ class _HomeScreenState extends State<HomeScreen> {
                     _assets.isEmpty
                         ? 'Start organizing your belongings.'
                         : 'Add another asset to your collection.',
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
                     style: GoogleFonts.outfit(
                       fontSize: 12,
                       color: Colors.white.withAlpha(220),
@@ -289,8 +288,7 @@ class _HomeScreenState extends State<HomeScreen> {
     return LayoutBuilder(
       builder: (context, constraints) {
         final width = constraints.maxWidth;
-        // 2-column on narrow, 4-column on wider screens
-        final crossAxisCount = width < 340 ? 2 : 4;
+        final crossAxisCount = width < 340 ? 2 : 3;
         final itemWidth = (width - (crossAxisCount - 1) * 10) / crossAxisCount;
 
         return Wrap(
@@ -319,19 +317,10 @@ class _HomeScreenState extends State<HomeScreen> {
             SizedBox(
               width: itemWidth,
               child: _metric(
-                Icons.task_alt_rounded,
-                '0',
-                'Tasks',
-                () => widget.onTabSelected?.call(3),
-              ),
-            ),
-            SizedBox(
-              width: itemWidth,
-              child: _metric(
-                Icons.group_rounded,
-                '—',
-                'Family',
-                () => widget.onTabSelected?.call(2),
+                Icons.description_rounded,
+                '$_documentCount',
+                'Documents',
+                () => widget.onTabSelected?.call(1),
               ),
             ),
           ],
@@ -341,16 +330,17 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _metric(IconData icon, String count, String label, VoidCallback onTap, {bool isPrimary = false}) {
+    final palette = AppPalette.of(context);
     return GestureDetector(
       onTap: onTap,
       child: Container(
         constraints: const BoxConstraints(minHeight: 90),
         padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 6),
         decoration: BoxDecoration(
-          color: isPrimary ? AppColors.primaryPurple : Colors.white,
+          color: isPrimary ? AppColors.primaryPurple : palette.surface,
           borderRadius: BorderRadius.circular(16),
           border: Border.all(
-            color: isPrimary ? AppColors.primaryPurple : const Color(0xFFEFEBF6),
+            color: isPrimary ? AppColors.primaryPurple : palette.border,
           ),
           boxShadow: [
             BoxShadow(
@@ -368,28 +358,23 @@ class _HomeScreenState extends State<HomeScreen> {
             Icon(
               icon,
               color: isPrimary ? Colors.white : AppColors.primaryPurple,
-              size: isPrimary ? 26 : 22
+              size: isPrimary ? 26 : 22,
             ),
             const SizedBox(height: 6),
             Text(
               count,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
               style: GoogleFonts.outfit(
                 fontSize: isPrimary ? 18 : 16,
                 fontWeight: FontWeight.w700,
-                color: isPrimary ? Colors.white : AppColors.textPrimary,
+                color: isPrimary ? Colors.white : palette.onSurface,
               ),
             ),
             const SizedBox(height: 2),
             Text(
               label,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              textAlign: TextAlign.center,
               style: GoogleFonts.outfit(
                 fontSize: 10,
-                color: isPrimary ? Colors.white70 : AppColors.textSecondary,
+                color: isPrimary ? Colors.white70 : palette.onSurfaceMuted,
               ),
             ),
           ],
@@ -398,14 +383,15 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  Widget _buildEmptyGuidance() {
+  Widget _buildEmptyGuidance(BuildContext context) {
+    final palette = AppPalette.of(context);
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: palette.surface,
         borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: const Color(0xFFEFEBF6)),
+        border: Border.all(color: palette.border),
       ),
       child: Column(
         children: [
@@ -427,7 +413,7 @@ class _HomeScreenState extends State<HomeScreen> {
             style: GoogleFonts.outfit(
               fontSize: 18,
               fontWeight: FontWeight.w700,
-              color: AppColors.textPrimary,
+              color: palette.onSurface,
             ),
           ),
           const SizedBox(height: 8),
@@ -436,7 +422,7 @@ class _HomeScreenState extends State<HomeScreen> {
             textAlign: TextAlign.center,
             style: GoogleFonts.outfit(
               fontSize: 14,
-              color: AppColors.textSecondary,
+              color: palette.onSurfaceMuted,
             ),
           ),
           const SizedBox(height: 20),
@@ -444,7 +430,7 @@ class _HomeScreenState extends State<HomeScreen> {
             width: double.infinity,
             child: ElevatedButton.icon(
               onPressed: () async {
-                await AddQuickAssetSheet.show(context);
+                await AddAssetScreen.navigateTo(context);
                 if (mounted) _loadHomeData();
               },
               icon: const Icon(Icons.add_rounded),
@@ -456,7 +442,7 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  Widget _buildRecentAssets() {
+  Widget _buildRecentAssets(AppPalette palette) {
     final recent = _assets.take(3).toList();
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -466,12 +452,10 @@ class _HomeScreenState extends State<HomeScreen> {
             Expanded(
               child: Text(
                 'Recent Assets',
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
                 style: GoogleFonts.outfit(
                   fontSize: 18,
                   fontWeight: FontWeight.w700,
-                  color: AppColors.textPrimary,
+                  color: palette.onSurface,
                 ),
               ),
             ),
@@ -488,21 +472,21 @@ class _HomeScreenState extends State<HomeScreen> {
           ],
         ),
         const SizedBox(height: 8),
-        ...recent.map(_buildAssetTile),
+        ...recent.map((asset) => _buildAssetTile(asset, palette)),
       ],
     );
   }
 
-  Widget _buildAssetTile(LocalAsset asset) {
+  Widget _buildAssetTile(LocalAsset asset, AppPalette palette) {
     return GestureDetector(
       onTap: () => _openAssetDetails(asset),
       child: Container(
         margin: const EdgeInsets.only(bottom: 10),
         padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
-          color: Colors.white,
+          color: palette.surface,
           borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: const Color(0xFFEFEBF6)),
+          border: Border.all(color: palette.border),
           boxShadow: [
             BoxShadow(
               color: Colors.black.withAlpha(4),
@@ -536,32 +520,26 @@ class _HomeScreenState extends State<HomeScreen> {
                 children: [
                   Text(
                     asset.name,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
                     style: GoogleFonts.outfit(
                       fontSize: 14,
                       fontWeight: FontWeight.w700,
-                      color: AppColors.textPrimary,
+                      color: palette.onSurface,
                     ),
                   ),
                   const SizedBox(height: 3),
                   Text(
                     _categoryName(asset.categoryId),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
                     style: GoogleFonts.outfit(
                       fontSize: 11,
-                      color: AppColors.textSecondary,
+                      color: palette.onSurfaceMuted,
                     ),
                   ),
                   if (asset.location != null && asset.location!.isNotEmpty)
                     Text(
                       '📍 ${asset.location}',
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
                       style: GoogleFonts.outfit(
                         fontSize: 11,
-                        color: AppColors.textMuted,
+                        color: palette.textMuted,
                       ),
                     ),
                 ],

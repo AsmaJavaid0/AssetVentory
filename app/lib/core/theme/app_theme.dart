@@ -13,6 +13,20 @@ class AppTheme {
       brightness: Brightness.light,
       primaryColor: AppColors.primaryPurple,
       scaffoldBackgroundColor: AppColors.scaffoldBg,
+      appBarTheme: AppBarTheme(
+        elevation: 0,
+        scrolledUnderElevation: 0,
+        backgroundColor: AppColors.surfaceWhite,
+        foregroundColor: AppColors.textPrimary,
+        surfaceTintColor: Colors.transparent,
+        titleTextStyle: GoogleFonts.outfit(
+          fontSize: 18,
+          fontWeight: FontWeight.w700,
+          color: AppColors.textPrimary,
+        ),
+        iconTheme: const IconThemeData(color: AppColors.textPrimary, size: 22),
+        actionsIconTheme: const IconThemeData(color: AppColors.textPrimary, size: 22),
+      ),
       colorScheme: const ColorScheme.light(
         primary: AppColors.primaryPurple,
         secondary: AppColors.primaryBlue,
@@ -133,6 +147,20 @@ class AppTheme {
       brightness: Brightness.dark,
       primaryColor: AppColors.primaryPurple,
       scaffoldBackgroundColor: AppColors.heroDarkBg,
+      appBarTheme: AppBarTheme(
+        elevation: 0,
+        scrolledUnderElevation: 0,
+        backgroundColor: AppColors.heroDarkBg,
+        foregroundColor: AppColors.textWhite,
+        surfaceTintColor: Colors.transparent,
+        titleTextStyle: GoogleFonts.outfit(
+          fontSize: 18,
+          fontWeight: FontWeight.w700,
+          color: AppColors.textWhite,
+        ),
+        iconTheme: const IconThemeData(color: AppColors.textWhite, size: 22),
+        actionsIconTheme: const IconThemeData(color: AppColors.textWhite, size: 22),
+      ),
       colorScheme: const ColorScheme.dark(
         primary: AppColors.primaryPurple,
         secondary: AppColors.primaryBlue,

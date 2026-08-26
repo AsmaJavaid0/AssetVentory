@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+
 import '../constants/app_colors.dart';
+import '../constants/app_palette.dart';
 
 class GradientButton extends StatelessWidget {
   final String text;
@@ -89,13 +91,15 @@ class GoogleSignInButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final palette = AppPalette.of(context);
+    final isDark = palette.isDark;
     return Container(
       width: double.infinity,
       height: 52,
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: isDark ? palette.surface : Colors.white,
         borderRadius: BorderRadius.circular(26),
-        border: Border.all(color: const Color(0xFFE5E2F0), width: 1.2),
+        border: Border.all(color: isDark ? palette.border : const Color(0xFFE5E2F0), width: 1.2),
         boxShadow: [
           BoxShadow(
             color: Colors.black.withAlpha(10),
@@ -129,7 +133,7 @@ class GoogleSignInButton extends StatelessWidget {
                         style: GoogleFonts.outfit(
                           fontSize: 15,
                           fontWeight: FontWeight.w600,
-                          color: const Color(0xFF2C243B),
+                          color: isDark ? palette.onSurface : const Color(0xFF2C243B),
                         ),
                       ),
                     ],

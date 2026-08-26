@@ -2,18 +2,19 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import '../../../core/constants/app_colors.dart';
+import '../../../core/constants/app_palette.dart';
 import '../../../core/di/service_locator.dart';
+import '../../../core/widgets/empty_state.dart';
 import '../models/local_category.dart';
 import 'category_detail_screen.dart';
 
 class CategoriesScreen extends StatefulWidget {
   const CategoriesScreen({super.key});
 
-  static Future<void> navigateTo(BuildContext context) {
-    return Navigator.of(context).push(
-      MaterialPageRoute<void>(builder: (_) => const CategoriesScreen()),
-    );
-  }
+  static Future<void> navigateTo(BuildContext context) =>
+      Navigator.of(context).push(
+        MaterialPageRoute<void>(builder: (_) => const CategoriesScreen()),
+      );
 
   @override
   State<CategoriesScreen> createState() => _CategoriesScreenState();
@@ -68,14 +69,21 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
               TextField(
                 controller: controller,
                 autofocus: true,
-                decoration: const InputDecoration(labelText: 'Category name'),
+                decoration: InputDecoration(
+                  labelText: 'Category name',
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: BorderSide(color: AppPalette.of(context).inputBorder),
+                  ),
+                ),
               ),
               const SizedBox(height: 12),
               DropdownButton<String>(
                 value: emoji,
                 isExpanded: true,
                 items: const ['📂', '🛠️', '📚', '👕', '🎨', '🍳', '👟', '💍', '🎮', '🚗']
-                    .map((value) => DropdownMenuItem(value: value, child: Text(value, style: const TextStyle(fontSize: 22))))
+                    .map((value) =>
+                        DropdownMenuItem(value: value, child: Text(value, style: const TextStyle(fontSize: 22))))
                     .toList(),
                 onChanged: (value) {
                   if (value != null) setDialogState(() => emoji = value);
@@ -108,27 +116,38 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final palette = AppPalette.of(context);
     return Scaffold(
-      backgroundColor: AppColors.scaffoldBg,
+      backgroundColor: palette.isDark ? AppColors.heroDarkBg : AppColors.scaffoldBg,
       appBar: AppBar(
-        backgroundColor: Colors.white,
-        surfaceTintColor: Colors.white,
-        elevation: 0,
-        title: Text('Categories', style: GoogleFonts.outfit(fontWeight: FontWeight.w700, color: AppColors.textPrimary)),
+        title: const Text('Categories'),
         actions: [
-          IconButton(onPressed: _createCategory, icon: const Icon(Icons.add_rounded), tooltip: 'Create category'),
+          IconButton(
+            onPressed: _createCategory,
+            icon: const Icon(Icons.add_rounded),
+            tooltip: 'Create category',
+          ),
         ],
       ),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : RefreshIndicator(
+              color: AppColors.primaryPurple,
               onRefresh: _load,
               child: _categories.isEmpty
                   ? ListView(
                       physics: const AlwaysScrollableScrollPhysics(),
                       children: [
-                        const SizedBox(height: 180),
-                        Center(child: Text('No categories yet.', style: GoogleFonts.outfit(color: AppColors.textSecondary))),
+                        SizedBox(
+                          height: MediaQuery.of(context).size.height * 0.7,
+                          child: EmptyState(
+                            icon: Icons.folder_outlined,
+                            title: 'No categories yet.',
+                            message: 'Group your assets into categories to keep your collection organized and easy to browse.',
+                            actionLabel: 'Create Category',
+                            onAction: _createCategory,
+                          ),
+                        ),
                       ],
                     )
                   : ListView.separated(
@@ -140,7 +159,7 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
                         final category = _categories[index];
                         final count = _counts[category.id] ?? 0;
                         return Material(
-                          color: Colors.white,
+                          color: palette.surface,
                           borderRadius: BorderRadius.circular(18),
                           child: InkWell(
                             borderRadius: BorderRadius.circular(18),
@@ -156,7 +175,7 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
                                     width: 54,
                                     height: 54,
                                     decoration: BoxDecoration(
-                                      color: AppColors.primaryPurple.withAlpha(18),
+                                      color: AppColors.primaryPurple.withAlpha(16),
                                       borderRadius: BorderRadius.circular(14),
                                     ),
                                     alignment: Alignment.center,
@@ -168,9 +187,17 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
                                       crossAxisAlignment: CrossAxisAlignment.start,
                                       mainAxisSize: MainAxisSize.min,
                                       children: [
-                                        Text(category.name, maxLines: 1, overflow: TextOverflow.ellipsis, style: GoogleFonts.outfit(fontSize: 16, fontWeight: FontWeight.w700)),
+                                        Text(category.name,
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                            style: GoogleFonts.outfit(
+                                                fontSize: 16,
+                                                fontWeight: FontWeight.w700,
+                                                color: palette.onSurface)),
                                         const SizedBox(height: 3),
-                                        Text('$count ${count == 1 ? 'asset' : 'assets'}', style: GoogleFonts.outfit(fontSize: 12, color: AppColors.textSecondary)),
+                                        Text('$count ${count == 1 ? 'asset' : 'assets'}',
+                                            style: GoogleFonts.outfit(
+                                                fontSize: 12, color: palette.onSurfaceMuted)),
                                       ],
                                     ),
                                   ),

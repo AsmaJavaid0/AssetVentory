@@ -2,12 +2,16 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import '../../../core/constants/app_colors.dart';
+import '../../../core/constants/app_palette.dart';
+import '../../../core/widgets/app_snackbar.dart';
 import '../../assets/screens/assets_screen.dart';
 import '../../tasks/screens/tasks_screen.dart';
 import 'home_screen.dart';
+import '../../../core/theme/app_settings.dart';
 
 class MainNavigationScreen extends StatefulWidget {
-  const MainNavigationScreen({super.key});
+  final AppSettings settings;
+  const MainNavigationScreen({super.key, required this.settings});
 
   @override
   State<MainNavigationScreen> createState() => _MainNavigationScreenState();
@@ -38,20 +42,10 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
   }
 
   Widget _buildFamilySharePage() {
+    final palette = AppPalette.of(context);
     return Scaffold(
-      backgroundColor: AppColors.scaffoldBg,
-      appBar: AppBar(
-        title: Text(
-          'Family Share',
-          style: GoogleFonts.outfit(
-            fontWeight: FontWeight.w700,
-            color: AppColors.textPrimary,
-          ),
-        ),
-        backgroundColor: Colors.white,
-        elevation: 0,
-        centerTitle: true,
-      ),
+      backgroundColor: palette.isDark ? AppColors.heroDarkBg : AppColors.scaffoldBg,
+      appBar: AppBar(title: const Text('Family Share')),
       body: Center(
         child: SingleChildScrollView(
           padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
@@ -77,7 +71,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
                 style: GoogleFonts.outfit(
                   fontSize: 22,
                   fontWeight: FontWeight.w700,
-                  color: AppColors.textPrimary,
+                  color: palette.onSurface,
                 ),
               ),
               const SizedBox(height: 10),
@@ -88,29 +82,26 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
                 textAlign: TextAlign.center,
                 style: GoogleFonts.outfit(
                   fontSize: 14,
-                  color: AppColors.textSecondary,
+                  color: palette.onSurfaceMuted,
                   height: 1.5,
                 ),
               ),
               const SizedBox(height: 24),
-              ElevatedButton.icon(
-                onPressed: () {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text(
-                        'Family Share login will be added here.',
-                      ),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton.icon(
+                  onPressed: () {
+                    AppSnackBar.show(context, 'Family Share sign-in coming soon.');
+                  },
+                  icon: const Icon(Icons.login_rounded),
+                  label: const Text('Sign in for Family Share'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.primaryPurple,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(16),
                     ),
-                  );
-                },
-                icon: const Icon(Icons.login_rounded),
-                label: const Text('Sign in for Family Share'),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.primaryPurple,
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(16),
                   ),
                 ),
               ),
@@ -122,34 +113,19 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
   }
 
   Widget _buildProfilePage() {
+    final palette = AppPalette.of(context);
     return Scaffold(
-      backgroundColor: AppColors.scaffoldBg,
-      appBar: AppBar(
-        title: Text(
-          'Profile & Settings',
-          style: GoogleFonts.outfit(
-            fontWeight: FontWeight.w700,
-            color: AppColors.textPrimary,
-          ),
-        ),
-        backgroundColor: Colors.white,
-        elevation: 0,
-        centerTitle: true,
-      ),
+      backgroundColor: palette.isDark ? AppColors.heroDarkBg : AppColors.scaffoldBg,
+      appBar: AppBar(title: const Text('Profile & Settings')),
       body: ListView(
         padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
         children: [
-          const SizedBox(height: 16),
           CircleAvatar(
             radius: 44,
             backgroundColor: AppColors.primaryPurple,
             child: const Text(
               'U',
-              style: TextStyle(
-                fontSize: 32,
-                color: Colors.white,
-                fontWeight: FontWeight.bold,
-              ),
+              style: TextStyle(fontSize: 32, color: Colors.white, fontWeight: FontWeight.bold),
             ),
           ),
           const SizedBox(height: 14),
@@ -159,26 +135,21 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
             style: GoogleFonts.outfit(
               fontSize: 20,
               fontWeight: FontWeight.w700,
-              color: AppColors.textPrimary,
+              color: palette.onSurface,
             ),
           ),
           const SizedBox(height: 4),
           Text(
             'Personal mode',
             textAlign: TextAlign.center,
-            style: GoogleFonts.outfit(
-              fontSize: 13,
-              color: AppColors.textSecondary,
-            ),
+            style: GoogleFonts.outfit(fontSize: 13, color: palette.onSurfaceMuted),
           ),
           const SizedBox(height: 28),
           Container(
             decoration: BoxDecoration(
-              color: Colors.white,
+              color: palette.surface,
               borderRadius: BorderRadius.circular(18),
-              border: Border.all(
-                color: const Color(0xFFEFEBF6),
-              ),
+              border: Border.all(color: palette.border),
               boxShadow: [
                 BoxShadow(
                   color: Colors.black.withAlpha(4),
@@ -189,67 +160,13 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
             ),
             child: Column(
               children: [
-                ListTile(
-                  leading: Container(
-                    padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(
-                      color: AppColors.primaryPurple.withAlpha(16),
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: const Icon(
-                      Icons.storage_rounded,
-                      color: AppColors.primaryPurple,
-                      size: 20,
-                    ),
-                  ),
-                  title: Text(
-                    'Local Storage',
-                    style: GoogleFonts.outfit(
-                      fontWeight: FontWeight.w600,
-                      fontSize: 14,
-                    ),
-                  ),
-                  subtitle: Text(
-                    'Your personal assets are stored on this device.',
-                    style: GoogleFonts.outfit(
-                      fontSize: 12,
-                      color: AppColors.textSecondary,
-                    ),
-                  ),
-                ),
-                const Divider(
-                  height: 1,
-                  indent: 16,
-                  endIndent: 16,
-                ),
-                ListTile(
-                  leading: Container(
-                    padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(
-                      color: AppColors.primaryPurple.withAlpha(16),
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: const Icon(
-                      Icons.group_rounded,
-                      color: AppColors.primaryPurple,
-                      size: 20,
-                    ),
-                  ),
-                  title: Text(
-                    'Family Sharing',
-                    style: GoogleFonts.outfit(
-                      fontWeight: FontWeight.w600,
-                      fontSize: 14,
-                    ),
-                  ),
-                  subtitle: Text(
-                    'Sign in only when you need remote sharing.',
-                    style: GoogleFonts.outfit(
-                      fontSize: 12,
-                      color: AppColors.textSecondary,
-                    ),
-                  ),
-                ),
+                _themeToggleTile(palette),
+                Divider(height: 1, indent: 16, endIndent: 16, color: palette.divider),
+                _profileTile(palette, Icons.storage_rounded, 'Local Storage',
+                    'Your personal assets are stored on this device.'),
+                Divider(height: 1, indent: 16, endIndent: 16, color: palette.divider),
+                _profileTile(palette, Icons.group_rounded, 'Family Sharing',
+                    'Sign in only when you need remote sharing.'),
               ],
             ),
           ),
@@ -258,8 +175,49 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
     );
   }
 
+  Widget _profileTile(AppPalette palette, IconData icon, String title, String subtitle) => ListTile(
+        leading: Container(
+          padding: const EdgeInsets.all(8),
+          decoration: BoxDecoration(
+            color: AppColors.primaryPurple.withAlpha(16),
+            borderRadius: BorderRadius.circular(10),
+          ),
+          child: Icon(icon, color: AppColors.primaryPurple, size: 20),
+        ),
+        title: Text(title, style: GoogleFonts.outfit(fontWeight: FontWeight.w600, fontSize: 14)),
+        subtitle: Text(subtitle, style: GoogleFonts.outfit(fontSize: 12, color: palette.onSurfaceMuted)),
+      );
+
+  Widget _themeToggleTile(AppPalette palette) => ListTile(
+        leading: Container(
+          padding: const EdgeInsets.all(8),
+          decoration: BoxDecoration(
+            color: AppColors.primaryPurple.withAlpha(16),
+            borderRadius: BorderRadius.circular(10),
+          ),
+          child: Icon(
+            widget.settings.isDark ? Icons.dark_mode_rounded : Icons.light_mode_rounded,
+            color: AppColors.primaryPurple,
+            size: 20,
+          ),
+        ),
+        title: Text('Dark Mode', style: GoogleFonts.outfit(fontWeight: FontWeight.w600, fontSize: 14)),
+        subtitle: Text(
+          widget.settings.isSystem
+              ? 'Following system'
+              : (widget.settings.isDark ? 'On' : 'Off'),
+          style: GoogleFonts.outfit(fontSize: 12, color: palette.onSurfaceMuted),
+        ),
+        trailing: Switch(
+          value: widget.settings.isDark,
+          activeColor: AppColors.primaryPurple,
+          onChanged: (_) => widget.settings.toggle(),
+        ),
+      );
+
   @override
   Widget build(BuildContext context) {
+    final palette = AppPalette.of(context);
     return Scaffold(
       body: IndexedStack(
         index: _currentIndex,
@@ -267,7 +225,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
       ),
       bottomNavigationBar: Container(
         decoration: BoxDecoration(
-          color: Colors.white,
+          color: palette.surface,
           boxShadow: [
             BoxShadow(
               color: Colors.black.withAlpha(10),
@@ -285,10 +243,10 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
               });
             },
             type: BottomNavigationBarType.fixed,
-            backgroundColor: Colors.white,
+            backgroundColor: palette.surface,
             elevation: 0,
             selectedItemColor: AppColors.primaryPurple,
-            unselectedItemColor: const Color(0xFF9E98AD),
+            unselectedItemColor: palette.iconMuted,
             selectedLabelStyle: GoogleFonts.outfit(
               fontSize: 12,
               fontWeight: FontWeight.w600,

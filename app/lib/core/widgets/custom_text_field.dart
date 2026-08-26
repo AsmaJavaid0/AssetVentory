@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+
 import '../constants/app_colors.dart';
+import '../constants/app_palette.dart';
 
 class CustomTextField extends StatelessWidget {
   final TextEditingController controller;
@@ -30,6 +32,7 @@ class CustomTextField extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final palette = AppPalette.of(context);
     final textField = TextFormField(
       controller: controller,
       obscureText: obscureText,
@@ -40,12 +43,12 @@ class CustomTextField extends StatelessWidget {
       style: GoogleFonts.outfit(
         fontSize: 15,
         fontWeight: FontWeight.w500,
-        color: AppColors.textPrimary,
+        color: palette.onSurface,
       ),
       decoration: InputDecoration(
         hintText: hintText,
         prefixIcon: prefixIcon != null
-            ? Icon(prefixIcon, color: const Color(0xFF9E98AD), size: 20)
+            ? Icon(prefixIcon, color: palette.iconMuted, size: 20)
             : null,
         suffixIcon: suffixIcon,
       ),
@@ -60,7 +63,7 @@ class CustomTextField extends StatelessWidget {
             style: GoogleFonts.outfit(
               fontSize: 13,
               fontWeight: FontWeight.w600,
-              color: AppColors.textSecondary,
+              color: palette.onSurfaceMuted,
             ),
           ),
           const SizedBox(height: 6),

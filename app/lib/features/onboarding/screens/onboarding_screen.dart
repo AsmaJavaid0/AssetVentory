@@ -2,12 +2,15 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../../core/constants/app_colors.dart';
+import '../../../core/constants/app_palette.dart';
 import '../../../core/constants/app_strings.dart';
+import '../../../core/theme/app_settings.dart';
 import '../../../core/widgets/asset_logo.dart';
 import '../../../core/widgets/custom_button.dart';
 import '../../home/screens/main_navigation_screen.dart';
 class OnboardingScreen extends StatefulWidget {
-  const OnboardingScreen({super.key});
+  final AppSettings settings;
+  const OnboardingScreen({super.key, required this.settings});
 
   @override
   State<OnboardingScreen> createState() => _OnboardingScreenState();
@@ -23,7 +26,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     Navigator.of(context).pushReplacement(
   PageRouteBuilder(
     pageBuilder: (context, animation, secondaryAnimation) =>
-        const MainNavigationScreen(),
+        MainNavigationScreen(settings: widget.settings),
     transitionsBuilder: (context, animation, secondaryAnimation, child) {
       return FadeTransition(
         opacity: animation,
@@ -37,9 +40,10 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   @override
   Widget build(BuildContext context) {
     final size = MediaQuery.of(context).size;
+    final palette = AppPalette.of(context);
 
     return Scaffold(
-      backgroundColor: AppColors.scaffoldBg,
+      backgroundColor: palette.isDark ? AppColors.heroDarkBg : AppColors.scaffoldBg,
       body: SafeArea(
         child: Column(
           children: [
@@ -60,7 +64,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                       style: GoogleFonts.outfit(
                         fontSize: 15,
                         fontWeight: FontWeight.w600,
-                        color: const Color(0xFF6B52A3),
+                        color: AppColors.primaryPurple,
                       ),
                     ),
                   ),
@@ -123,10 +127,10 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
             Container(
               padding: const EdgeInsets.fromLTRB(24, 12, 24, 20),
               decoration: BoxDecoration(
-                color: AppColors.scaffoldBg,
+                color: palette.isDark ? AppColors.heroDarkBg : AppColors.scaffoldBg,
                 boxShadow: [
                   BoxShadow(
-                    color: AppColors.scaffoldBg.withAlpha(200),
+                    color: (palette.isDark ? AppColors.heroDarkBg : AppColors.scaffoldBg).withAlpha(200),
                     blurRadius: 10,
                     offset: const Offset(0, -10),
                   ),

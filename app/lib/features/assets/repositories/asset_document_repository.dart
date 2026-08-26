@@ -30,6 +30,21 @@ class AssetDocumentRepository implements IAssetDocumentRepository {
     return rows.map(_toModel).toList();
   }
 
+  /// Total number of documents attached to every asset owned by [ownerId].
+  Future<int> countDocuments(String ownerId) async {
+    final assets = await _database
+        .select(_database.assets)
+        .join([
+          innerJoin(
+            _database.assetDocuments,
+            _database.assetDocuments.assetId.equalsExp(_database.assets.id),
+          ),
+        ])
+      ..where(_database.assets.ownerId.equals(ownerId));
+
+    return assets.get().length;
+  }
+
   Future<LocalAssetDocument> addDocument({
     required String assetId,
     required File sourceFile,

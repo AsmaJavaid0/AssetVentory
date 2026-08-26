@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../../core/constants/app_colors.dart';
+import '../../../core/constants/app_palette.dart';
 import '../../../core/constants/app_strings.dart';
 import '../../../core/widgets/custom_button.dart';
 import '../../../core/widgets/custom_text_field.dart';
@@ -60,19 +61,20 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final palette = AppPalette.of(context);
     return Scaffold(
-      backgroundColor: AppColors.scaffoldBg,
+      backgroundColor: palette.isDark ? AppColors.heroDarkBg : AppColors.scaffoldBg,
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios_new, color: AppColors.textPrimary, size: 20),
+          icon: Icon(Icons.arrow_back_ios_new, color: palette.onSurface, size: 20),
           onPressed: () => Navigator.of(context).pop(),
         ),
         title: Text(
           AppStrings.resetPassword,
           style: GoogleFonts.outfit(
-            color: AppColors.textPrimary,
+            color: palette.onSurface,
             fontWeight: FontWeight.w700,
             fontSize: 18,
           ),
@@ -89,6 +91,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
   }
 
   Widget _buildFormState() {
+    final palette = AppPalette.of(context);
     return Form(
       key: _formKey,
       child: Column(
@@ -100,7 +103,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
             style: GoogleFonts.outfit(
               fontSize: 22,
               fontWeight: FontWeight.w700,
-              color: AppColors.textPrimary,
+              color: palette.onSurface,
             ),
           ),
           const SizedBox(height: 8),
@@ -108,7 +111,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
             AppStrings.resetPasswordDesc,
             style: GoogleFonts.outfit(
               fontSize: 14,
-              color: AppColors.textSecondary,
+              color: palette.onSurfaceMuted,
               height: 1.4,
             ),
           ),
@@ -140,6 +143,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
   }
 
   Widget _buildSuccessState() {
+    final palette = AppPalette.of(context);
     return Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
@@ -161,7 +165,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
             style: GoogleFonts.outfit(
               fontSize: 22,
               fontWeight: FontWeight.w700,
-              color: AppColors.textPrimary,
+              color: palette.onSurface,
             ),
           ),
           const SizedBox(height: 10),
@@ -170,7 +174,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
             textAlign: TextAlign.center,
             style: GoogleFonts.outfit(
               fontSize: 14,
-              color: AppColors.textSecondary,
+              color: palette.onSurfaceMuted,
             ),
           ),
           const SizedBox(height: 32),

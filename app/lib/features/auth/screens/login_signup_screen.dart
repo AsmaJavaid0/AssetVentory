@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../../../core/constants/app_colors.dart';
+import '../../../core/constants/app_palette.dart';
 import '../../../core/constants/app_strings.dart';
 import '../../../core/utils/wave_clipper.dart';
 import '../../../core/widgets/asset_logo.dart';
@@ -154,10 +155,11 @@ class _LoginSignupScreenState extends State<LoginSignupScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final palette = AppPalette.of(context);
     return LoadingOverlay(
       isLoading: _isLoading,
       child: Scaffold(
-        backgroundColor: AppColors.scaffoldBg,
+        backgroundColor: palette.isDark ? AppColors.heroDarkBg : AppColors.scaffoldBg,
         body: SingleChildScrollView(
           physics: const ClampingScrollPhysics(),
           child: Column(
@@ -187,8 +189,8 @@ class _LoginSignupScreenState extends State<LoginSignupScreen> {
                       // "or" Divider
                       Row(
                         children: [
-                          const Expanded(
-                            child: Divider(color: Color(0xFFE2DDF0), thickness: 1.2),
+                          Expanded(
+                            child: Divider(color: palette.divider, thickness: 1.2),
                           ),
                           Padding(
                             padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -196,13 +198,13 @@ class _LoginSignupScreenState extends State<LoginSignupScreen> {
                               AppStrings.or,
                               style: GoogleFonts.outfit(
                                 fontSize: 13,
-                                color: const Color(0xFF9E98AD),
+                                color: palette.iconMuted,
                                 fontWeight: FontWeight.w500,
                               ),
                             ),
                           ),
-                          const Expanded(
-                            child: Divider(color: Color(0xFFE2DDF0), thickness: 1.2),
+                          Expanded(
+                            child: Divider(color: palette.divider, thickness: 1.2),
                           ),
                         ],
                       ),
@@ -255,7 +257,7 @@ class _LoginSignupScreenState extends State<LoginSignupScreen> {
                             _obscurePassword
                                 ? Icons.visibility_outlined
                                 : Icons.visibility_off_outlined,
-                            color: const Color(0xFF9E98AD),
+                            color: palette.iconMuted,
                             size: 20,
                           ),
                           onPressed: () {
@@ -286,7 +288,7 @@ class _LoginSignupScreenState extends State<LoginSignupScreen> {
                               _obscureConfirmPassword
                                   ? Icons.visibility_outlined
                                   : Icons.visibility_off_outlined,
-                              color: const Color(0xFF9E98AD),
+                              color: palette.iconMuted,
                               size: 20,
                             ),
                             onPressed: () {
@@ -326,8 +328,8 @@ class _LoginSignupScreenState extends State<LoginSignupScreen> {
                                   shape: RoundedRectangleBorder(
                                     borderRadius: BorderRadius.circular(5),
                                   ),
-                                  side: const BorderSide(
-                                    color: Color(0xFFC7C1D8),
+                                  side: BorderSide(
+                                    color: palette.controlBorder,
                                     width: 1.5,
                                   ),
                                 ),
@@ -341,7 +343,7 @@ class _LoginSignupScreenState extends State<LoginSignupScreen> {
                                   AppStrings.rememberMe,
                                   style: GoogleFonts.outfit(
                                     fontSize: 13,
-                                    color: const Color(0xFF655E75),
+                                    color: palette.onSurfaceMuted,
                                     fontWeight: FontWeight.w500,
                                   ),
                                 ),
@@ -418,7 +420,9 @@ class _LoginSignupScreenState extends State<LoginSignupScreen> {
                     showDialog(
                       context: context,
                       builder: (ctx) => AlertDialog(
-                        backgroundColor: Colors.white,
+                        backgroundColor: Theme.of(ctx).brightness == Brightness.dark
+                            ? AppColors.heroCardBg
+                            : Colors.white,
                         title: Text('AssetVentory Support', style: GoogleFonts.outfit(fontWeight: FontWeight.bold)),
                         content: Text(
                           'Need help signing in? You can use Google Sign-in or create a new account with your email.',

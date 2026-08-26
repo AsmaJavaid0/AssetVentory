@@ -4,9 +4,12 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import '../../../core/constants/app_colors.dart';
+import '../../../core/constants/app_palette.dart';
 import '../../../core/database/app_database.dart';
 import '../../../core/storage/local_file_storage.dart';
-import '../../../core/utils/wave_clipper.dart';
+import '../../../core/widgets/app_header.dart';
+import '../../../core/widgets/empty_state.dart';
+import '../../../core/widgets/app_snackbar.dart';
 import '../models/local_asset.dart';
 import '../models/local_category.dart';
 import '../repositories/asset_repository.dart';
@@ -138,34 +141,64 @@ class _AssetsScreenState extends State<AssetsScreen>
 
   @override
   Widget build(BuildContext context) {
+    final palette = AppPalette.of(context);
     if (_loading) {
-      return const Scaffold(body: Center(child: CircularProgressIndicator()));
+      return Scaffold(
+        backgroundColor: palette.isDark ? AppColors.heroDarkBg : AppColors.scaffoldBg,
+        body: const Center(child: CircularProgressIndicator()),
+      );
     }
 
     final assets = _filteredAssets;
     return Scaffold(
-      backgroundColor: AppColors.scaffoldBg,
+      backgroundColor: palette.isDark ? AppColors.heroDarkBg : AppColors.scaffoldBg,
       body: Stack(
         children: [
           Column(
             children: [
-              _buildHeader(),
-              _buildFilterPills(),
+              AppHeader.solid(
+                title: 'My Assets',
+                subtitle: '${_assets.length} item${_assets.length == 1 ? '' : 's'} in your collection',
+                actions: [
+                  HeaderIconButton(
+                    icon: _searchVisible ? Icons.search_off_rounded : Icons.search_rounded,
+                    tooltip: _searchVisible ? 'Close search' : 'Search assets',
+                    onTap: _toggleSearch,
+                    active: _searchVisible,
+                  ),
+                  HeaderIconButton(
+                    icon: Icons.folder_outlined,
+                    tooltip: 'Categories',
+                    onTap: _openCategories,
+                  ),
+                  PopupMenuButton<_AssetSort>(
+                    tooltip: 'Sort',
+                    icon: const Icon(Icons.sort_rounded, color: Colors.white, size: 22),
+                    color: palette.surface,
+                    onSelected: (value) => setState(() => _sort = value),
+                    itemBuilder: (_) => const [
+                      PopupMenuItem(value: _AssetSort.newest, child: Text('Newest first')),
+                      PopupMenuItem(value: _AssetSort.name, child: Text('Name A–Z')),
+                      PopupMenuItem(value: _AssetSort.location, child: Text('Location A–Z')),
+                    ],
+                  ),
+                ],
+                bottom: _buildFilterPills(),
+              ),
               Expanded(
                 child: assets.isEmpty ? _buildEmptyState() : _buildAssetList(assets),
               ),
             ],
           ),
-          // Floating Search Overlay
           if (_searchVisible)
             Positioned(
-              top: MediaQuery.of(context).padding.top + 60,
+              top: MediaQuery.of(context).padding.top + 64,
               left: 16,
               right: 16,
               child: Material(
                 elevation: 8,
                 borderRadius: BorderRadius.circular(14),
-                child: _buildSearchBar(),
+                child: _buildSearchBar(palette),
               ),
             ),
         ],
@@ -186,98 +219,7 @@ class _AssetsScreenState extends State<AssetsScreen>
     );
   }
 
-  Widget _buildHeader() {
-    final topPad = MediaQuery.of(context).padding.top;
-    return Container(
-      width: double.infinity,
-      decoration: const BoxDecoration(
-        color: AppColors.heroDarkBg,
-        borderRadius: BorderRadius.vertical(bottom: Radius.circular(24)),
-      ),
-      padding: EdgeInsets.fromLTRB(20, topPad + 16, 12, 24),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.center,
-        children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  'My Assets',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: GoogleFonts.outfit(
-                    fontSize: 24,
-                    color: Colors.white,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  '${_assets.length} item${_assets.length == 1 ? '' : 's'} in your collection',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: GoogleFonts.outfit(
-                    fontSize: 12,
-                    color: const Color(0xFFB8AED6),
-                  ),
-                ),
-              ],
-            ),
-          ),
-          _headerIconBtn(
-            icon: _searchVisible ? Icons.search_off_rounded : Icons.search_rounded,
-            tooltip: _searchVisible ? 'Close search' : 'Search assets',
-            onTap: _toggleSearch,
-            active: _searchVisible,
-          ),
-          _headerIconBtn(
-            icon: Icons.folder_outlined,
-            tooltip: 'Categories',
-            onTap: _openCategories,
-          ),
-          PopupMenuButton<_AssetSort>(
-            tooltip: 'Sort',
-            icon: const Icon(Icons.sort_rounded, color: Colors.white, size: 22),
-            color: Colors.white,
-            onSelected: (value) => setState(() => _sort = value),
-            itemBuilder: (_) => const [
-              PopupMenuItem(value: _AssetSort.newest, child: Text('Newest first')),
-              PopupMenuItem(value: _AssetSort.name, child: Text('Name A–Z')),
-              PopupMenuItem(value: _AssetSort.location, child: Text('Location A–Z')),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _headerIconBtn({
-    required IconData icon,
-    required String tooltip,
-    required VoidCallback onTap,
-    bool active = false,
-  }) {
-    return Tooltip(
-      message: tooltip,
-      child: GestureDetector(
-        onTap: onTap,
-        child: Container(
-          width: 36,
-          height: 36,
-          margin: const EdgeInsets.symmetric(horizontal: 2),
-          decoration: BoxDecoration(
-            color: active ? Colors.white.withAlpha(40) : Colors.transparent,
-            shape: BoxShape.circle,
-          ),
-          child: Icon(icon, color: Colors.white, size: 22),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildSearchBar() {
+  Widget _buildSearchBar(AppPalette palette) {
     return Container(
       color: const Color(0xFF1F1040),
       padding: const EdgeInsets.fromLTRB(16, 0, 16, 14),
@@ -314,34 +256,35 @@ class _AssetsScreenState extends State<AssetsScreen>
   }
 
   Widget _buildFilterPills() {
+    final palette = AppPalette.of(context);
     return Container(
-      color: Colors.white,
-      padding: const EdgeInsets.fromLTRB(16, 10, 16, 10),
+      color: Colors.transparent,
+      padding: const EdgeInsets.fromLTRB(4, 4, 4, 4),
       child: Row(
         children: [
-          Expanded(child: _filterPill('All', _AssetFilter.all)),
+          Expanded(child: _filterPill(palette, 'All', _AssetFilter.all)),
           const SizedBox(width: 8),
-          Expanded(child: _filterPill('Categorized', _AssetFilter.categorized)),
+          Expanded(child: _filterPill(palette, 'Categorized', _AssetFilter.categorized)),
           const SizedBox(width: 8),
-          Expanded(child: _filterPill('Uncategorized', _AssetFilter.uncategorized)),
+          Expanded(child: _filterPill(palette, 'Uncategorized', _AssetFilter.uncategorized)),
         ],
       ),
     );
   }
 
-  Widget _filterPill(String label, _AssetFilter filter) {
+  Widget _filterPill(AppPalette palette, String label, _AssetFilter filter) {
     final selected = _filter == filter;
     return GestureDetector(
       onTap: () => setState(() => _filter = filter),
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 160),
-        height: 38,
+        height: 34,
         alignment: Alignment.center,
         decoration: BoxDecoration(
-          color: selected ? AppColors.primaryPurple : AppColors.scaffoldBg,
+          color: selected ? Colors.white : Colors.white.withAlpha(16),
           borderRadius: BorderRadius.circular(20),
           border: Border.all(
-            color: selected ? AppColors.primaryPurple : const Color(0xFFE7E2EF),
+            color: selected ? Colors.white : Colors.white.withAlpha(35),
           ),
         ),
         child: Text(
@@ -351,7 +294,7 @@ class _AssetsScreenState extends State<AssetsScreen>
           style: GoogleFonts.outfit(
             fontSize: 12,
             fontWeight: FontWeight.w600,
-            color: selected ? Colors.white : AppColors.textSecondary,
+            color: selected ? AppColors.primaryPurple : Colors.white,
           ),
         ),
       ),
@@ -359,6 +302,7 @@ class _AssetsScreenState extends State<AssetsScreen>
   }
 
   Widget _buildAssetList(List<LocalAsset> assets) {
+    final palette = AppPalette.of(context);
     return RefreshIndicator(
       color: AppColors.primaryPurple,
       onRefresh: _load,
@@ -367,21 +311,21 @@ class _AssetsScreenState extends State<AssetsScreen>
         padding: const EdgeInsets.fromLTRB(16, 12, 16, 100),
         itemCount: assets.length,
         separatorBuilder: (_, _) => const SizedBox(height: 10),
-        itemBuilder: (context, index) => _buildAssetCard(assets[index]),
+        itemBuilder: (context, index) => _buildAssetCard(assets[index], palette),
       ),
     );
   }
 
-  Widget _buildAssetCard(LocalAsset asset) {
+  Widget _buildAssetCard(LocalAsset asset, AppPalette palette) {
     return GestureDetector(
       onTap: () => _openDetails(asset),
       child: Container(
         width: double.infinity,
         padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(18),
-          border: Border.all(color: const Color(0xFFEFEBF6)),
+          color: palette.surface,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: palette.border),
           boxShadow: [
             BoxShadow(
               color: Colors.black.withAlpha(5),
@@ -402,27 +346,23 @@ class _AssetsScreenState extends State<AssetsScreen>
                 children: [
                   Text(
                     asset.name,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
                     style: GoogleFonts.outfit(
                       fontSize: 15,
                       fontWeight: FontWeight.w700,
-                      color: AppColors.textPrimary,
+                      color: palette.onSurface,
                     ),
                   ),
                   const SizedBox(height: 4),
                   Row(
                     children: [
-                      const Icon(Icons.folder_outlined, size: 12, color: AppColors.textSecondary),
+                      const Icon(Icons.folder_outlined, size: 12, color: AppColors.primaryPurple),
                       const SizedBox(width: 4),
                       Expanded(
                         child: Text(
                           _categoryName(asset.categoryId),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
                           style: GoogleFonts.outfit(
                             fontSize: 12,
-                            color: AppColors.textSecondary,
+                            color: palette.onSurfaceMuted,
                           ),
                         ),
                       ),
@@ -437,11 +377,9 @@ class _AssetsScreenState extends State<AssetsScreen>
                         Expanded(
                           child: Text(
                             asset.location!,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
                             style: GoogleFonts.outfit(
                               fontSize: 11,
-                              color: AppColors.textMuted,
+                              color: palette.textMuted,
                             ),
                           ),
                         ),
@@ -478,6 +416,7 @@ class _AssetsScreenState extends State<AssetsScreen>
       Center(child: Text(asset.emoji ?? '📦', style: const TextStyle(fontSize: 32)));
 
   Widget _buildEmptyState() {
+    final palette = AppPalette.of(context);
     final label = switch (_filter) {
       _AssetFilter.all => 'No assets yet.',
       _AssetFilter.categorized => 'No categorized assets.',
@@ -489,57 +428,17 @@ class _AssetsScreenState extends State<AssetsScreen>
       child: ListView(
         physics: const AlwaysScrollableScrollPhysics(),
         children: [
-          const SizedBox(height: 80),
-          Center(
-            child: Padding(
-              padding: const EdgeInsets.all(32),
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(24),
-                    decoration: BoxDecoration(
-                      color: AppColors.lightLavender,
-                      shape: BoxShape.circle,
-                    ),
-                    child: const Icon(
-                      Icons.inventory_2_outlined,
-                      size: 64,
-                      color: AppColors.primaryPurple,
-                    ),
-                  ),
-                  const SizedBox(height: 24),
-                  Text(
-                    label,
-                    style: GoogleFonts.outfit(
-                      fontSize: 20,
-                      fontWeight: FontWeight.w700,
-                      color: AppColors.textPrimary,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    'Your inventory is looking a bit empty. Start adding your belongings to keep everything organized!',
-                    textAlign: TextAlign.center,
-                    style: GoogleFonts.outfit(
-                      fontSize: 14,
-                      color: AppColors.textSecondary,
-                    ),
-                  ),
-                  const SizedBox(height: 24),
-                  ElevatedButton.icon(
-                    onPressed: () async {
-                      await AddQuickAssetSheet.show(context);
-                      if (mounted) await _load();
-                    },
-                    icon: const Icon(Icons.add_rounded),
-                    label: const Text('Add Your First Asset'),
-                    style: ElevatedButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-                    ),
-                  ),
-                ],
-              ),
+          SizedBox(
+            height: MediaQuery.of(context).size.height * 0.6,
+            child: EmptyState(
+              icon: Icons.inventory_2_outlined,
+              title: label,
+              message: 'Your inventory is looking a bit empty. Start adding your belongings to keep everything organized!',
+              actionLabel: 'Add Your First Asset',
+              onAction: () async {
+                await AddQuickAssetSheet.show(context);
+                if (mounted) await _load();
+              },
             ),
           ),
         ],

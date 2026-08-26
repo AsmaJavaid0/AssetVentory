@@ -4,9 +4,11 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../../onboarding/screens/onboarding_screen.dart';
 
 import '../../home/screens/main_navigation_screen.dart';
+import '../../../core/theme/app_settings.dart';
 
 class AuthWrapper extends StatelessWidget {
-  const AuthWrapper({super.key});
+  final AppSettings settings;
+  const AuthWrapper({super.key, required this.settings});
 
   Future<bool> _hasSeenOnboarding() async {
     final prefs = await SharedPreferences.getInstance();
@@ -29,10 +31,10 @@ class AuthWrapper extends StatelessWidget {
         final hasSeenOnboarding = snapshot.data ?? false;
 
         if (!hasSeenOnboarding) {
-          return const OnboardingScreen();
+          return OnboardingScreen(settings: settings);
         }
 
-        return const MainNavigationScreen();
+        return MainNavigationScreen(settings: settings);
       },
     );
   }
