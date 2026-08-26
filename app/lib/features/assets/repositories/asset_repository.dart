@@ -10,69 +10,28 @@ class AssetRepository {
   final AppDatabase _database;
   final LocalFileStorage _fileStorage;
   static const Uuid _uuid = Uuid();
-
-  AssetRepository({
-    required this._database,
-    required this._fileStorage,
-  });
+  AssetRepository({required this._database, required this._fileStorage});
 
   Future<void> createAsset(LocalAsset asset) async {
-    await _database.into(_database.assets).insert(
-          AssetsCompanion.insert(
-            id: asset.id,
-            ownerId: asset.ownerId,
-            name: asset.name,
-            categoryId: Value(asset.categoryId),
-            emoji: Value(asset.emoji),
-            imagePath: Value(asset.imagePath),
-            location: Value(asset.location),
-            description: Value(asset.description),
-            qrEnabled: Value(asset.qrEnabled),
-            customFields: Value(jsonEncode(asset.customFields)),
-            createdAt: asset.createdAt,
-            updatedAt: asset.updatedAt,
-          ),
-        );
+    await _database.into(_database.assets).insert(AssetsCompanion.insert(
+      id: asset.id, ownerId: asset.ownerId, name: asset.name,
+      categoryId: Value(asset.categoryId), emoji: Value(asset.emoji), imagePath: Value(asset.imagePath),
+      location: Value(asset.location), description: Value(asset.description), qrEnabled: Value(asset.qrEnabled),
+      customFields: Value(jsonEncode(asset.customFields)), createdAt: asset.createdAt, updatedAt: asset.updatedAt,
+    ));
   }
 
-  Future<LocalAsset> createAssetWithImage({
-    required String ownerId,
-    required String name,
-    String? categoryId,
-    String? emoji,
-    File? imageFile,
-    String? location,
-    String? description,
-    bool qrEnabled = false,
-    Map<String, String> customFields = const {},
-  }) async {
+  Future<LocalAsset> createAssetWithImage({required String ownerId, required String name, String? categoryId,
+    String? emoji, File? imageFile, String? location, String? description, bool qrEnabled = false,
+    Map<String, String> customFields = const {}}) async {
     final now = DateTime.now();
     final assetId = _uuid.v4();
     String? imagePath;
-
     try {
-      if (imageFile != null) {
-        imagePath = await _fileStorage.saveImage(
-          assetId: assetId,
-          sourceFile: imageFile,
-        );
-      }
-
-      final asset = LocalAsset(
-        id: assetId,
-        ownerId: ownerId,
-        name: name,
-        categoryId: categoryId,
-        emoji: emoji,
-        imagePath: imagePath,
-        location: location,
-        description: description,
-        qrEnabled: qrEnabled,
-        customFields: customFields,
-        createdAt: now,
-        updatedAt: now,
-      );
-
+      if (imageFile != null) imagePath = await _fileStorage.saveImage(assetId: assetId, sourceFile: imageFile);
+      final asset = LocalAsset(id: assetId, ownerId: ownerId, name: name, categoryId: categoryId, emoji: emoji,
+        imagePath: imagePath, location: location, description: description, qrEnabled: qrEnabled,
+        customFields: customFields, createdAt: now, updatedAt: now);
       await createAsset(asset);
       return asset;
     } catch (e) {
@@ -82,62 +41,39 @@ class AssetRepository {
   }
 
   Future<LocalAsset?> getAsset(String assetId) async {
-    final query = _database.select(_database.assets)
-      ..where((asset) => asset.id.equals(assetId));
+    final query = _database.select(_database.assets)..where((asset) => asset.id.equals(assetId));
     final row = await query.getSingleOrNull();
     return row == null ? null : _toLocalAsset(row);
   }
 
   Future<List<LocalAsset>> getAssets(String ownerId) async {
-    final query = _database.select(_database.assets)
-      ..where((asset) => asset.ownerId.equals(ownerId))
+    final query = _database.select(_database.assets)..where((asset) => asset.ownerId.equals(ownerId))
       ..orderBy([(asset) => OrderingTerm.desc(asset.createdAt)]);
-    final rows = await query.get();
-    return rows.map(_toLocalAsset).toList();
+    return (await query.get()).map(_toLocalAsset).toList();
+  }
+
+  Future<List<LocalAsset>> getAssetsByCategory({required String ownerId, required String categoryId}) async {
+    final query = _database.select(_database.assets)
+      ..where((asset) => asset.ownerId.equals(ownerId) & asset.categoryId.equals(categoryId))
+      ..orderBy([(asset) => OrderingTerm.desc(asset.createdAt)]);
+    return (await query.get()).map(_toLocalAsset).toList();
   }
 
   Future<void> updateAsset(LocalAsset asset) async {
-    await (_database.update(_database.assets)
-          ..where((row) => row.id.equals(asset.id)))
-        .write(
-      AssetsCompanion(
-        ownerId: Value(asset.ownerId),
-        name: Value(asset.name),
-        categoryId: Value(asset.categoryId),
-        emoji: Value(asset.emoji),
-        imagePath: Value(asset.imagePath),
-        location: Value(asset.location),
-        description: Value(asset.description),
-        qrEnabled: Value(asset.qrEnabled),
-        customFields: Value(jsonEncode(asset.customFields)),
-        createdAt: Value(asset.createdAt),
-        updatedAt: Value(asset.updatedAt),
-      ),
-    );
+    await (_database.update(_database.assets)..where((row) => row.id.equals(asset.id))).write(AssetsCompanion(
+      ownerId: Value(asset.ownerId), name: Value(asset.name), categoryId: Value(asset.categoryId), emoji: Value(asset.emoji),
+      imagePath: Value(asset.imagePath), location: Value(asset.location), description: Value(asset.description), qrEnabled: Value(asset.qrEnabled),
+      customFields: Value(jsonEncode(asset.customFields)), createdAt: Value(asset.createdAt), updatedAt: Value(asset.updatedAt),
+    ));
   }
 
-  /// Replaces the primary image while keeping the asset metadata unchanged.
-  /// The old image is removed only after the database points to the new file.
-  Future<LocalAsset> updateAssetImage({
-    required LocalAsset asset,
-    required File imageFile,
-  }) async {
+  Future<LocalAsset> updateAssetImage({required LocalAsset asset, required File imageFile}) async {
     final oldPath = asset.imagePath;
-    final newPath = await _fileStorage.saveImage(
-      assetId: asset.id,
-      sourceFile: imageFile,
-    );
-
-    final updated = asset.copyWith(
-      imagePath: newPath,
-      updatedAt: DateTime.now(),
-    );
-
+    final newPath = await _fileStorage.saveImage(assetId: asset.id, sourceFile: imageFile);
+    final updated = asset.copyWith(imagePath: newPath, updatedAt: DateTime.now());
     try {
       await updateAsset(updated);
-      if (oldPath != null && oldPath.isNotEmpty && oldPath != newPath) {
-        await _fileStorage.deleteFile(oldPath);
-      }
+      if (oldPath != null && oldPath.isNotEmpty && oldPath != newPath) await _fileStorage.deleteFile(oldPath);
       return updated;
     } catch (e) {
       await _fileStorage.deleteFile(newPath);
@@ -146,35 +82,19 @@ class AssetRepository {
   }
 
   Future<void> deleteAsset(String assetId) async {
-    await (_database.delete(_database.assets)
-          ..where((asset) => asset.id.equals(assetId)))
-        .go();
+    await (_database.delete(_database.assets)..where((asset) => asset.id.equals(assetId))).go();
     await _fileStorage.deleteAssetFiles(assetId);
   }
 
-  LocalAsset _toLocalAsset(Asset row) {
-    return LocalAsset(
-      id: row.id,
-      ownerId: row.ownerId,
-      name: row.name,
-      categoryId: row.categoryId,
-      emoji: row.emoji,
-      imagePath: row.imagePath,
-      location: row.location,
-      description: row.description,
-      qrEnabled: row.qrEnabled,
-      customFields: _decodeCustomFields(row.customFields),
-      createdAt: row.createdAt,
-      updatedAt: row.updatedAt,
-    );
-  }
+  LocalAsset _toLocalAsset(Asset row) => LocalAsset(id: row.id, ownerId: row.ownerId, name: row.name,
+    categoryId: row.categoryId, emoji: row.emoji, imagePath: row.imagePath, location: row.location,
+    description: row.description, qrEnabled: row.qrEnabled, customFields: _decodeCustomFields(row.customFields),
+    createdAt: row.createdAt, updatedAt: row.updatedAt);
 
   Map<String, String> _decodeCustomFields(String value) {
     try {
       final decoded = jsonDecode(value);
-      if (decoded is Map<String, dynamic>) {
-        return decoded.map((key, value) => MapEntry(key, value.toString()));
-      }
+      if (decoded is Map<String, dynamic>) return decoded.map((k, v) => MapEntry(k, v.toString()));
     } catch (_) {}
     return {};
   }
