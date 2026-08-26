@@ -1,8 +1,12 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:image_picker/image_picker.dart';
 
 import '../../../core/constants/app_colors.dart';
 import '../../../core/di/service_locator.dart';
+import '../../../core/storage/local_file_storage.dart';
 import '../../../core/widgets/custom_text_field.dart';
 import '../models/local_asset.dart';
 import '../models/local_category.dart';
@@ -12,7 +16,9 @@ class EditAssetScreen extends StatefulWidget {
   const EditAssetScreen({super.key, required this.asset});
 
   static Future<void> navigateTo(BuildContext context, LocalAsset asset) {
-    return Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => EditAssetScreen(asset: asset)));
+    return Navigator.of(context).push(
+      MaterialPageRoute<void>(builder: (_) => EditAssetScreen(asset: asset)),
+    );
   }
 
   @override
@@ -23,6 +29,7 @@ class _EditAssetScreenState extends State<EditAssetScreen> {
   final _formKey = GlobalKey<FormState>();
   final _assetRepository = serviceLocator.assetRepository;
   final _categoryRepository = serviceLocator.categoryRepository;
+  final _imagePicker = ImagePicker();
 
   late final TextEditingController _nameController;
   late final TextEditingController _locationController;
@@ -32,6 +39,7 @@ class _EditAssetScreenState extends State<EditAssetScreen> {
   late bool _qrEnabled;
   late Map<String, String> _customFields;
   List<LocalCategory> _categories = [];
+  File? _newImage;
   bool _loading = true;
   bool _saving = false;
   bool _deleting = false;
@@ -54,11 +62,17 @@ class _EditAssetScreenState extends State<EditAssetScreen> {
     try {
       final categories = await _categoryRepository.getCategories('local_user');
       if (!mounted) return;
-      setState(() { _categories = categories; _loading = false; });
+      setState(() {
+        _categories = categories;
+        _loading = false;
+      });
     } catch (e) {
       debugPrint('Error loading categories: $e');
       if (!mounted) return;
-      setState(() { _categories = []; _loading = false; });
+      setState(() {
+        _categories = [];
+        _loading = false;
+      });
     }
   }
 
@@ -70,11 +84,66 @@ class _EditAssetScreenState extends State<EditAssetScreen> {
     super.dispose();
   }
 
+  Future<void> _pickNewImage(ImageSource source) async {
+    try {
+      final picked = await _imagePicker.pickImage(
+        source: source,
+        imageQuality: 90,
+        maxWidth: 2048,
+        maxHeight: 2048,
+      );
+      if (picked == null || !mounted) return;
+      setState(() => _newImage = File(picked.path));
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Could not select the image.')),
+      );
+    }
+  }
+
+  Future<void> _changeImage() async {
+    await showModalBottomSheet<void>(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (sheetContext) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(20, 18, 20, 12),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text('Change Asset Image', style: GoogleFonts.outfit(fontSize: 18, fontWeight: FontWeight.w700)),
+              const SizedBox(height: 12),
+              ListTile(
+                leading: const Icon(Icons.camera_alt_rounded, color: AppColors.primaryPurple),
+                title: const Text('Take Photo'),
+                onTap: () {
+                  Navigator.pop(sheetContext);
+                  _pickNewImage(ImageSource.camera);
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.photo_library_rounded, color: AppColors.primaryPurple),
+                title: const Text('Choose from Gallery'),
+                onTap: () {
+                  Navigator.pop(sheetContext);
+                  _pickNewImage(ImageSource.gallery);
+                },
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   Future<void> _save() async {
-    if (!_formKey.currentState!.validate()) return;
+    if (!_formKey.currentState!.validate() || _saving || _deleting) return;
     setState(() => _saving = true);
     try {
-      final updated = widget.asset.copyWith(
+      var updated = widget.asset.copyWith(
         name: _nameController.text.trim(),
         categoryId: _categoryId,
         emoji: _emoji,
@@ -84,7 +153,16 @@ class _EditAssetScreenState extends State<EditAssetScreen> {
         customFields: _customFields,
         updatedAt: DateTime.now(),
       );
-      await _assetRepository.updateAsset(updated);
+
+      if (_newImage != null) {
+        updated = await _assetRepository.updateAssetImage(
+          asset: updated,
+          imageFile: _newImage!,
+        );
+      } else {
+        await _assetRepository.updateAsset(updated);
+      }
+
       if (!mounted) return;
       Navigator.of(context).pop();
     } catch (e, stackTrace) {
@@ -92,12 +170,14 @@ class _EditAssetScreenState extends State<EditAssetScreen> {
       debugPrintStack(stackTrace: stackTrace);
       if (!mounted) return;
       setState(() => _saving = false);
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Failed to update asset.')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Failed to update asset.')),
+      );
     }
   }
 
   Future<void> _deleteAsset() async {
-    if (_deleting) return;
+    if (_deleting || _saving) return;
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
@@ -120,7 +200,6 @@ class _EditAssetScreenState extends State<EditAssetScreen> {
       await _assetRepository.deleteAsset(widget.asset.id);
       if (!mounted) return;
       Navigator.of(context).pop();
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Asset deleted.')));
     } catch (e, stackTrace) {
       debugPrint('Error deleting asset: $e');
       debugPrintStack(stackTrace: stackTrace);
@@ -140,7 +219,10 @@ class _EditAssetScreenState extends State<EditAssetScreen> {
           shrinkWrap: true,
           padding: const EdgeInsets.all(24),
           children: emojis.map((emoji) => InkWell(
-            onTap: () { setState(() => _emoji = emoji); Navigator.pop(sheetContext); },
+            onTap: () {
+              setState(() => _emoji = emoji);
+              Navigator.pop(sheetContext);
+            },
             child: Center(child: Text(emoji, style: const TextStyle(fontSize: 32))),
           )).toList(),
         ),
@@ -159,92 +241,126 @@ class _EditAssetScreenState extends State<EditAssetScreen> {
         backgroundColor: Colors.transparent,
         elevation: 0,
       ),
-      body: Form(
-        key: _formKey,
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(20),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Center(
-                child: GestureDetector(
-                  onTap: _chooseEmoji,
-                  child: Container(
-                    width: 82, height: 82,
-                    decoration: BoxDecoration(color: AppColors.primaryPurple.withAlpha(18), shape: BoxShape.circle),
-                    child: Center(child: Text(_emoji, style: const TextStyle(fontSize: 42))),
+      body: SafeArea(
+        child: Form(
+          key: _formKey,
+          child: SingleChildScrollView(
+            keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+            padding: const EdgeInsets.fromLTRB(20, 8, 20, 28),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _buildImageEditor(),
+                const SizedBox(height: 22),
+                CustomTextField(
+                  controller: _nameController,
+                  labelText: 'Asset Name *',
+                  hintText: 'e.g. My Laptop',
+                  prefixIcon: Icons.inventory_2_outlined,
+                  validator: (value) => value == null || value.trim().isEmpty ? 'Name is required' : null,
+                ),
+                const SizedBox(height: 18),
+                Text('Category', style: GoogleFonts.outfit(fontWeight: FontWeight.w600, color: AppColors.textSecondary)),
+                const SizedBox(height: 7),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 14),
+                  decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16), border: Border.all(color: const Color(0xFFE4DFEE))),
+                  child: DropdownButtonHideUnderline(
+                    child: DropdownButton<String?>(
+                      value: _categoryId,
+                      isExpanded: true,
+                      hint: const Text('Select category'),
+                      items: [
+                        const DropdownMenuItem<String?>(value: null, child: Text('Uncategorized')),
+                        ..._categories.map((category) => DropdownMenuItem<String?>(
+                          value: category.id,
+                          child: Text('${category.emoji ?? '📂'}  ${category.name}', maxLines: 1, overflow: TextOverflow.ellipsis),
+                        )),
+                      ],
+                      onChanged: (value) => setState(() => _categoryId = value),
+                    ),
                   ),
                 ),
-              ),
-              const SizedBox(height: 24),
-              CustomTextField(
-                controller: _nameController,
-                labelText: 'Asset Name *',
-                hintText: 'e.g. My Laptop',
-                prefixIcon: Icons.inventory_2_outlined,
-                validator: (value) => value == null || value.trim().isEmpty ? 'Name is required' : null,
-              ),
-              const SizedBox(height: 18),
-              Text('Category', style: GoogleFonts.outfit(fontWeight: FontWeight.w600, color: AppColors.textSecondary)),
-              const SizedBox(height: 7),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 14),
-                decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16), border: Border.all(color: const Color(0xFFE4DFEE))),
-                child: DropdownButtonHideUnderline(
-                  child: DropdownButton<String?>(
-                    value: _categoryId,
-                    isExpanded: true,
-                    hint: const Text('Select category'),
-                    items: [
-                      const DropdownMenuItem<String?>(value: null, child: Text('Uncategorized')),
-                      ..._categories.map((category) => DropdownMenuItem<String?>(
-                        value: category.id,
-                        child: Row(children: [Text(category.emoji ?? '📂'), const SizedBox(width: 8), Text(category.name)]),
-                      )),
-                    ],
-                    onChanged: (value) => setState(() => _categoryId = value),
+                const SizedBox(height: 18),
+                CustomTextField(controller: _locationController, labelText: 'Location', hintText: 'e.g. Bedroom, Garage', prefixIcon: Icons.location_on_outlined),
+                const SizedBox(height: 18),
+                CustomTextField(controller: _descriptionController, labelText: 'Description / Notes', hintText: 'Additional information', prefixIcon: Icons.notes_rounded),
+                const SizedBox(height: 20),
+                SwitchListTile(
+                  contentPadding: EdgeInsets.zero,
+                  value: _qrEnabled,
+                  onChanged: (value) => setState(() => _qrEnabled = value),
+                  activeThumbColor: AppColors.primaryPurple,
+                  title: Text('Generate QR Code', style: GoogleFonts.outfit(fontWeight: FontWeight.w700)),
+                  subtitle: Text('Enable QR identification for this asset.', style: GoogleFonts.outfit(fontSize: 12, color: AppColors.textSecondary)),
+                ),
+                const SizedBox(height: 22),
+                SizedBox(
+                  width: double.infinity,
+                  height: 52,
+                  child: ElevatedButton(
+                    onPressed: (_saving || _deleting) ? null : _save,
+                    style: ElevatedButton.styleFrom(backgroundColor: AppColors.primaryPurple, foregroundColor: Colors.white, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14))),
+                    child: _saving ? const SizedBox(width: 22, height: 22, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white)) : Text('Save Changes', style: GoogleFonts.outfit(fontWeight: FontWeight.w700)),
                   ),
                 ),
-              ),
-              const SizedBox(height: 18),
-              CustomTextField(controller: _locationController, labelText: 'Location', hintText: 'e.g. Bedroom, Garage', prefixIcon: Icons.location_on_outlined),
-              const SizedBox(height: 18),
-              CustomTextField(controller: _descriptionController, labelText: 'Description / Notes', hintText: 'Additional information', prefixIcon: Icons.notes_rounded),
-              const SizedBox(height: 20),
-              SwitchListTile(
-                contentPadding: EdgeInsets.zero,
-                value: _qrEnabled,
-                onChanged: (value) => setState(() => _qrEnabled = value),
-                activeThumbColor: AppColors.primaryPurple,
-                title: Text('Generate QR Code', style: GoogleFonts.outfit(fontWeight: FontWeight.w700)),
-                subtitle: Text('Enable QR identification for this asset.', style: GoogleFonts.outfit(fontSize: 12, color: AppColors.textSecondary)),
-              ),
-              const SizedBox(height: 26),
-              SizedBox(
-                width: double.infinity,
-                height: 52,
-                child: ElevatedButton(
-                  onPressed: (_saving || _deleting) ? null : _save,
-                  style: ElevatedButton.styleFrom(backgroundColor: AppColors.primaryPurple, foregroundColor: Colors.white, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14))),
-                  child: _saving ? const SizedBox(width: 22, height: 22, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white)) : Text('Save Changes', style: GoogleFonts.outfit(fontWeight: FontWeight.w700)),
+                const SizedBox(height: 12),
+                SizedBox(
+                  width: double.infinity,
+                  height: 50,
+                  child: OutlinedButton.icon(
+                    onPressed: (_saving || _deleting) ? null : _deleteAsset,
+                    icon: _deleting ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.delete_outline_rounded),
+                    label: Text(_deleting ? 'Deleting...' : 'Delete Asset', maxLines: 1, overflow: TextOverflow.ellipsis, style: GoogleFonts.outfit(fontWeight: FontWeight.w700)),
+                    style: OutlinedButton.styleFrom(foregroundColor: AppColors.error, side: BorderSide(color: AppColors.error.withAlpha(100)), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14))),
+                  ),
                 ),
-              ),
-              const SizedBox(height: 12),
-              SizedBox(
-                width: double.infinity,
-                height: 50,
-                child: OutlinedButton.icon(
-                  onPressed: (_saving || _deleting) ? null : _deleteAsset,
-                  icon: _deleting ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.delete_outline_rounded),
-                  label: Text(_deleting ? 'Deleting...' : 'Delete Asset', style: GoogleFonts.outfit(fontWeight: FontWeight.w700)),
-                  style: OutlinedButton.styleFrom(foregroundColor: AppColors.error, side: BorderSide(color: AppColors.error.withAlpha(100)), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14))),
-                ),
-              ),
-              const SizedBox(height: 24),
-            ],
+              ],
+            ),
           ),
         ),
       ),
     );
   }
+
+  Widget _buildImageEditor() {
+    final currentPath = widget.asset.imagePath;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text('Asset Image', style: GoogleFonts.outfit(fontSize: 14, fontWeight: FontWeight.w700, color: AppColors.textSecondary)),
+        const SizedBox(height: 8),
+        ClipRRect(
+          borderRadius: BorderRadius.circular(20),
+          child: Container(
+            width: double.infinity,
+            constraints: const BoxConstraints(minHeight: 180, maxHeight: 300),
+            color: AppColors.primaryPurple.withAlpha(10),
+            child: _newImage != null
+                ? Image.file(_newImage!, fit: BoxFit.contain)
+                : currentPath != null && currentPath.isNotEmpty
+                    ? Image.file(File(currentPath), fit: BoxFit.contain, errorBuilder: (_, _, _) => _imageFallback())
+                    : _imageFallback(),
+          ),
+        ),
+        const SizedBox(height: 10),
+        SizedBox(
+          width: double.infinity,
+          child: OutlinedButton.icon(
+            onPressed: _saving || _deleting ? null : _changeImage,
+            icon: const Icon(Icons.edit_outlined),
+            label: Text(_newImage != null || (currentPath?.isNotEmpty ?? false) ? 'Change Image' : 'Add Image', maxLines: 1, overflow: TextOverflow.ellipsis),
+            style: OutlinedButton.styleFrom(
+              foregroundColor: AppColors.primaryPurple,
+              side: BorderSide(color: AppColors.primaryPurple.withAlpha(90)),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+              padding: const EdgeInsets.symmetric(vertical: 13),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _imageFallback() => Center(child: Text(_emoji, style: const TextStyle(fontSize: 56)));
 }
