@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
@@ -89,7 +90,7 @@ class FcmService {
         'token': token,
         'platform': kIsWeb ? 'web' : (defaultTargetPlatform.name),
         'updatedAt': FieldValue.serverTimestamp(),
-      }, SetOptions(merge: true));
+      }, SetOptions(merge: true)).timeout(const Duration(seconds: 5));
     } catch (e) {
       debugPrint('Error saving FCM token to Firestore: $e');
     }

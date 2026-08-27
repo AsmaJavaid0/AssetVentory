@@ -135,7 +135,7 @@ class _InviteMemberScreenState extends State<InviteMemberScreen> {
       isOfflineQueued = true;
     } catch (e) {
       final errStr = e.toString().toLowerCase();
-      if (errStr.contains('offline') || errStr.contains('unavailable') || errStr.contains('network')) {
+      if (errStr.contains('offline') || errStr.contains('unavailable') || errStr.contains('network') || errStr.contains('timeout')) {
         isOfflineQueued = true;
       } else {
         if (!mounted) return;
@@ -317,13 +317,16 @@ class _InviteMemberScreenState extends State<InviteMemberScreen> {
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Text(
-                        widget.family.inviteCode,
-                        style: GoogleFonts.outfit(
-                          color: Colors.white,
-                          fontSize: 26,
-                          fontWeight: FontWeight.bold,
-                          letterSpacing: 2,
+                      Flexible(
+                        child: Text(
+                          widget.family.inviteCode,
+                          style: GoogleFonts.outfit(
+                            color: Colors.white,
+                            fontSize: 26,
+                            fontWeight: FontWeight.bold,
+                            letterSpacing: 2,
+                          ),
+                          overflow: TextOverflow.ellipsis,
                         ),
                       ),
                       Row(

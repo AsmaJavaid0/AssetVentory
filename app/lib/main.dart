@@ -21,16 +21,26 @@ void main() async {
   // Initialize the service locator
   await setupServiceLocator();
 
-  // Initialize local notifications & FCM asynchronously
+  // Initialize local notifications & FCM asynchronously (non-blocking)
+  // This runs in the background so the UI renders immediately.
+  _initNotifications();
+
+  runApp(const AssetVentoryApp());
+}
+
+Future<void> _initNotifications() async {
   try {
     await serviceLocator.taskNotificationService.initialize();
     await serviceLocator.taskNotificationService.requestPermissions();
-    await serviceLocator.fcmService.initialize();
   } catch (e) {
-    debugPrint('Notification initialization warning: $e');
+    debugPrint('Local notification init warning: $e');
   }
-
-  runApp(const AssetVentoryApp());
+  try {
+    await serviceLocator.fcmService.initialize()
+        .timeout(const Duration(seconds: 8));
+  } catch (e) {
+    debugPrint('FCM initialization warning: $e');
+  }
 }
 
 class AssetVentoryApp extends StatelessWidget {

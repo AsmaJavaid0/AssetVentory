@@ -22,7 +22,32 @@ class TaskNotificationService {
   Future<void> initialize() async {
     if (_isInitialized) return;
     tz.initializeTimeZones();
-    timezone.setLocalLocation(timezone.getLocation(DateTime.now().timeZoneName));
+    final now = DateTime.now();
+    final tzName = now.timeZoneName;
+    timezone.Location? matchedLoc;
+    try {
+      matchedLoc = timezone.getLocation(tzName);
+    } catch (_) {
+      // Find matching location by name in database
+      for (final loc in timezone.timeZoneDatabase.locations.values) {
+        if (loc.name.toLowerCase().contains(tzName.toLowerCase())) {
+          matchedLoc = loc;
+          break;
+        }
+      }
+      // If not found by abbreviation, match by current UTC offset (e.g. +5:00 for PKT -> Asia/Karachi)
+      if (matchedLoc == null) {
+        final offsetMillis = now.timeZoneOffset.inMilliseconds;
+        for (final loc in timezone.timeZoneDatabase.locations.values) {
+          if (loc.currentTimeZone.offset == offsetMillis) {
+            matchedLoc = loc;
+            break;
+          }
+        }
+      }
+    }
+    timezone.setLocalLocation(matchedLoc ?? timezone.getLocation('UTC'));
+
     const androidSettings = AndroidInitializationSettings('@mipmap/ic_launcher');
     const darwinSettings = DarwinInitializationSettings(requestAlertPermission: false, requestBadgePermission: false, requestSoundPermission: false);
     await _notificationsPlugin.initialize(InitializationSettings(android: androidSettings, iOS: darwinSettings, macOS: darwinSettings), onDidReceiveNotificationResponse: (response) {
@@ -30,7 +55,16 @@ class TaskNotificationService {
       if (payload != null && payload.isNotEmpty) _onNotificationSelected?.call(payload);
     });
     final android = _notificationsPlugin.resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>();
-    await android?.createNotificationChannel(const AndroidNotificationChannel('task_reminders_channel', 'Task Reminders', description: 'Notifications for upcoming asset tasks and reminders', importance: Importance.high));
+    await android?.createNotificationChannel(
+      const AndroidNotificationChannel(
+        'task_reminders_channel',
+        'Task Reminders',
+        description: 'Notifications for upcoming asset tasks and reminders',
+        importance: Importance.max,
+        playSound: true,
+        enableVibration: true,
+      ),
+    );
     _isInitialized = true;
   }
 
@@ -78,14 +112,39 @@ class TaskNotificationService {
       return;
     }
     final details = NotificationDetails(
-      android: const AndroidNotificationDetails('task_reminders_channel', 'Task Reminders', channelDescription: 'Notifications for upcoming asset tasks and reminders', importance: Importance.high, priority: Priority.high, icon: '@mipmap/ic_launcher'),
+      android: const AndroidNotificationDetails(
+        'task_reminders_channel',
+        'Task Reminders',
+        channelDescription: 'Notifications for upcoming asset tasks and reminders',
+        importance: Importance.max,
+        priority: Priority.high,
+        playSound: true,
+        enableVibration: true,
+        icon: '@mipmap/ic_launcher',
+      ),
       iOS: const DarwinNotificationDetails(presentAlert: true, presentBadge: true, presentSound: true),
       macOS: const DarwinNotificationDetails(presentAlert: true, presentBadge: true, presentSound: true),
     );
     final notificationId = _generateNotificationId(task.id);
-    final scheduled = timezone.TZDateTime.from(scheduledDateTime, timezone.local);
-    await _notificationsPlugin.zonedSchedule(notificationId, '${task.taskType.icon} ${task.title}', task.assetName != null ? 'Asset: ${task.assetName}' : task.description ?? 'Scheduled Task', scheduled, details, androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle, payload: task.id);
-    debugPrint('Task reminder scheduled for $scheduled (id=$notificationId)');
+    final scheduled = timezone.TZDateTime(
+      timezone.local,
+      scheduledDateTime.year,
+      scheduledDateTime.month,
+      scheduledDateTime.day,
+      scheduledDateTime.hour,
+      scheduledDateTime.minute,
+      scheduledDateTime.second,
+    );
+    await _notificationsPlugin.zonedSchedule(
+      notificationId,
+      '${task.taskType.icon} ${task.title}',
+      task.assetName != null ? 'Asset: ${task.assetName}' : task.description ?? 'Scheduled Task',
+      scheduled,
+      details,
+      androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
+      payload: task.id,
+    );
+    debugPrint('Task reminder scheduled for $scheduled (id=$notificationId, tz=${timezone.local.name})');
   }
 
   Future<void> cancelTaskNotification(String taskId) async {

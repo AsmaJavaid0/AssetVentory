@@ -34,7 +34,7 @@ class AuthService {
             name: name.trim(),
             email: email.trim(),
             photoUrl: credential.user!.photoURL,
-          );
+          ).timeout(const Duration(seconds: 5));
         } catch (_) {}
       }
 
@@ -64,7 +64,7 @@ class AuthService {
             name: credential.user!.displayName ?? '',
             email: credential.user!.email ?? email.trim(),
             photoUrl: credential.user!.photoURL,
-          );
+          ).timeout(const Duration(seconds: 5));
         } catch (_) {}
       }
 
@@ -101,7 +101,7 @@ class AuthService {
             name: userCredential.user!.displayName ?? googleUser.displayName ?? '',
             email: userCredential.user!.email ?? googleUser.email,
             photoUrl: userCredential.user!.photoURL ?? googleUser.photoUrl,
-          );
+          ).timeout(const Duration(seconds: 5));
         } catch (_) {}
       }
 
