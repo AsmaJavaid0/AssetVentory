@@ -40,8 +40,26 @@ class _CategoryDetailScreenState extends State<CategoryDetailScreen> {
   }
 
   Future<void> _refreshAssets() async {
-    setState(_loadAssets);
-    await _assetsFuture;
+    if (!mounted) return;
+    final future = serviceLocator.assetRepository.getAssetsByCategory(
+      ownerId: _ownerId,
+      categoryId: widget.category.id,
+    );
+    setState(() => _assetsFuture = future);
+    await future;
+  }
+
+  Future<void> _openAddAsset() async {
+    // Push the screen directly instead of relying on the static navigation helper.
+    // This keeps the category-detail route's element tree stable during the
+    // transition and avoids the Flutter _dependants assertion seen here.
+    if (!mounted) return;
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute(
+        builder: (_) => AddAssetScreen(initialCategoryId: widget.category.id),
+      ),
+    );
+    if (mounted) await _refreshAssets();
   }
 
   Future<void> _editCategory() async {
@@ -78,10 +96,7 @@ class _CategoryDetailScreenState extends State<CategoryDetailScreen> {
             ],
           ),
           actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(dialogContext, false),
-              child: const Text('Cancel'),
-            ),
+            TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('Cancel')),
             ElevatedButton(
               onPressed: () async {
                 final name = controller.text.trim();
@@ -112,26 +127,17 @@ class _CategoryDetailScreenState extends State<CategoryDetailScreen> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        title: Text(
-          'Delete "${widget.category.name}"?',
-          style: GoogleFonts.outfit(fontWeight: FontWeight.w700),
-        ),
+        title: Text('Delete "${widget.category.name}"?', style: GoogleFonts.outfit(fontWeight: FontWeight.w700)),
         content: Text(
           assetCount == 0
               ? 'This category will be permanently removed.'
               : '$assetCount asset${assetCount == 1 ? '' : 's'} will become uncategorized. No assets will be deleted.',
         ),
         actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext, false),
-            child: const Text('Cancel'),
-          ),
+          TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('Cancel')),
           TextButton(
             onPressed: () => Navigator.pop(dialogContext, true),
-            child: const Text(
-              'Delete',
-              style: TextStyle(color: AppColors.error, fontWeight: FontWeight.w700),
-            ),
+            child: const Text('Delete', style: TextStyle(color: AppColors.error, fontWeight: FontWeight.w700)),
           ),
         ],
       ),
@@ -160,26 +166,19 @@ class _CategoryDetailScreenState extends State<CategoryDetailScreen> {
                 category.name,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                style: GoogleFonts.outfit(
-                  fontWeight: FontWeight.w700,
-                  color: AppColors.textPrimary,
-                ),
+                style: GoogleFonts.outfit(fontWeight: FontWeight.w700, color: AppColors.textPrimary),
               ),
             ),
           ],
         ),
         actions: [
-          IconButton(
-            tooltip: 'Edit category',
-            icon: const Icon(Icons.edit_outlined),
-            onPressed: _editCategory,
-          ),
+          IconButton(tooltip: 'Edit category', icon: const Icon(Icons.edit_outlined), onPressed: _editCategory),
           IconButton(
             tooltip: 'Delete category',
             icon: const Icon(Icons.delete_outline_rounded, color: AppColors.error),
             onPressed: () async {
               final assets = await _assetsFuture;
-              if (mounted) _deleteCategory(assets.length);
+              if (mounted) await _deleteCategory(assets.length);
             },
           ),
         ],
@@ -194,11 +193,7 @@ class _CategoryDetailScreenState extends State<CategoryDetailScreen> {
             return Center(
               child: Padding(
                 padding: const EdgeInsets.all(24),
-                child: Text(
-                  'Unable to load assets in this category.',
-                  textAlign: TextAlign.center,
-                  style: GoogleFonts.outfit(color: AppColors.textSecondary),
-                ),
+                child: Text('Unable to load assets in this category.', textAlign: TextAlign.center, style: GoogleFonts.outfit(color: AppColors.textSecondary)),
               ),
             );
           }
@@ -220,29 +215,14 @@ class _CategoryDetailScreenState extends State<CategoryDetailScreen> {
                         Container(
                           width: 82,
                           height: 82,
-                          decoration: BoxDecoration(
-                            color: AppColors.primaryPurple.withAlpha(15),
-                            shape: BoxShape.circle,
-                          ),
+                          decoration: BoxDecoration(color: AppColors.primaryPurple.withAlpha(15), shape: BoxShape.circle),
                           alignment: Alignment.center,
                           child: Text(category.emoji ?? '📁', style: const TextStyle(fontSize: 38)),
                         ),
                         const SizedBox(height: 16),
-                        Text(
-                          'No assets here yet',
-                          textAlign: TextAlign.center,
-                          style: GoogleFonts.outfit(
-                            fontSize: 18,
-                            fontWeight: FontWeight.w700,
-                            color: AppColors.textPrimary,
-                          ),
-                        ),
+                        Text('No assets here yet', textAlign: TextAlign.center, style: GoogleFonts.outfit(fontSize: 18, fontWeight: FontWeight.w700, color: AppColors.textPrimary)),
                         const SizedBox(height: 6),
-                        Text(
-                          'Add an asset and assign it to ${category.name}.',
-                          textAlign: TextAlign.center,
-                          style: GoogleFonts.outfit(fontSize: 13, color: AppColors.textSecondary),
-                        ),
+                        Text('Add an asset and assign it to ${category.name}.', textAlign: TextAlign.center, style: GoogleFonts.outfit(fontSize: 13, color: AppColors.textSecondary)),
                       ],
                     ),
                   ),
@@ -265,17 +245,13 @@ class _CategoryDetailScreenState extends State<CategoryDetailScreen> {
         },
       ),
       floatingActionButton: FloatingActionButton.extended(
-        heroTag: 'category_detail_fab',
-        onPressed: () async {
-          await AddAssetScreen.navigateTo(context, categoryId: category.id);
-          if (mounted) _refreshAssets();
-        },
+        // No Hero animation is needed here; disabling it also prevents the
+        // old category route from participating in the add-asset transition.
+        heroTag: null,
+        onPressed: _openAddAsset,
         backgroundColor: AppColors.primaryPurple,
         icon: const Icon(Icons.add_rounded, color: Colors.white),
-        label: Text(
-          'Add Asset',
-          style: GoogleFonts.outfit(color: Colors.white, fontWeight: FontWeight.w600),
-        ),
+        label: Text('Add Asset', style: GoogleFonts.outfit(color: Colors.white, fontWeight: FontWeight.w600)),
       ),
     );
   }
@@ -288,7 +264,7 @@ class _CategoryDetailScreenState extends State<CategoryDetailScreen> {
         borderRadius: BorderRadius.circular(18),
         onTap: () async {
           await AssetDetailsScreen.navigateTo(context, asset);
-          if (mounted) _loadAssets();
+          if (mounted) await _refreshAssets();
         },
         child: Padding(
           padding: const EdgeInsets.all(12),
@@ -303,11 +279,7 @@ class _CategoryDetailScreenState extends State<CategoryDetailScreen> {
                   color: AppColors.primaryPurple.withAlpha(15),
                   alignment: Alignment.center,
                   child: asset.imagePath?.isNotEmpty == true
-                      ? Image.file(
-                          File(asset.imagePath!),
-                          fit: BoxFit.contain,
-                          errorBuilder: (_, _, _) => _fallback(asset),
-                        )
+                      ? Image.file(File(asset.imagePath!), fit: BoxFit.contain, errorBuilder: (_, _, _) => _fallback(asset))
                       : _fallback(asset),
                 ),
               ),
@@ -317,30 +289,14 @@ class _CategoryDetailScreenState extends State<CategoryDetailScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Text(
-                      asset.name,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: GoogleFonts.outfit(
-                        fontSize: 15,
-                        fontWeight: FontWeight.w700,
-                        color: AppColors.textPrimary,
-                      ),
-                    ),
+                    Text(asset.name, maxLines: 2, overflow: TextOverflow.ellipsis, style: GoogleFonts.outfit(fontSize: 15, fontWeight: FontWeight.w700, color: AppColors.textPrimary)),
                     if (asset.location?.isNotEmpty == true) ...[
                       const SizedBox(height: 5),
                       Row(
                         children: [
                           const Icon(Icons.location_on_outlined, size: 13, color: AppColors.textMuted),
                           const SizedBox(width: 4),
-                          Expanded(
-                            child: Text(
-                              asset.location!,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: GoogleFonts.outfit(fontSize: 11, color: AppColors.textMuted),
-                            ),
-                          ),
+                          Expanded(child: Text(asset.location!, maxLines: 1, overflow: TextOverflow.ellipsis, style: GoogleFonts.outfit(fontSize: 11, color: AppColors.textMuted))),
                         ],
                       ),
                     ],
@@ -356,6 +312,5 @@ class _CategoryDetailScreenState extends State<CategoryDetailScreen> {
     );
   }
 
-  Widget _fallback(LocalAsset asset) =>
-      Center(child: Text(asset.emoji ?? '📦', style: const TextStyle(fontSize: 28)));
+  Widget _fallback(LocalAsset asset) => Center(child: Text(asset.emoji ?? '📦', style: const TextStyle(fontSize: 28)));
 }
