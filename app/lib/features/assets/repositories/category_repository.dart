@@ -13,6 +13,7 @@ class CategoryRepository implements ICategoryRepository {
   CategoryRepository({
   required this._database,
 });
+  @override
   Future<void> createCategory(LocalCategory category) async {
     await _database.into(_database.categories).insert(
           CategoriesCompanion.insert(
@@ -26,6 +27,7 @@ class CategoryRepository implements ICategoryRepository {
         );
   }
 
+  @override
   Future<List<LocalCategory>> getCategories(String ownerId) async {
     final query = _database.select(_database.categories)
       ..where((category) => category.ownerId.equals(ownerId))
@@ -38,6 +40,7 @@ class CategoryRepository implements ICategoryRepository {
     return rows.map(_toLocalCategory).toList();
   }
 
+  @override
   Future<LocalCategory?> getCategory(String categoryId) async {
     final query = _database.select(_database.categories)
       ..where((category) => category.id.equals(categoryId));
@@ -51,6 +54,7 @@ class CategoryRepository implements ICategoryRepository {
     return _toLocalCategory(row);
   }
 
+  @override
   Future<String> createCategoryIfNotExists({
     required String ownerId,
     required String name,
@@ -88,6 +92,7 @@ class CategoryRepository implements ICategoryRepository {
     }
   }
 
+  @override
   Future<void> updateCategory(LocalCategory category) async {
     await (_database.update(_database.categories)
           ..where((row) => row.id.equals(category.id)))
@@ -102,6 +107,7 @@ class CategoryRepository implements ICategoryRepository {
     );
   }
 
+  @override
   Future<void> deleteCategory(String categoryId) async {
     await (_database.delete(_database.categories)
           ..where((category) => category.id.equals(categoryId)))

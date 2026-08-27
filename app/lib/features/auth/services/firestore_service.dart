@@ -1,5 +1,6 @@
+import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import '../../core/utils/result.dart';
+import '../../../core/utils/result.dart';
 import '../models/user_model.dart';
 import '../../assets/models/asset_model.dart';
 import '../../assets/models/category_model.dart';
@@ -36,34 +37,16 @@ class FirestoreService {
     String? photoUrl,
     String? familyId,
   }) async {
-    final userDocRef = _usersCollection.doc(uid);
-    final userSnapshot = await userDocRef.get();
+    try {
+      final userDocRef = _usersCollection.doc(uid);
+      final now = DateTime.now();
 
-    final now = DateTime.now();
-
-    if (!userSnapshot.exists) {
-      final newUser = UserModel(
-        id: uid,
-        name: name.isNotEmpty ? name : email.split('@').first,
-        email: email,
-        photoUrl: photoUrl ?? '',
-        createdAt: now,
-        updatedAt: now,
-        familyId: familyId,
-      );
-      await userDocRef.set(newUser.toFirestore());
-    } else {
-      final existingData = userSnapshot.data() ?? {};
       final updateData = <String, dynamic>{
+        'name': name.isNotEmpty ? name : email.split('@').first,
+        'email': email,
         'updatedAt': Timestamp.fromDate(now),
       };
 
-      if (name.isNotEmpty && existingData['name'] != name) {
-        updateData['name'] = name;
-      }
-      if (email.isNotEmpty && existingData['email'] != email) {
-        updateData['email'] = email;
-      }
       if (photoUrl != null && photoUrl.isNotEmpty) {
         updateData['photoUrl'] = photoUrl;
       }
@@ -71,7 +54,10 @@ class FirestoreService {
         updateData['familyId'] = familyId;
       }
 
-      await userDocRef.update(updateData);
+      // set with merge doesn't require a blocking get() call
+      await userDocRef.set(updateData, SetOptions(merge: true));
+    } catch (e) {
+      // Non-fatal: offline client will sync when connection is established
     }
   }
 
@@ -169,16 +155,14 @@ class FirestoreService {
     return _tasksCollection.where(filter).snapshots().map((snapshot) {
       final list = snapshot.docs
           .map((doc) => TaskModel.fromFirestore(doc))
-          .where((task) => task.status == 'pending')
+          .where((task) => task.status == TaskStatus.pending)
           .toList();
       list.sort((a, b) => a.dueDate.compareTo(b.dueDate));
       return list;
     });
   }
 
-  /// Stream every task the user is allowed to see. The client performs the
-  /// presentation-level visibility check as a safeguard; Firestore rules must
-  /// enforce the same relationship server-side.
+  /// Stream all tasks visible to user (created by user, assigned to user, or family tasks).
   Stream<List<TaskModel>> streamVisibleTasks(String uid, {String? familyId}) {
     final hasFamily = familyId != null && familyId.isNotEmpty;
     final filter = hasFamily
@@ -194,7 +178,7 @@ class FirestoreService {
 
     return _tasksCollection.where(filter).snapshots().map((snapshot) {
       final tasks = snapshot.docs
-          .map(TaskModel.fromFirestore)
+          .map((doc) => TaskModel.fromFirestore(doc))
           .where(
             (task) =>
                 task.createdBy == uid ||
@@ -209,142 +193,107 @@ class FirestoreService {
     });
   }
 
-  /// Stream count of family members
-  Stream<int> streamFamilyMembersCount(String? familyId) {
-    if (familyId == null || familyId.isEmpty) {
-      return Stream.value(1); // Default single user
+  /// Get single task by ID
+  Future<TaskModel?> getTask(String taskId) async {
+    try {
+      final doc = await _tasksCollection.doc(taskId).get();
+      if (!doc.exists) return null;
+      return TaskModel.fromFirestore(doc);
+    } catch (_) {
+      return null;
     }
-    return _usersCollection
-        .where('familyId', isEqualTo: familyId)
-        .snapshots()
-        .map((snapshot) => snapshot.docs.length);
   }
 
-  /// Stream the profiles eligible to receive a family task assignment.
-  Stream<List<UserModel>> streamFamilyMembers(String familyId) {
-    return _usersCollection
-        .where('familyId', isEqualTo: familyId)
-        .snapshots()
-        .map((snapshot) => snapshot.docs.map(UserModel.fromFirestore).toList());
-  }
-
-  /// Add a new asset
-  Future<String> addAsset(AssetModel asset) async {
-    final docRef = await _assetsCollection.add(asset.toFirestore());
-    return docRef.id;
-  }
-
-  /// Update an existing asset. `asset.id` must be set.
-  Future<void> updateAsset(AssetModel asset) async {
-    await _assetsCollection.doc(asset.id).update(asset.toFirestore());
-  }
-
-  /// Add a new task
+  /// Add a new task document
   Future<String> addTask(TaskModel task) async {
     final docRef = await _tasksCollection.add(task.toFirestore());
     return docRef.id;
   }
 
-  /// Creates the task and its optional supporting reminder atomically.
-  Future<String> createTask(TaskModel task, {ReminderModel? reminder}) async {
-    final taskRef = _tasksCollection.doc();
-    final batch = _firestore.batch();
-    String? reminderId;
-
-    if (reminder != null) {
-      final reminderRef = _remindersCollection.doc();
-      reminderId = reminderRef.id;
-      batch.set(reminderRef, {
-        ...reminder.toFirestore(),
-        'taskId': taskRef.id,
-        'createdAt': FieldValue.serverTimestamp(),
-        'updatedAt': FieldValue.serverTimestamp(),
-      });
+  /// Set task with explicit document ID or generated ID
+  Future<String> createTask(TaskModel task) async {
+    final docRef = task.id.isNotEmpty
+        ? _tasksCollection.doc(task.id)
+        : _tasksCollection.doc();
+    
+    final taskData = task.copyWith(id: docRef.id).toFirestore();
+    try {
+      await docRef
+          .set(taskData, SetOptions(merge: true))
+          .timeout(const Duration(seconds: 6));
+    } on TimeoutException {
+      // Queued in Firestore offline cache
     }
-
-    batch.set(taskRef, {
-      ...task.toFirestore(),
-      'reminderId': reminderId,
-      'createdAt': FieldValue.serverTimestamp(),
-      'updatedAt': FieldValue.serverTimestamp(),
-    });
-    await batch.commit();
-    return taskRef.id;
+    return docRef.id;
   }
 
-  Future<void> updateTask(TaskModel task, {ReminderModel? reminder}) async {
-    final batch = _firestore.batch();
-    final taskRef = _tasksCollection.doc(task.id);
-
-    if (reminder != null) {
-      final reminderRef = task.reminderId == null
-          ? _remindersCollection.doc()
-          : _remindersCollection.doc(task.reminderId);
-      batch.set(reminderRef, {
-        ...reminder.toFirestore(),
-        'taskId': task.id,
-        'createdAt': task.reminderId == null
-            ? FieldValue.serverTimestamp()
-            : reminder.createdAt,
-        'updatedAt': FieldValue.serverTimestamp(),
-      }, SetOptions(merge: true));
-      batch.update(taskRef, {
-        ...task.toFirestore(),
-        'reminderId': reminderRef.id,
-        'updatedAt': FieldValue.serverTimestamp(),
-      });
-    } else {
-      if (task.reminderId != null) {
-        batch.delete(_remindersCollection.doc(task.reminderId));
-      }
-      batch.update(taskRef, {
-        ...task.toFirestore(),
-        'reminderId': null,
-        'updatedAt': FieldValue.serverTimestamp(),
-      });
+  /// Update an existing task
+  Future<void> updateTask(TaskModel task) async {
+    try {
+      await _tasksCollection
+          .doc(task.id)
+          .update({
+            ...task.toFirestore(),
+            'updatedAt': FieldValue.serverTimestamp(),
+          })
+          .timeout(const Duration(seconds: 6));
+    } on TimeoutException {
+      // Queued in Firestore offline cache
     }
-    await batch.commit();
   }
 
-  Future<void> updateTaskStatus(String taskId, String status) {
-    return _tasksCollection.doc(taskId).update({
-      'status': status,
-      'updatedAt': FieldValue.serverTimestamp(),
-    });
-  }
-
-  Future<void> deleteTask(TaskModel task) async {
-    final batch = _firestore.batch();
-    batch.delete(_tasksCollection.doc(task.id));
-    if (task.reminderId != null) {
-      batch.delete(_remindersCollection.doc(task.reminderId));
+  /// Complete a task
+  Future<void> completeTask(
+    String taskId, {
+    required String completedBy,
+    String? completedByName,
+  }) async {
+    final now = DateTime.now();
+    final data = <String, dynamic>{
+      'status': TaskStatus.completed.toFirestore(),
+      'completedAt': Timestamp.fromDate(now),
+      'completedBy': completedBy,
+      'updatedAt': Timestamp.fromDate(now),
+    };
+    if (completedByName != null) {
+      data['completedByName'] = completedByName;
     }
-    await batch.commit();
+    try {
+      await _tasksCollection
+          .doc(taskId)
+          .update(data)
+          .timeout(const Duration(seconds: 6));
+    } on TimeoutException {
+      // Queued in Firestore offline cache
+    }
   }
 
-  /// Deletes only the reminder document and clears reminderId on the parent
-  /// task. The Home page reminder stream will update automatically because it
-  /// is a live Firestore listener.
-  Future<void> deleteReminderOnly(
-    String reminderId,
-    String taskId,
-  ) async {
-    final batch = _firestore.batch();
-    batch.delete(_remindersCollection.doc(reminderId));
-    batch.update(_tasksCollection.doc(taskId), {
-      'reminderId': null,
-      'updatedAt': FieldValue.serverTimestamp(),
-    });
-    await batch.commit();
+  /// Snooze a task
+  Future<void> snoozeTask(String taskId, DateTime snoozeUntil) async {
+    final now = DateTime.now();
+    try {
+      await _tasksCollection
+          .doc(taskId)
+          .update({
+            'snoozedUntil': Timestamp.fromDate(snoozeUntil),
+            'updatedAt': Timestamp.fromDate(now),
+          })
+          .timeout(const Duration(seconds: 6));
+    } on TimeoutException {
+      // Queued in Firestore offline cache
+    }
   }
 
-  /// Live stream of a single reminder document. Emits null when the document
-  /// does not exist (e.g. after deletion).
-  Stream<ReminderModel?> streamReminder(String reminderId) {
-    return _remindersCollection.doc(reminderId).snapshots().map((doc) {
-      if (!doc.exists) return null;
-      return ReminderModel.fromFirestore(doc);
-    });
+  /// Delete a task
+  Future<void> deleteTask(String taskId) async {
+    try {
+      await _tasksCollection
+          .doc(taskId)
+          .delete()
+          .timeout(const Duration(seconds: 6));
+    } on TimeoutException {
+      // Queued in Firestore offline cache
+    }
   }
 
   /// Delete an asset

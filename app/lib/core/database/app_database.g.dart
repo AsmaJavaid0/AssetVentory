@@ -105,18 +105,16 @@ class $AssetsTable extends Assets with TableInfo<$AssetsTable, Asset> {
     ),
     defaultValue: const Constant(false),
   );
-  static const VerificationMeta _customFieldsMeta = const VerificationMeta(
-    'customFields',
-  );
   @override
-  late final GeneratedColumn<String> customFields = GeneratedColumn<String>(
+  late final GeneratedColumnWithTypeConverter<Map<String, String>, String>
+  customFields = GeneratedColumn<String>(
     'custom_fields',
     aliasedName,
     false,
     type: DriftSqlType.string,
     requiredDuringInsert: false,
     defaultValue: const Constant('{}'),
-  );
+  ).withConverter<Map<String, String>>($AssetsTable.$convertercustomFields);
   static const VerificationMeta _createdAtMeta = const VerificationMeta(
     'createdAt',
   );
@@ -226,15 +224,6 @@ class $AssetsTable extends Assets with TableInfo<$AssetsTable, Asset> {
         qrEnabled.isAcceptableOrUnknown(data['qr_enabled']!, _qrEnabledMeta),
       );
     }
-    if (data.containsKey('custom_fields')) {
-      context.handle(
-        _customFieldsMeta,
-        customFields.isAcceptableOrUnknown(
-          data['custom_fields']!,
-          _customFieldsMeta,
-        ),
-      );
-    }
     if (data.containsKey('created_at')) {
       context.handle(
         _createdAtMeta,
@@ -296,10 +285,12 @@ class $AssetsTable extends Assets with TableInfo<$AssetsTable, Asset> {
         DriftSqlType.bool,
         data['${effectivePrefix}qr_enabled'],
       )!,
-      customFields: attachedDatabase.typeMapping.read(
-        DriftSqlType.string,
-        data['${effectivePrefix}custom_fields'],
-      )!,
+      customFields: $AssetsTable.$convertercustomFields.fromSql(
+        attachedDatabase.typeMapping.read(
+          DriftSqlType.string,
+          data['${effectivePrefix}custom_fields'],
+        )!,
+      ),
       createdAt: attachedDatabase.typeMapping.read(
         DriftSqlType.dateTime,
         data['${effectivePrefix}created_at'],
@@ -315,6 +306,9 @@ class $AssetsTable extends Assets with TableInfo<$AssetsTable, Asset> {
   $AssetsTable createAlias(String alias) {
     return $AssetsTable(attachedDatabase, alias);
   }
+
+  static TypeConverter<Map<String, String>, String> $convertercustomFields =
+      const CustomFieldsConverter();
 }
 
 class Asset extends DataClass implements Insertable<Asset> {
@@ -327,7 +321,7 @@ class Asset extends DataClass implements Insertable<Asset> {
   final String? location;
   final String? description;
   final bool qrEnabled;
-  final String customFields;
+  final Map<String, String> customFields;
   final DateTime createdAt;
   final DateTime updatedAt;
   const Asset({
@@ -366,7 +360,11 @@ class Asset extends DataClass implements Insertable<Asset> {
       map['description'] = Variable<String>(description);
     }
     map['qr_enabled'] = Variable<bool>(qrEnabled);
-    map['custom_fields'] = Variable<String>(customFields);
+    {
+      map['custom_fields'] = Variable<String>(
+        $AssetsTable.$convertercustomFields.toSql(customFields),
+      );
+    }
     map['created_at'] = Variable<DateTime>(createdAt);
     map['updated_at'] = Variable<DateTime>(updatedAt);
     return map;
@@ -414,7 +412,9 @@ class Asset extends DataClass implements Insertable<Asset> {
       location: serializer.fromJson<String?>(json['location']),
       description: serializer.fromJson<String?>(json['description']),
       qrEnabled: serializer.fromJson<bool>(json['qrEnabled']),
-      customFields: serializer.fromJson<String>(json['customFields']),
+      customFields: serializer.fromJson<Map<String, String>>(
+        json['customFields'],
+      ),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
       updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
     );
@@ -432,7 +432,7 @@ class Asset extends DataClass implements Insertable<Asset> {
       'location': serializer.toJson<String?>(location),
       'description': serializer.toJson<String?>(description),
       'qrEnabled': serializer.toJson<bool>(qrEnabled),
-      'customFields': serializer.toJson<String>(customFields),
+      'customFields': serializer.toJson<Map<String, String>>(customFields),
       'createdAt': serializer.toJson<DateTime>(createdAt),
       'updatedAt': serializer.toJson<DateTime>(updatedAt),
     };
@@ -448,7 +448,7 @@ class Asset extends DataClass implements Insertable<Asset> {
     Value<String?> location = const Value.absent(),
     Value<String?> description = const Value.absent(),
     bool? qrEnabled,
-    String? customFields,
+    Map<String, String>? customFields,
     DateTime? createdAt,
     DateTime? updatedAt,
   }) => Asset(
@@ -550,7 +550,7 @@ class AssetsCompanion extends UpdateCompanion<Asset> {
   final Value<String?> location;
   final Value<String?> description;
   final Value<bool> qrEnabled;
-  final Value<String> customFields;
+  final Value<Map<String, String>> customFields;
   final Value<DateTime> createdAt;
   final Value<DateTime> updatedAt;
   final Value<int> rowid;
@@ -630,7 +630,7 @@ class AssetsCompanion extends UpdateCompanion<Asset> {
     Value<String?>? location,
     Value<String?>? description,
     Value<bool>? qrEnabled,
-    Value<String>? customFields,
+    Value<Map<String, String>>? customFields,
     Value<DateTime>? createdAt,
     Value<DateTime>? updatedAt,
     Value<int>? rowid,
@@ -683,7 +683,9 @@ class AssetsCompanion extends UpdateCompanion<Asset> {
       map['qr_enabled'] = Variable<bool>(qrEnabled.value);
     }
     if (customFields.present) {
-      map['custom_fields'] = Variable<String>(customFields.value);
+      map['custom_fields'] = Variable<String>(
+        $AssetsTable.$convertercustomFields.toSql(customFields.value),
+      );
     }
     if (createdAt.present) {
       map['created_at'] = Variable<DateTime>(createdAt.value);
@@ -853,6 +855,10 @@ class $CategoriesTable extends Categories
 
   @override
   Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  List<Set<GeneratedColumn>> get uniqueKeys => [
+    {ownerId, name},
+  ];
   @override
   Category map(Map<String, dynamic> data, {String? tablePrefix}) {
     final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
@@ -1665,7 +1671,7 @@ typedef $$AssetsTableCreateCompanionBuilder =
       Value<String?> location,
       Value<String?> description,
       Value<bool> qrEnabled,
-      Value<String> customFields,
+      Value<Map<String, String>> customFields,
       required DateTime createdAt,
       required DateTime updatedAt,
       Value<int> rowid,
@@ -1681,7 +1687,7 @@ typedef $$AssetsTableUpdateCompanionBuilder =
       Value<String?> location,
       Value<String?> description,
       Value<bool> qrEnabled,
-      Value<String> customFields,
+      Value<Map<String, String>> customFields,
       Value<DateTime> createdAt,
       Value<DateTime> updatedAt,
       Value<int> rowid,
@@ -1741,9 +1747,14 @@ class $$AssetsTableFilterComposer
     builder: (column) => ColumnFilters(column),
   );
 
-  ColumnFilters<String> get customFields => $composableBuilder(
+  ColumnWithTypeConverterFilters<
+    Map<String, String>,
+    Map<String, String>,
+    String
+  >
+  get customFields => $composableBuilder(
     column: $table.customFields,
-    builder: (column) => ColumnFilters(column),
+    builder: (column) => ColumnWithTypeConverterFilters(column),
   );
 
   ColumnFilters<DateTime> get createdAt => $composableBuilder(
@@ -1867,7 +1878,8 @@ class $$AssetsTableAnnotationComposer
   GeneratedColumn<bool> get qrEnabled =>
       $composableBuilder(column: $table.qrEnabled, builder: (column) => column);
 
-  GeneratedColumn<String> get customFields => $composableBuilder(
+  GeneratedColumnWithTypeConverter<Map<String, String>, String>
+  get customFields => $composableBuilder(
     column: $table.customFields,
     builder: (column) => column,
   );
@@ -1916,7 +1928,7 @@ class $$AssetsTableTableManager
                 Value<String?> location = const Value.absent(),
                 Value<String?> description = const Value.absent(),
                 Value<bool> qrEnabled = const Value.absent(),
-                Value<String> customFields = const Value.absent(),
+                Value<Map<String, String>> customFields = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<DateTime> updatedAt = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
@@ -1946,7 +1958,7 @@ class $$AssetsTableTableManager
                 Value<String?> location = const Value.absent(),
                 Value<String?> description = const Value.absent(),
                 Value<bool> qrEnabled = const Value.absent(),
-                Value<String> customFields = const Value.absent(),
+                Value<Map<String, String>> customFields = const Value.absent(),
                 required DateTime createdAt,
                 required DateTime updatedAt,
                 Value<int> rowid = const Value.absent(),

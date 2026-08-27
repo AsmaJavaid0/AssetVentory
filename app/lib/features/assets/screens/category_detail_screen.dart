@@ -265,6 +265,7 @@ class _CategoryDetailScreenState extends State<CategoryDetailScreen> {
         },
       ),
       floatingActionButton: FloatingActionButton.extended(
+        heroTag: 'category_detail_fab',
         onPressed: () async {
           await AddAssetScreen.navigateTo(context, categoryId: category.id);
           if (mounted) _refreshAssets();

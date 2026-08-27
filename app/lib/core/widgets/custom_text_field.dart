@@ -13,6 +13,7 @@ class CustomTextField extends StatelessWidget {
   final String? Function(String?)? validator;
   final TextInputAction textInputAction;
   final void Function(String)? onFieldSubmitted;
+  final int maxLines;
 
   const CustomTextField({
     super.key,
@@ -26,6 +27,7 @@ class CustomTextField extends StatelessWidget {
     this.validator,
     this.textInputAction = TextInputAction.next,
     this.onFieldSubmitted,
+    this.maxLines = 1,
   });
 
   @override
@@ -37,6 +39,7 @@ class CustomTextField extends StatelessWidget {
       textInputAction: textInputAction,
       onFieldSubmitted: onFieldSubmitted,
       validator: validator,
+      maxLines: obscureText ? 1 : maxLines,
       style: GoogleFonts.outfit(
         fontSize: 15,
         fontWeight: FontWeight.w500,

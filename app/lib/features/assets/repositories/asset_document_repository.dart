@@ -19,6 +19,7 @@ class AssetDocumentRepository implements IAssetDocumentRepository {
     required this._fileStorage,
   });
 
+  @override
   Future<List<LocalAssetDocument>> getDocuments(String assetId) async {
     final query = _database.select(_database.assetDocuments)
       ..where((document) => document.assetId.equals(assetId))
@@ -30,6 +31,7 @@ class AssetDocumentRepository implements IAssetDocumentRepository {
     return rows.map(_toModel).toList();
   }
 
+  @override
   Future<LocalAssetDocument> addDocument({
     required String assetId,
     required File sourceFile,
@@ -78,6 +80,7 @@ class AssetDocumentRepository implements IAssetDocumentRepository {
     return document;
   }
 
+  @override
   Future<void> deleteDocument(LocalAssetDocument document) async {
     await (_database.delete(_database.assetDocuments)
           ..where((row) => row.id.equals(document.id)))
@@ -86,6 +89,7 @@ class AssetDocumentRepository implements IAssetDocumentRepository {
     await _fileStorage.deleteFile(document.filePath);
   }
 
+  @override
   Future<void> deleteDocumentsForAsset(String assetId) async {
     final documents = await getDocuments(assetId);
 

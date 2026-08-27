@@ -2,6 +2,8 @@ import 'package:drift/drift.dart';
 import 'dart:convert';
 
 class CustomFieldsConverter extends TypeConverter<Map<String, String>, String> {
+  const CustomFieldsConverter();
+
   @override
   Map<String, String> fromSql(String fromDb) {
     return Map<String, String>.from(json.decode(fromDb) as Map);

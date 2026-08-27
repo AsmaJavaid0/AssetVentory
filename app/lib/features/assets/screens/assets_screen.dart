@@ -6,7 +6,6 @@ import 'package:google_fonts/google_fonts.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/database/app_database.dart';
 import '../../../core/storage/local_file_storage.dart';
-import '../../../core/utils/wave_clipper.dart';
 import '../models/local_asset.dart';
 import '../models/local_category.dart';
 import '../repositories/asset_repository.dart';
@@ -162,15 +161,19 @@ class _AssetsScreenState extends State<AssetsScreen>
               top: MediaQuery.of(context).padding.top + 60,
               left: 16,
               right: 16,
-              child: Material(
-                elevation: 8,
-                borderRadius: BorderRadius.circular(14),
-                child: _buildSearchBar(),
+              child: FadeTransition(
+                opacity: _searchAnimation,
+                child: Material(
+                  elevation: 8,
+                  borderRadius: BorderRadius.circular(14),
+                  child: _buildSearchBar(),
+                ),
               ),
             ),
         ],
       ),
       floatingActionButton: FloatingActionButton.extended(
+        heroTag: 'assets_fab',
         onPressed: () async {
           await AddQuickAssetSheet.show(context);
           if (mounted) await _load();

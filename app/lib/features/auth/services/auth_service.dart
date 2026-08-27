@@ -1,6 +1,6 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:google_sign_in/google_sign_in.dart';
-import '../../core/utils/result.dart';
+import '../../../core/utils/result.dart';
 import 'firestore_service.dart';
 
 class AuthService {
@@ -27,13 +27,15 @@ class AuthService {
       );
 
       if (credential.user != null) {
-        await credential.user!.updateDisplayName(name.trim());
-        await _firestoreService.createOrUpdateUser(
-          uid: credential.user!.uid,
-          name: name.trim(),
-          email: email.trim(),
-          photoUrl: credential.user!.photoURL,
-        );
+        try {
+          await credential.user!.updateDisplayName(name.trim());
+          await _firestoreService.createOrUpdateUser(
+            uid: credential.user!.uid,
+            name: name.trim(),
+            email: email.trim(),
+            photoUrl: credential.user!.photoURL,
+          );
+        } catch (_) {}
       }
 
       return Result.success(credential);
@@ -56,12 +58,14 @@ class AuthService {
       );
 
       if (credential.user != null) {
-        await _firestoreService.createOrUpdateUser(
-          uid: credential.user!.uid,
-          name: credential.user!.displayName ?? '',
-          email: credential.user!.email ?? email.trim(),
-          photoUrl: credential.user!.photoURL,
-        );
+        try {
+          await _firestoreService.createOrUpdateUser(
+            uid: credential.user!.uid,
+            name: credential.user!.displayName ?? '',
+            email: credential.user!.email ?? email.trim(),
+            photoUrl: credential.user!.photoURL,
+          );
+        } catch (_) {}
       }
 
       return Result.success(credential);
@@ -91,12 +95,14 @@ class AuthService {
       final userCredential = await _auth.signInWithCredential(credential);
 
       if (userCredential.user != null) {
-        await _firestoreService.createOrUpdateUser(
-          uid: userCredential.user!.uid,
-          name: userCredential.user!.displayName ?? googleUser.displayName ?? '',
-          email: userCredential.user!.email ?? googleUser.email,
-          photoUrl: userCredential.user!.photoURL ?? googleUser.photoUrl,
-        );
+        try {
+          await _firestoreService.createOrUpdateUser(
+            uid: userCredential.user!.uid,
+            name: userCredential.user!.displayName ?? googleUser.displayName ?? '',
+            email: userCredential.user!.email ?? googleUser.email,
+            photoUrl: userCredential.user!.photoURL ?? googleUser.photoUrl,
+          );
+        } catch (_) {}
       }
 
       return Result.success(userCredential);

@@ -1,0 +1,86 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Helper functions
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function isFamilyMember(familyId) {
+      return isAuthenticated() && 
+        exists(/databases/$(database)/documents/family_members/$(familyId + '_' + request.auth.uid));
+    }
+
+    // Users collection
+    match /users/{userId} {
+      allow read: if isAuthenticated();
+      allow write: if isOwner(userId);
+
+      match /devices/{tokenId} {
+        allow read, write: if isOwner(userId);
+      }
+    }
+
+    // Tasks collection (Personal & Family Tasks)
+    match /tasks/{taskId} {
+      // Read: allowed if created by user, assigned to user, or user is in the family task group
+      allow read: if isAuthenticated() && (
+        resource.data.createdBy == request.auth.uid ||
+        resource.data.assignedTo == request.auth.uid ||
+        (resource.data.familyId != null && isFamilyMember(resource.data.familyId))
+      );
+
+      // Create: allowed if createdBy matches auth user, and if familyId present, user must belong to family
+      allow create: if isAuthenticated() && 
+        request.resource.data.createdBy == request.auth.uid &&
+        (request.resource.data.familyId == null || isFamilyMember(request.resource.data.familyId));
+
+      // Update: allowed if createdBy or assignedTo matches auth user, or user is in family
+      allow update: if isAuthenticated() && (
+        resource.data.createdBy == request.auth.uid ||
+        resource.data.assignedTo == request.auth.uid ||
+        (resource.data.familyId != null && isFamilyMember(resource.data.familyId))
+      );
+
+      // Delete: allowed only by task creator or family admin
+      allow delete: if isAuthenticated() && (
+        resource.data.createdBy == request.auth.uid ||
+        (resource.data.familyId != null && isFamilyMember(resource.data.familyId))
+      );
+    }
+
+    // Families collection
+    match /families/{familyId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated();
+      allow update, delete: if isFamilyMember(familyId);
+    }
+
+    // Family Members collection
+    match /family_members/{memberId} {
+      allow read: if isAuthenticated();
+      allow write: if isAuthenticated();
+    }
+
+    // Family Invitations
+    match /family_invitations/{inviteId} {
+      allow read: if isAuthenticated();
+      allow write: if isAuthenticated();
+    }
+
+    // Shared Assets
+    match /shared_assets/{sharedAssetId} {
+      allow read: if isAuthenticated() && isFamilyMember(resource.data.familyId);
+      allow create: if isAuthenticated() && isFamilyMember(request.resource.data.familyId);
+      allow update, delete: if isAuthenticated() && (
+        resource.data.ownerId == request.auth.uid ||
+        isFamilyMember(resource.data.familyId)
+      );
+    }
+  }
+}

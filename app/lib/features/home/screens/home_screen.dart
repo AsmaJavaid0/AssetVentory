@@ -3,6 +3,8 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
+import 'package:firebase_auth/firebase_auth.dart';
+
 import '../../../core/constants/app_colors.dart';
 import '../../../core/utils/wave_clipper.dart';
 import '../../../core/widgets/asset_logo.dart';
@@ -13,6 +15,8 @@ import '../../assets/models/local_category.dart';
 import '../../assets/screens/add_asset_screen.dart';
 import '../../assets/screens/asset_details_screen.dart';
 import '../../assets/screens/categories_screen.dart';
+import '../../tasks/models/task_model.dart';
+import '../widgets/add_quick_asset_sheet.dart';
 
 class HomeScreen extends StatefulWidget {
   final ValueChanged<int>? onTabSelected;
@@ -24,8 +28,10 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   final _assetRepository = serviceLocator.assetRepository;
   final _categoryRepository = serviceLocator.categoryRepository;
+  final _taskService = serviceLocator.taskService;
   List<LocalAsset> _assets = [];
   List<LocalCategory> _categories = [];
+  int _pendingTaskCount = 0;
   bool _isLoading = true;
 
   @override
@@ -38,10 +44,20 @@ class _HomeScreenState extends State<HomeScreen> {
     try {
       final assets = await _assetRepository.getAssets('local_user');
       final categories = await _categoryRepository.getCategories('local_user');
+      final user = FirebaseAuth.instance.currentUser;
+      final uid = user?.uid ?? 'local_user';
+
+      int taskCount = 0;
+      try {
+        final tasks = await _taskService.streamVisibleTasks(uid).first;
+        taskCount = tasks.where((t) => t.status == TaskStatus.pending).length;
+      } catch (_) {}
+
       if (!mounted) return;
       setState(() {
         _assets = assets;
         _categories = categories;
+        _pendingTaskCount = taskCount;
         _isLoading = false;
       });
     } catch (e, stackTrace) {
@@ -51,6 +67,7 @@ class _HomeScreenState extends State<HomeScreen> {
       setState(() {
         _assets = [];
         _categories = [];
+        _pendingTaskCount = 0;
         _isLoading = false;
       });
     }
@@ -320,7 +337,7 @@ class _HomeScreenState extends State<HomeScreen> {
               width: itemWidth,
               child: _metric(
                 Icons.task_alt_rounded,
-                '0',
+                '$_pendingTaskCount',
                 'Tasks',
                 () => widget.onTabSelected?.call(3),
               ),

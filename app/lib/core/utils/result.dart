@@ -1,5 +1,3 @@
-import 'package:flutter/foundation.dart';
-
 /// A functional wrapper for values that can either be a success or a failure.
 class Result<T> {
   final T? value;
@@ -20,7 +18,7 @@ class Result<T> {
   /// or [onFailure] if it is a failure.
   void fold(void Function(T value) onSuccess, void Function(Exception error) onFailure) {
     if (isSuccess) {
-      onSuccess(value!);
+      onSuccess(value as T);
     } else {
       onFailure(error!);
     }

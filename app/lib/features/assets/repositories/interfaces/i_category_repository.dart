@@ -1,4 +1,4 @@
-import '../models/local_category.dart';
+import '../../models/local_category.dart';
 
 abstract class ICategoryRepository {
   Future<void> createCategory(LocalCategory category);

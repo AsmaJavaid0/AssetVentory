@@ -1,5 +1,5 @@
 import 'dart:io';
-import '../models/local_asset_document.dart';
+import '../../models/local_asset_document.dart';
 
 abstract class IAssetDocumentRepository {
   Future<List<LocalAssetDocument>> getDocuments(String assetId);

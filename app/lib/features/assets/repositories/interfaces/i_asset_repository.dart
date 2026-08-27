@@ -1,4 +1,4 @@
-import '../models/local_asset.dart';
+import '../../models/local_asset.dart';
 import 'dart:io';
 
 abstract class IAssetRepository {

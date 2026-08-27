@@ -1,4 +1,3 @@
-import 'dart:convert';
 import 'dart:io';
 import 'package:drift/drift.dart';
 import 'package:uuid/uuid.dart';
@@ -13,6 +12,7 @@ class AssetRepository implements IAssetRepository {
   static const Uuid _uuid = Uuid();
   AssetRepository({required this._database, required this._fileStorage});
 
+  @override
   Future<void> createAsset(LocalAsset asset) async {
     await _database.into(_database.assets).insert(AssetsCompanion.insert(
       id: asset.id, ownerId: asset.ownerId, name: asset.name,
@@ -22,6 +22,7 @@ class AssetRepository implements IAssetRepository {
     ));
   }
 
+  @override
   Future<LocalAsset> createAssetWithImage({required String ownerId, required String name, String? categoryId,
     String? emoji, File? imageFile, String? location, String? description, bool qrEnabled = false,
     Map<String, String> customFields = const {}}) async {
@@ -41,18 +42,21 @@ class AssetRepository implements IAssetRepository {
     }
   }
 
+  @override
   Future<LocalAsset?> getAsset(String assetId) async {
     final query = _database.select(_database.assets)..where((asset) => asset.id.equals(assetId));
     final row = await query.getSingleOrNull();
     return row == null ? null : _toLocalAsset(row);
   }
 
+  @override
   Future<List<LocalAsset>> getAssets(String ownerId) async {
     final query = _database.select(_database.assets)..where((asset) => asset.ownerId.equals(ownerId))
       ..orderBy([(asset) => OrderingTerm.desc(asset.createdAt)]);
     return (await query.get()).map(_toLocalAsset).toList();
   }
 
+  @override
   Future<List<LocalAsset>> getAssetsByCategory({required String ownerId, required String categoryId}) async {
     final query = _database.select(_database.assets)
       ..where((asset) => asset.ownerId.equals(ownerId) & asset.categoryId.equals(categoryId))
@@ -60,6 +64,7 @@ class AssetRepository implements IAssetRepository {
     return (await query.get()).map(_toLocalAsset).toList();
   }
 
+  @override
   Future<void> updateAsset(LocalAsset asset) async {
     await (_database.update(_database.assets)..where((row) => row.id.equals(asset.id))).write(AssetsCompanion(
       ownerId: Value(asset.ownerId), name: Value(asset.name), categoryId: Value(asset.categoryId), emoji: Value(asset.emoji),
@@ -68,6 +73,7 @@ class AssetRepository implements IAssetRepository {
     ));
   }
 
+  @override
   Future<LocalAsset> updateAssetImage({required LocalAsset asset, required File imageFile}) async {
     final oldPath = asset.imagePath;
     final newPath = await _fileStorage.saveImage(assetId: asset.id, sourceFile: imageFile);
@@ -82,6 +88,7 @@ class AssetRepository implements IAssetRepository {
     }
   }
 
+  @override
   Future<void> deleteAsset(String assetId) async {
     await (_database.delete(_database.assets)..where((asset) => asset.id.equals(assetId))).go();
     await _fileStorage.deleteAssetFiles(assetId);

@@ -4,6 +4,7 @@ import 'package:google_fonts/google_fonts.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../assets/screens/assets_screen.dart';
 import '../../tasks/screens/tasks_screen.dart';
+import '../../family/screens/family_share_screen.dart';
 import 'home_screen.dart';
 
 class MainNavigationScreen extends StatefulWidget {
@@ -31,94 +32,10 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
         },
       ),
       const AssetsScreen(),
-      _buildFamilySharePage(),
+      const FamilyShareScreen(),
       const TasksScreen(),
       _buildProfilePage(),
     ];
-  }
-
-  Widget _buildFamilySharePage() {
-    return Scaffold(
-      backgroundColor: AppColors.scaffoldBg,
-      appBar: AppBar(
-        title: Text(
-          'Family Share',
-          style: GoogleFonts.outfit(
-            fontWeight: FontWeight.w700,
-            color: AppColors.textPrimary,
-          ),
-        ),
-        backgroundColor: Colors.white,
-        elevation: 0,
-        centerTitle: true,
-      ),
-      body: Center(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Container(
-                width: 100,
-                height: 100,
-                decoration: BoxDecoration(
-                  color: AppColors.primaryPurple.withAlpha(20),
-                  shape: BoxShape.circle,
-                ),
-                child: Icon(
-                  Icons.group_rounded,
-                  size: 54,
-                  color: AppColors.primaryPurple,
-                ),
-              ),
-              const SizedBox(height: 20),
-              Text(
-                'Family Sharing',
-                style: GoogleFonts.outfit(
-                  fontSize: 22,
-                  fontWeight: FontWeight.w700,
-                  color: AppColors.textPrimary,
-                ),
-              ),
-              const SizedBox(height: 10),
-              Text(
-                'Your personal assets work completely offline. '
-                'Google/Firebase sign-in will only be required '
-                'when you use Family Sharing.',
-                textAlign: TextAlign.center,
-                style: GoogleFonts.outfit(
-                  fontSize: 14,
-                  color: AppColors.textSecondary,
-                  height: 1.5,
-                ),
-              ),
-              const SizedBox(height: 24),
-              ElevatedButton.icon(
-                onPressed: () {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text(
-                        'Family Share login will be added here.',
-                      ),
-                    ),
-                  );
-                },
-                icon: const Icon(Icons.login_rounded),
-                label: const Text('Sign in for Family Share'),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.primaryPurple,
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(16),
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
   }
 
   Widget _buildProfilePage() {
