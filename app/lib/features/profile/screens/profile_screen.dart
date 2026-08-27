@@ -77,14 +77,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   Future<void> _handleEditProfile() async {
     final updated = await EditProfileScreen.navigateTo(context);
-    if (updated == true && mounted) {
-      setState(() {});
-    }
+    if (updated == true && mounted) setState(() {});
   }
 
   Future<void> _handleFamilyTap() async {
     if (widget.onNavigateTab != null) {
-      // Switch to Family tab (Index 2 in MainNavigation)
       widget.onNavigateTab!(2);
     } else {
       await Navigator.push(
@@ -104,9 +101,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       final granted = await _taskNotificationService.requestPermissions();
       if (!granted && mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Please enable notification permissions in system settings'),
-          ),
+          const SnackBar(content: Text('Please enable notification permissions in system settings')),
         );
       }
     } else {
@@ -131,19 +126,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
       context: context,
       builder: (dialogContext) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: Text(
-          'Log Out?',
-          style: GoogleFonts.outfit(fontWeight: FontWeight.w700),
-        ),
-        content: Text(
-          'Are you sure you want to log out of AssetVentory?',
-          style: GoogleFonts.outfit(height: 1.4),
-        ),
+        title: Text('Log Out?', style: GoogleFonts.outfit(fontWeight: FontWeight.w700)),
+        content: Text('Are you sure you want to log out of AssetVentory?', style: GoogleFonts.outfit(height: 1.4)),
         actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext, false),
-            child: const Text('Cancel'),
-          ),
+          TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('Cancel')),
           ElevatedButton(
             onPressed: () => Navigator.pop(dialogContext, true),
             style: ElevatedButton.styleFrom(
@@ -159,33 +145,21 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
 
     if (confirm != true) return;
-
     setState(() => _isLoggingOut = true);
 
     try {
-      // 1. Unregister FCM token
       await _fcmService.unregisterDeviceToken();
-
-      // 2. Sign out via AuthService
       await _authService.signOut();
-
       if (!mounted) return;
       setState(() => _isLoggingOut = false);
-
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Logged out successfully.'),
-          backgroundColor: AppColors.success,
-        ),
+        const SnackBar(content: Text('Logged out successfully.'), backgroundColor: AppColors.success),
       );
     } catch (e) {
       if (!mounted) return;
       setState(() => _isLoggingOut = false);
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(ErrorFormatter.format(e)),
-          backgroundColor: AppColors.error,
-        ),
+        SnackBar(content: Text(ErrorFormatter.format(e)), backgroundColor: AppColors.error),
       );
     }
   }
@@ -198,22 +172,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
       context: context,
       builder: (dialogContext) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: Text(
-          'Delete Account?',
-          style: GoogleFonts.outfit(
-            fontWeight: FontWeight.w700,
-            color: AppColors.error,
-          ),
-        ),
+        title: Text('Delete Account?', style: GoogleFonts.outfit(fontWeight: FontWeight.w700, color: AppColors.error)),
         content: Text(
           'This permanently deletes your account and associated cloud data.\n\nThis action cannot be undone.',
           style: GoogleFonts.outfit(height: 1.4),
         ),
         actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext, false),
-            child: const Text('Cancel'),
-          ),
+          TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('Cancel')),
           ElevatedButton(
             onPressed: () => Navigator.pop(dialogContext, true),
             style: ElevatedButton.styleFrom(
@@ -229,53 +194,35 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
 
     if (confirm != true) return;
-
     setState(() => _isDeletingAccount = true);
 
     try {
-      // 1. Unregister FCM token
       await _fcmService.unregisterDeviceToken();
-
-      // 2. Delete user account from Firebase
       await user.delete();
-
       if (!mounted) return;
       setState(() => _isDeletingAccount = false);
-
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Account deleted successfully.'),
-          backgroundColor: AppColors.success,
-        ),
+        const SnackBar(content: Text('Account deleted successfully.'), backgroundColor: AppColors.success),
       );
     } on FirebaseAuthException catch (e) {
       if (!mounted) return;
       setState(() => _isDeletingAccount = false);
-
-      if (e.code == 'requires-recent-login') {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Please log out and log back in to verify your identity before deleting your account.'),
-            backgroundColor: AppColors.warning,
-            duration: Duration(seconds: 4),
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            e.code == 'requires-recent-login'
+                ? 'Please log out and log back in to verify your identity before deleting your account.'
+                : ErrorFormatter.format(e),
           ),
-        );
-      } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(ErrorFormatter.format(e)),
-            backgroundColor: AppColors.error,
-          ),
-        );
-      }
+          backgroundColor: e.code == 'requires-recent-login' ? AppColors.warning : AppColors.error,
+          duration: const Duration(seconds: 4),
+        ),
+      );
     } catch (e) {
       if (!mounted) return;
       setState(() => _isDeletingAccount = false);
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(ErrorFormatter.format(e)),
-          backgroundColor: AppColors.error,
-        ),
+        SnackBar(content: Text(ErrorFormatter.format(e)), backgroundColor: AppColors.error),
       );
     }
   }
@@ -293,13 +240,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
         return Scaffold(
           backgroundColor: AppColors.scaffoldBg,
           appBar: AppBar(
-            title: Text(
-              'Profile',
-              style: GoogleFonts.outfit(
-                fontWeight: FontWeight.w700,
-                color: AppColors.textPrimary,
-              ),
-            ),
+            title: Text('Profile', style: GoogleFonts.outfit(fontWeight: FontWeight.w700, color: AppColors.textPrimary)),
             backgroundColor: Colors.white,
             elevation: 0,
             centerTitle: true,
@@ -309,37 +250,17 @@ class _ProfileScreenState extends State<ProfileScreen> {
             padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 20),
             child: Column(
               children: [
-                // 1. Profile Header
-                ProfileHeader(
-                  user: user,
-                  onEditProfile: _handleEditProfile,
-                ),
+                ProfileHeader(user: user, onEditProfile: _handleEditProfile),
                 const SizedBox(height: 24),
-
-                // 2. ACCOUNT Section
                 ProfileSection(
                   title: 'Account',
                   children: [
-                    ProfileSettingsTile(
-                      icon: Icons.person_outline_rounded,
-                      title: 'Edit Profile',
-                      onTap: _handleEditProfile,
-                    ),
-                    ProfileSettingsTile(
-                      icon: Icons.lock_outline_rounded,
-                      title: 'Change Password',
-                      onTap: () => ChangePasswordSheet.show(context),
-                    ),
-                    ProfileSettingsTile(
-                      icon: Icons.shield_outlined,
-                      title: 'Login & Security',
-                      onTap: () => LoginSecurityScreen.navigateTo(context),
-                    ),
+                    ProfileSettingsTile(icon: Icons.person_outline_rounded, title: 'Edit Profile', onTap: _handleEditProfile),
+                    ProfileSettingsTile(icon: Icons.lock_outline_rounded, title: 'Change Password', onTap: () => ChangePasswordSheet.show(context)),
+                    ProfileSettingsTile(icon: Icons.shield_outlined, title: 'Login & Security', onTap: () => LoginSecurityScreen.navigateTo(context)),
                   ],
                 ),
                 const SizedBox(height: 24),
-
-                // 3. FAMILY Section
                 ProfileSection(
                   title: 'Family',
                   children: [
@@ -353,61 +274,27 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   ],
                 ),
                 const SizedBox(height: 24),
-
-                // 4. NOTIFICATIONS Section
                 ProfileSection(
                   title: 'Notifications',
                   children: [
-                    ProfileSettingsTile(
-                      icon: Icons.notifications_none_rounded,
-                      title: 'Task Reminders',
-                      isSwitch: true,
-                      switchValue: _taskRemindersOn,
-                      onSwitchChanged: _toggleTaskReminders,
-                    ),
-                    ProfileSettingsTile(
-                      icon: Icons.send_to_mobile_rounded,
-                      title: 'Push Notifications',
-                      isSwitch: true,
-                      switchValue: _pushNotificationsOn,
-                      onSwitchChanged: _togglePushNotifications,
-                    ),
+                    ProfileSettingsTile(icon: Icons.notifications_none_rounded, title: 'Task Reminders', isSwitch: true, switchValue: _taskRemindersOn, onSwitchChanged: _toggleTaskReminders),
+                    ProfileSettingsTile(icon: Icons.send_to_mobile_rounded, title: 'Push Notifications', isSwitch: true, switchValue: _pushNotificationsOn, onSwitchChanged: _togglePushNotifications),
                   ],
                 ),
                 const SizedBox(height: 24),
-
-                // 5. PREFERENCES Section
                 ProfileSection(
                   title: 'Preferences',
                   children: [
-                    ProfileSettingsTile(
-                      icon: Icons.settings_outlined,
-                      title: 'App Settings',
-                      onTap: () => AppSettingsScreen.navigateTo(context),
-                    ),
-                    ProfileSettingsTile(
-                      icon: Icons.palette_outlined,
-                      title: 'Appearance',
-                      onTap: () => AppearanceScreen.navigateTo(context),
-                    ),
+                    ProfileSettingsTile(icon: Icons.settings_outlined, title: 'App Settings', onTap: () => AppSettingsScreen.navigateTo(context)),
+                    ProfileSettingsTile(icon: Icons.palette_outlined, title: 'Appearance', onTap: () => AppearanceScreen.navigateTo(context)),
                   ],
                 ),
                 const SizedBox(height: 24),
-
-                // 6. PRIVACY & DATA Section
                 ProfileSection(
                   title: 'Privacy & Data',
                   children: [
-                    ProfileSettingsTile(
-                      icon: Icons.privacy_tip_outlined,
-                      title: 'Privacy & Security',
-                      onTap: () => AboutScreen.showPrivacyPolicy(context),
-                    ),
-                    ProfileSettingsTile(
-                      icon: Icons.storage_rounded,
-                      title: 'Data & Storage',
-                      onTap: () => DataStorageScreen.navigateTo(context),
-                    ),
+                    ProfileSettingsTile(icon: Icons.privacy_tip_outlined, title: 'Privacy & Security', onTap: () => AboutScreen.showPrivacyPolicy(context)),
+                    ProfileSettingsTile(icon: Icons.storage_rounded, title: 'Data & Storage', onTap: () => DataStorageScreen.navigateTo(context)),
                     ProfileSettingsTile(
                       icon: Icons.delete_forever_rounded,
                       isDestructive: true,
@@ -418,63 +305,32 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   ],
                 ),
                 const SizedBox(height: 24),
-
-                // 7. ABOUT Section
                 ProfileSection(
                   title: 'About',
                   children: [
-                    ProfileSettingsTile(
-                      icon: Icons.info_outline_rounded,
-                      title: 'About AssetVentory',
-                      valueText: 'v${AboutScreen.appVersion}',
-                      onTap: () => AboutScreen.navigateTo(context),
-                    ),
-                    ProfileSettingsTile(
-                      icon: Icons.help_outline_rounded,
-                      title: 'Help & Support',
-                      onTap: () => AboutScreen.showHelpAndSupport(context),
-                    ),
-                    ProfileSettingsTile(
-                      icon: Icons.description_outlined,
-                      title: 'Privacy Policy',
-                      onTap: () => AboutScreen.showPrivacyPolicy(context),
-                    ),
-                    ProfileSettingsTile(
-                      icon: Icons.gavel_rounded,
-                      title: 'Terms of Service',
-                      onTap: () => AboutScreen.showTermsOfService(context),
-                    ),
+                    ProfileSettingsTile(icon: Icons.info_outline_rounded, title: 'About AssetVentory', valueText: 'v${AboutScreen.appVersion}', onTap: () => AboutScreen.navigateTo(context)),
+                    // Help & Support intentionally removed from the profile menu.
+                    ProfileSettingsTile(icon: Icons.description_outlined, title: 'Privacy Policy', onTap: () => AboutScreen.showPrivacyPolicy(context)),
+                    ProfileSettingsTile(icon: Icons.gavel_rounded, title: 'Terms of Service', onTap: () => AboutScreen.showTermsOfService(context)),
                   ],
                 ),
                 const SizedBox(height: 28),
-
-                // 8. Log Out Button
                 SizedBox(
                   width: double.infinity,
                   height: 52,
                   child: OutlinedButton.icon(
                     onPressed: (_isLoggingOut || _isDeletingAccount) ? null : _handleLogout,
                     icon: _isLoggingOut
-                        ? const SizedBox(
-                            width: 20,
-                            height: 20,
-                            child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.error),
-                          )
+                        ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.error))
                         : const Icon(Icons.logout_rounded, color: AppColors.error, size: 20),
                     label: Text(
                       _isLoggingOut ? 'Logging out...' : 'Log Out',
-                      style: GoogleFonts.outfit(
-                        fontSize: 15,
-                        fontWeight: FontWeight.w700,
-                        color: AppColors.error,
-                      ),
+                      style: GoogleFonts.outfit(fontSize: 15, fontWeight: FontWeight.w700, color: AppColors.error),
                     ),
                     style: OutlinedButton.styleFrom(
                       side: const BorderSide(color: Color(0xFFFDCED4), width: 1.5),
                       backgroundColor: const Color(0xFFFFF5F5),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(16),
-                      ),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
                     ),
                   ),
                 ),
