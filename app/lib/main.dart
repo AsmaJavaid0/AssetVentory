@@ -20,6 +20,7 @@ void main() async {
 
   // Initialize the service locator
   await setupServiceLocator();
+  await serviceLocator.preferences.init();
 
   // Initialize local notifications & FCM asynchronously (non-blocking)
   // This runs in the background so the UI renders immediately.
@@ -48,11 +49,18 @@ class AssetVentoryApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'AssetVentory',
-      debugShowCheckedModeBanner: false,
-      theme: AppTheme.lightTheme,
-      home: const AuthWrapper(),
+    return ValueListenableBuilder<ThemeMode>(
+      valueListenable: serviceLocator.preferences.themeModeNotifier,
+      builder: (context, themeMode, _) {
+        return MaterialApp(
+          title: 'AssetVentory',
+          debugShowCheckedModeBanner: false,
+          theme: AppTheme.lightTheme,
+          darkTheme: AppTheme.darkTheme,
+          themeMode: themeMode,
+          home: const AuthWrapper(),
+        );
+      },
     );
   }
 }

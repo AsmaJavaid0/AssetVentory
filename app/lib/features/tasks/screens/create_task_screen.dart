@@ -66,6 +66,16 @@ class _CreateTaskScreenState extends State<CreateTaskScreen> {
   void initState() {
     super.initState();
     _selectedAsset = widget.preselectedAsset;
+    _reminderMinutesBefore = serviceLocator.preferences.defaultReminderMinutes;
+    _reminderEnabled = serviceLocator.preferences.taskRemindersEnabled;
+    final defaultPriorityStr = serviceLocator.preferences.defaultTaskPriority;
+    if (defaultPriorityStr == 'low') {
+      _priority = TaskPriority.low;
+    } else if (defaultPriorityStr == 'high') {
+      _priority = TaskPriority.high;
+    } else {
+      _priority = TaskPriority.medium;
+    }
     _checkFamilyMembership();
   }
 

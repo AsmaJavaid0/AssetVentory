@@ -1,6 +1,7 @@
 import 'package:get_it/get_it.dart';
 import '../database/app_database.dart';
 import '../storage/local_file_storage.dart';
+import '../storage/app_preferences_service.dart';
 
 import '../../features/assets/repositories/asset_repository.dart';
 import '../../features/assets/repositories/asset_document_repository.dart';
@@ -27,6 +28,7 @@ class ServiceLocator {
   FcmService get fcmService => getIt<FcmService>();
   AppDatabase get database => getIt<AppDatabase>();
   LocalFileStorage get fileStorage => getIt<LocalFileStorage>();
+  AppPreferencesService get preferences => getIt<AppPreferencesService>();
 
   T get<T extends Object>() => getIt<T>();
   T call<T extends Object>() => getIt<T>();
@@ -38,6 +40,7 @@ Future<void> setupServiceLocator() async {
   // Core Services
   getIt.registerLazySingleton<AppDatabase>(() => AppDatabase());
   getIt.registerLazySingleton<LocalFileStorage>(() => LocalFileStorage());
+  getIt.registerLazySingleton<AppPreferencesService>(() => AppPreferencesService());
 
   // Task & Notification Services
   getIt.registerLazySingleton<TaskNotificationService>(() => TaskNotificationService());
