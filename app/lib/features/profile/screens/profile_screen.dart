@@ -239,18 +239,18 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
         return Scaffold(
           backgroundColor: AppColors.scaffoldBg,
-          appBar: AppBar(
-            title: Text('Profile', style: GoogleFonts.outfit(fontWeight: FontWeight.w700, color: AppColors.textPrimary)),
-            backgroundColor: Colors.white,
-            elevation: 0,
-            centerTitle: true,
-          ),
           body: SingleChildScrollView(
             physics: const BouncingScrollPhysics(),
-            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 20),
+            padding: const EdgeInsets.only(bottom: 20),
             child: Column(
               children: [
-                ProfileHeader(user: user, onEditProfile: _handleEditProfile),
+                _buildHeader(context),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 20),
+                  child: Column(
+                    children: [
+                      const SizedBox(height: 20),
+                      ProfileHeader(user: user, onEditProfile: _handleEditProfile),
                 const SizedBox(height: 24),
                 ProfileSection(
                   title: 'Account',
@@ -335,11 +335,32 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   ),
                 ),
                 const SizedBox(height: 36),
+                    ],
+                  ),
+                ),
               ],
             ),
           ),
         );
       },
+    );
+  }
+
+  Widget _buildHeader(BuildContext context) {
+    final top = MediaQuery.of(context).padding.top;
+    return Container(
+      padding: EdgeInsets.fromLTRB(20, top + 16, 12, 20),
+      decoration: const BoxDecoration(
+        color: AppColors.heroDarkBg,
+        borderRadius: BorderRadius.vertical(bottom: Radius.circular(24)),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text('Profile', style: GoogleFonts.outfit(fontSize: 24, color: Colors.white, fontWeight: FontWeight.w700)),
+          ),
+        ],
+      ),
     );
   }
 }

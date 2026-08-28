@@ -116,50 +116,9 @@ class _TasksScreenState extends State<TasksScreen> {
           ),
         ),
       ),
-      appBar: AppBar(
-        title: _isSearching
-            ? TextField(
-                controller: _searchController,
-                autofocus: true,
-                style: GoogleFonts.outfit(color: AppColors.textPrimary, fontSize: 16),
-                decoration: const InputDecoration(
-                  hintText: 'Search tasks or assets...',
-                  border: InputBorder.none,
-                  enabledBorder: InputBorder.none,
-                  focusedBorder: InputBorder.none,
-                  fillColor: Colors.transparent,
-                ),
-                onChanged: (val) => setState(() => _searchQuery = val),
-              )
-            : Text(
-                'Tasks & Reminders',
-                style: GoogleFonts.outfit(
-                  fontWeight: FontWeight.w700,
-                  color: AppColors.textPrimary,
-                ),
-              ),
-        backgroundColor: Colors.white,
-        elevation: 0,
-        actions: [
-          IconButton(
-            icon: Icon(_isSearching ? Icons.close_rounded : Icons.search_rounded),
-            color: AppColors.textPrimary,
-            onPressed: () {
-              setState(() {
-                if (_isSearching) {
-                  _isSearching = false;
-                  _searchQuery = '';
-                  _searchController.clear();
-                } else {
-                  _isSearching = true;
-                }
-              });
-            },
-          ),
-        ],
-      ),
       body: Column(
         children: [
+          _buildHeader(context),
           const SizedBox(height: 12),
           TaskFilterBar(
             selectedFilter: _selectedFilter,
@@ -226,6 +185,57 @@ class _TasksScreenState extends State<TasksScreen> {
                 );
               },
             ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildHeader(BuildContext context) {
+    final top = MediaQuery.of(context).padding.top;
+    return Container(
+      padding: EdgeInsets.fromLTRB(20, top + 16, 12, 20),
+      decoration: const BoxDecoration(
+        color: AppColors.heroDarkBg,
+        borderRadius: BorderRadius.vertical(bottom: Radius.circular(24)),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: _isSearching
+                ? TextField(
+                    controller: _searchController,
+                    autofocus: true,
+                    style: GoogleFonts.outfit(color: Colors.white, fontSize: 16),
+                    decoration: const InputDecoration(
+                      hintText: 'Search tasks...',
+                      hintStyle: TextStyle(color: Color(0xFFB8AED6)),
+                      border: InputBorder.none,
+                      enabledBorder: InputBorder.none,
+                      focusedBorder: InputBorder.none,
+                      fillColor: Colors.transparent,
+                    ),
+                    onChanged: (val) => setState(() => _searchQuery = val),
+                  )
+                : Text(
+                    'Tasks & Reminders',
+                    style: GoogleFonts.outfit(fontSize: 24, color: Colors.white, fontWeight: FontWeight.w700),
+                  ),
+          ),
+          IconButton(
+            icon: Icon(_isSearching ? Icons.close_rounded : Icons.search_rounded),
+            color: Colors.white,
+            onPressed: () {
+              setState(() {
+                if (_isSearching) {
+                  _isSearching = false;
+                  _searchQuery = '';
+                  _searchController.clear();
+                } else {
+                  _isSearching = true;
+                }
+              });
+            },
           ),
         ],
       ),

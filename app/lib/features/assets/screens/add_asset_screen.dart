@@ -166,13 +166,13 @@ class _AddAssetScreenState extends State<AddAssetScreen> {
 
   Future<void> _pickDocuments() async {
     try {
-      final result = await FilePicker.pickFiles(allowMultiple: true);
+      final result = await FilePicker.pickFiles();
 
-      if (!mounted || result == null || result.files.isEmpty) {
+      if (!mounted || result.isEmpty) {
         return;
       }
 
-      final picked = result.files
+      final picked = result
           .where((file) => file.path != null)
           .map((file) => File(file.path!))
           .toList();

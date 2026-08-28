@@ -291,88 +291,99 @@ class _FamilyShareScreenState extends State<FamilyShareScreen> {
     // State A: User does not belong to a family -> Show Landing Empty State
     return Scaffold(
       backgroundColor: AppColors.scaffoldBg,
-      appBar: AppBar(
-        title: Text(
-          'Family Sharing',
-          style: GoogleFonts.outfit(
-            fontWeight: FontWeight.w700,
-            color: AppColors.textPrimary,
+      body: Column(
+        children: [
+          _buildHeader(context),
+          Expanded(
+            child: SingleChildScrollView(
+              child: Column(
+                children: [
+                  if (_currentUser != null)
+                    Container(
+                      margin: const EdgeInsets.fromLTRB(20, 12, 20, 0),
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                      decoration: BoxDecoration(
+                        color: AppColors.primaryPurple.withAlpha(12),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Row(
+                        children: [
+                          const Icon(Icons.account_circle_outlined, size: 18, color: AppColors.primaryPurple),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              'Signed in as ${_currentUser!.email}',
+                              style: GoogleFonts.outfit(fontSize: 12, color: AppColors.primaryPurple, fontWeight: FontWeight.w500),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          InkWell(
+                            onTap: _handleLogout,
+                            child: Text(
+                              'Switch',
+                              style: GoogleFonts.outfit(fontSize: 12, color: AppColors.error, fontWeight: FontWeight.bold),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  if (_pendingInvitations.isNotEmpty)
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
+                      child: InvitationBanner(
+                        invitations: _pendingInvitations,
+                        onAccept: _acceptInvitation,
+                        onDecline: _declineInvitation,
+                      ),
+                    ),
+                  FamilyEmptyState(
+                    onCreateFamily: () async {
+                      if (_currentUser == null) {
+                        FamilyAuthPrompt.show(context, onSignedIn: _loadState);
+                        return;
+                      }
+                      final created = await CreateFamilyScreen.navigateTo(context, _currentUser!);
+                      if (created == true) _loadState();
+                    },
+                    onJoinFamily: () async {
+                      if (_currentUser == null) {
+                        FamilyAuthPrompt.show(context, onSignedIn: _loadState);
+                        return;
+                      }
+                      final joined = await JoinFamilyScreen.navigateTo(context, _currentUser!);
+                      if (joined == true) _loadState();
+                    },
+                  ),
+                ],
+              ),
+            ),
           ),
-        ),
-        backgroundColor: Colors.white,
-        elevation: 0,
-        centerTitle: true,
-        actions: [
+        ],
+      ),
+    );
+  }
+
+  Widget _buildHeader(BuildContext context) {
+    final top = MediaQuery.of(context).padding.top;
+    return Container(
+      padding: EdgeInsets.fromLTRB(20, top + 16, 12, 20),
+      decoration: const BoxDecoration(
+        color: AppColors.heroDarkBg,
+        borderRadius: BorderRadius.vertical(bottom: Radius.circular(24)),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text('Family Sharing', style: GoogleFonts.outfit(fontSize: 24, color: Colors.white, fontWeight: FontWeight.w700)),
+          ),
           if (_currentUser != null)
             IconButton(
-              icon: const Icon(Icons.logout_rounded, color: AppColors.textSecondary),
+              icon: const Icon(Icons.logout_rounded, color: Colors.white),
               tooltip: 'Log Out (${_currentUser!.email})',
               onPressed: _handleLogout,
             ),
         ],
-      ),
-      body: SingleChildScrollView(
-        child: Column(
-          children: [
-            if (_currentUser != null)
-              Container(
-                margin: const EdgeInsets.fromLTRB(20, 12, 20, 0),
-                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                decoration: BoxDecoration(
-                  color: AppColors.primaryPurple.withAlpha(12),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Row(
-                  children: [
-                    const Icon(Icons.account_circle_outlined, size: 18, color: AppColors.primaryPurple),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        'Signed in as ${_currentUser!.email}',
-                        style: GoogleFonts.outfit(fontSize: 12, color: AppColors.primaryPurple, fontWeight: FontWeight.w500),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                    InkWell(
-                      onTap: _handleLogout,
-                      child: Text(
-                        'Switch',
-                        style: GoogleFonts.outfit(fontSize: 12, color: AppColors.error, fontWeight: FontWeight.bold),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            if (_pendingInvitations.isNotEmpty)
-              Padding(
-                padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
-                child: InvitationBanner(
-                  invitations: _pendingInvitations,
-                  onAccept: _acceptInvitation,
-                  onDecline: _declineInvitation,
-                ),
-              ),
-            FamilyEmptyState(
-              onCreateFamily: () async {
-                if (_currentUser == null) {
-                  FamilyAuthPrompt.show(context, onSignedIn: _loadState);
-                  return;
-                }
-                final created = await CreateFamilyScreen.navigateTo(context, _currentUser!);
-                if (created == true) _loadState();
-              },
-              onJoinFamily: () async {
-                if (_currentUser == null) {
-                  FamilyAuthPrompt.show(context, onSignedIn: _loadState);
-                  return;
-                }
-                final joined = await JoinFamilyScreen.navigateTo(context, _currentUser!);
-                if (joined == true) _loadState();
-              },
-            ),
-          ],
-        ),
       ),
     );
   }

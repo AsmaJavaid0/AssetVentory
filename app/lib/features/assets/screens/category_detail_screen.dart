@@ -80,18 +80,31 @@ class _CategoryDetailScreenState extends State<CategoryDetailScreen> {
                 decoration: const InputDecoration(labelText: 'Category name'),
               ),
               const SizedBox(height: 8),
-              DropdownButton<String>(
-                value: emoji,
-                isExpanded: true,
-                items: const ['📁', '🛠️', '📚', '👕', '🎨', '🍳', '👟', '💍', '🎮', '🚗']
-                    .map((value) => DropdownMenuItem(
-                          value: value,
-                          child: Text(value, style: const TextStyle(fontSize: 22)),
+              Wrap(
+                spacing: 12,
+                runSpacing: 12,
+                alignment: WrapAlignment.center,
+                children: ['📁', '🛠️', '📚', '👕', '🎨', '🍳', '👟', '💍', '🎮', '🚗']
+                    .map((value) => GestureDetector(
+                          onTap: () => setDialogState(() => emoji = value),
+                          child: Container(
+                            padding: const EdgeInsets.all(8),
+                            decoration: BoxDecoration(
+                              color: emoji == value
+                                  ? AppColors.primaryPurple.withAlpha(50)
+                                  : AppColors.primaryPurple.withAlpha(10),
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(
+                                color: emoji == value
+                                    ? AppColors.primaryPurple
+                                    : Colors.transparent,
+                                width: 2,
+                              ),
+                            ),
+                            child: Text(value, style: const TextStyle(fontSize: 24)),
+                          ),
                         ))
                     .toList(),
-                onChanged: (value) {
-                  if (value != null) setDialogState(() => emoji = value);
-                },
               ),
             ],
           ),

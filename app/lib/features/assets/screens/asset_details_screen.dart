@@ -3,6 +3,8 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
+import 'package:open_filex/open_filex.dart';
+
 import '../../../core/constants/app_colors.dart';
 import '../../../core/di/service_locator.dart';
 import '../models/local_asset.dart';
@@ -177,14 +179,29 @@ class _AssetDetailsScreenState extends State<AssetDetailsScreen> {
     );
   }
 
-  Widget _documentTile(LocalAssetDocument document) => Container(
-    margin: const EdgeInsets.only(bottom: 8),
-    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
-    decoration: BoxDecoration(color: AppColors.scaffoldBg, borderRadius: BorderRadius.circular(12)),
-    child: Row(children: [
-      const Icon(Icons.description_outlined, color: AppColors.primaryPurple), const SizedBox(width: 10),
-      Expanded(child: Text(document.name, maxLines: 2, overflow: TextOverflow.ellipsis, style: GoogleFonts.outfit(fontWeight: FontWeight.w600))),
-      if (document.fileType != null) Padding(padding: const EdgeInsets.only(left: 8), child: Text(document.fileType!.toUpperCase(), maxLines: 1, overflow: TextOverflow.ellipsis, style: GoogleFonts.outfit(fontSize: 10, color: AppColors.textMuted))),
-    ]),
+  Widget _documentTile(LocalAssetDocument document) => Padding(
+    padding: const EdgeInsets.only(bottom: 8),
+    child: InkWell(
+      borderRadius: BorderRadius.circular(12),
+      onTap: () async {
+        if (document.filePath.isNotEmpty) {
+          final result = await OpenFilex.open(document.filePath);
+          if (result.type != ResultType.done && mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text('Could not open file: ${result.message}')),
+            );
+          }
+        }
+      },
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
+        decoration: BoxDecoration(color: AppColors.scaffoldBg, borderRadius: BorderRadius.circular(12)),
+        child: Row(children: [
+          const Icon(Icons.description_outlined, color: AppColors.primaryPurple), const SizedBox(width: 10),
+          Expanded(child: Text(document.name, maxLines: 2, overflow: TextOverflow.ellipsis, style: GoogleFonts.outfit(fontWeight: FontWeight.w600))),
+          if (document.fileType != null) Padding(padding: const EdgeInsets.only(left: 8), child: Text(document.fileType!.toUpperCase(), maxLines: 1, overflow: TextOverflow.ellipsis, style: GoogleFonts.outfit(fontSize: 10, color: AppColors.textMuted))),
+        ]),
+      ),
+    ),
   );
 }
