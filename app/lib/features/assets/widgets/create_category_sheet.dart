@@ -1,4 +1,4 @@
-import 'package:emoji_picker_flutter/emoji_picker_flutter.dart';
+import 'package:emoji_picker_flutter/emoji_picker_flutter.dart' as emoji_picker;
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../../core/constants/app_colors.dart';
@@ -6,14 +6,11 @@ import '../../../core/constants/app_colors.dart';
 /// A reusable bottom sheet widget for creating a new category with a full
 /// emoji picker embedded inline — avoids nested modals that cause the
 /// `_dependants.isEmpty` assertion error.
-///
-/// Returns `true` if a category was created, `null`/`false` otherwise.
 class CreateCategorySheet extends StatefulWidget {
   final Future<void> Function(String name, String emoji) onCreateCategory;
 
   const CreateCategorySheet({super.key, required this.onCreateCategory});
 
-  /// Shows the bottom sheet and returns `true` if a category was created.
   static Future<bool?> show(
     BuildContext context, {
     required Future<void> Function(String name, String emoji) onCreateCategory,
@@ -58,8 +55,8 @@ class _CreateCategorySheetState extends State<CreateCategorySheet> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Failed to create category. Please try again.'),
-            backgroundColor: Colors.red.shade600,
+            content: const Text('Failed to create category. Please try again.'),
+            backgroundColor: Colors.red,
             behavior: SnackBarBehavior.floating,
           ),
         );
@@ -82,7 +79,6 @@ class _CreateCategorySheetState extends State<CreateCategorySheet> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // ── Header ──
             Padding(
               padding: const EdgeInsets.fromLTRB(20, 16, 8, 0),
               child: Row(
@@ -103,8 +99,6 @@ class _CreateCategorySheetState extends State<CreateCategorySheet> {
               ),
             ),
             const SizedBox(height: 12),
-
-            // ── Name field ──
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 20),
               child: TextField(
@@ -123,8 +117,10 @@ class _CreateCategorySheetState extends State<CreateCategorySheet> {
                     },
                     child: Container(
                       padding: const EdgeInsets.all(10),
-                      child: Text(_selectedEmoji,
-                          style: const TextStyle(fontSize: 24)),
+                      child: Text(
+                        _selectedEmoji,
+                        style: const TextStyle(fontSize: 24),
+                      ),
                     ),
                   ),
                   suffixIcon: IconButton(
@@ -138,7 +134,6 @@ class _CreateCategorySheetState extends State<CreateCategorySheet> {
                     onPressed: () {
                       if (_showEmojiPicker) {
                         setState(() => _showEmojiPicker = false);
-                        // Re-focus on text field
                         FocusScope.of(context).requestFocus(FocusNode());
                       } else {
                         FocusScope.of(context).unfocus();
@@ -153,8 +148,6 @@ class _CreateCategorySheetState extends State<CreateCategorySheet> {
               ),
             ),
             const SizedBox(height: 16),
-
-            // ── Create button ──
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 20),
               child: SizedBox(
@@ -164,7 +157,8 @@ class _CreateCategorySheetState extends State<CreateCategorySheet> {
                   style: ElevatedButton.styleFrom(
                     backgroundColor: AppColors.primaryPurple,
                     foregroundColor: Colors.white,
-                    disabledBackgroundColor: AppColors.primaryPurple.withAlpha(120),
+                    disabledBackgroundColor:
+                        AppColors.primaryPurple.withAlpha(120),
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(16),
                     ),
@@ -189,35 +183,34 @@ class _CreateCategorySheetState extends State<CreateCategorySheet> {
                 ),
               ),
             ),
-
-            // ── Inline emoji picker (full, all categories) ──
             if (_showEmojiPicker)
               SizedBox(
                 height: 280,
-                child: EmojiPicker(
+                child: emoji_picker.EmojiPicker(
                   onEmojiSelected: (_, emoji) {
-                    setState(() {
-                      _selectedEmoji = emoji.emoji;
-                    });
+                    setState(() => _selectedEmoji = emoji.emoji);
                   },
-                  config: const Config(
+                  config: const emoji_picker.Config(
                     height: 280,
                     checkPlatformCompatibility: true,
-                    emojiViewConfig: EmojiViewConfig(
+                    emojiViewConfig: emoji_picker.EmojiViewConfig(
                       columns: 8,
                       emojiSizeMax: 28,
                       verticalSpacing: 0,
                       horizontalSpacing: 0,
                       recentsLimit: 28,
-                      noRecents: Text('No Recents', style: TextStyle(fontSize: 16, color: Colors.black26)),
-                      buttonMode: ButtonMode.MATERIAL,
+                      noRecents: Text(
+                        'No Recents',
+                        style: TextStyle(fontSize: 16, color: Colors.black26),
+                      ),
+                      buttonMode: emoji_picker.ButtonMode.MATERIAL,
                     ),
-                    categoryViewConfig: CategoryViewConfig(
-                      initCategory: Category.OBJECTS,
-                      showBackspaceButton: false,
+                    categoryViewConfig: emoji_picker.CategoryViewConfig(
+                      initCategory: emoji_picker.Category.OBJECTS,
                     ),
-                    bottomActionBarConfig: BottomActionBarConfig(enabled: false),
-                    searchViewConfig: SearchViewConfig(
+                    bottomActionBarConfig:
+                        emoji_picker.BottomActionBarConfig(enabled: false),
+                    searchViewConfig: emoji_picker.SearchViewConfig(
                       buttonIconColor: Colors.grey,
                     ),
                   ),
