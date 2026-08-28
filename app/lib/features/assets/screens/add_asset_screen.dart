@@ -23,10 +23,7 @@ class AddAssetScreen extends StatefulWidget {
 
   const AddAssetScreen({super.key, this.initialCategoryId});
 
-  static Future<void> navigateTo(
-    BuildContext context, {
-    String? categoryId,
-  }) {
+  static Future<void> navigateTo(BuildContext context, {String? categoryId}) {
     return Navigator.of(context).push(
       MaterialPageRoute(
         builder: (_) => AddAssetScreen(initialCategoryId: categoryId),
@@ -61,18 +58,11 @@ class _AddAssetScreenState extends State<AddAssetScreen> {
   void initState() {
     super.initState();
     _selectedCategoryId = widget.initialCategoryId;
-
     final database = AppDatabase();
     final storage = LocalFileStorage();
-    _assetRepository = AssetRepository(
-      database: database,
-      fileStorage: storage,
-    );
+    _assetRepository = AssetRepository(database: database, fileStorage: storage);
     _categoryRepository = CategoryRepository(database: database);
-    _documentRepository = AssetDocumentRepository(
-      database: database,
-      fileStorage: storage,
-    );
+    _documentRepository = AssetDocumentRepository(database: database, fileStorage: storage);
     _loadLocalCategories();
   }
 
@@ -80,19 +70,15 @@ class _AddAssetScreenState extends State<AddAssetScreen> {
     try {
       final categories = await _categoryRepository.getCategories('local_user');
       if (!mounted) return;
-
       final ids = categories.map((category) => category.id).toSet();
       setState(() {
         _categories = categories;
-        if (_selectedCategoryId != null &&
-            !ids.contains(_selectedCategoryId)) {
+        if (_selectedCategoryId != null && !ids.contains(_selectedCategoryId)) {
           _selectedCategoryId = null;
         }
       });
     } catch (_) {
-      if (mounted) {
-        setState(() => _categories = []);
-      }
+      if (mounted) setState(() => _categories = []);
     }
   }
 
@@ -126,54 +112,42 @@ class _AddAssetScreenState extends State<AddAssetScreen> {
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
-      builder: (sheetContext) {
-        return SafeArea(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const SizedBox(height: 12),
-              Text(
-                'Asset Photo',
-                style: GoogleFonts.outfit(
-                  fontSize: 18,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-              ListTile(
-                leading: const Icon(Icons.camera_alt_rounded),
-                title: const Text('Take Photo'),
-                onTap: () {
-                  Navigator.pop(sheetContext);
-                  _pickPrimaryImage(ImageSource.camera);
-                },
-              ),
-              ListTile(
-                leading: const Icon(Icons.photo_library_rounded),
-                title: const Text('Choose from Gallery'),
-                onTap: () {
-                  Navigator.pop(sheetContext);
-                  _pickPrimaryImage(ImageSource.gallery);
-                },
-              ),
-              const SizedBox(height: 8),
-            ],
-          ),
-        );
-      },
+      builder: (sheetContext) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const SizedBox(height: 12),
+            Text('Asset Photo', style: GoogleFonts.outfit(fontSize: 18, fontWeight: FontWeight.w700)),
+            ListTile(
+              leading: const Icon(Icons.camera_alt_rounded),
+              title: const Text('Take Photo'),
+              onTap: () {
+                Navigator.pop(sheetContext);
+                _pickPrimaryImage(ImageSource.camera);
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.photo_library_rounded),
+              title: const Text('Choose from Gallery'),
+              onTap: () {
+                Navigator.pop(sheetContext);
+                _pickPrimaryImage(ImageSource.gallery);
+              },
+            ),
+            const SizedBox(height: 8),
+          ],
+        ),
+      ),
     );
   }
 
   Future<void> _pickDocuments() async {
     try {
-      final result = await FilePicker.platform.pickFiles(
-        allowMultiple: true,
-      );
+      // file_picker 12 uses a static pickFiles API and returns the files directly.
+      final files = await FilePicker.pickFiles();
+      if (!mounted || files.isEmpty) return;
 
-      if (!mounted || result == null || result.files.isEmpty) {
-        return;
-      }
-
-      final picked = result.files
+      final picked = files
           .where((file) => file.path != null)
           .map((file) => File(file.path!))
           .toList();
@@ -192,13 +166,9 @@ class _AddAssetScreenState extends State<AddAssetScreen> {
 
   void _showSnackBar(String message, {bool isError = false}) {
     if (!mounted) return;
-
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text(
-          message,
-          style: GoogleFonts.outfit(fontWeight: FontWeight.w500),
-        ),
+        content: Text(message, style: GoogleFonts.outfit(fontWeight: FontWeight.w500)),
         backgroundColor: isError ? AppColors.error : AppColors.success,
         behavior: SnackBarBehavior.floating,
       ),
@@ -212,25 +182,22 @@ class _AddAssetScreenState extends State<AddAssetScreen> {
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
-      builder: (pickerContext) {
-        return SafeArea(
-          child: SizedBox(
-            height: 390,
-            child: EmojiPicker(
-              onEmojiSelected: (_, emoji) {
-                setState(() => _selectedEmoji = emoji.emoji);
-                Navigator.pop(pickerContext);
-              },
-            ),
+      builder: (pickerContext) => SafeArea(
+        child: SizedBox(
+          height: 390,
+          child: EmojiPicker(
+            onEmojiSelected: (_, emoji) {
+              setState(() => _selectedEmoji = emoji.emoji);
+              Navigator.pop(pickerContext);
+            },
           ),
-        );
-      },
+        ),
+      ),
     );
   }
 
   Future<void> _showCreateCategoryDialog() async {
     String? createdId;
-
     final created = await CreateCategorySheet.show(
       context,
       onCreateCategory: (name, emoji) async {
@@ -241,20 +208,15 @@ class _AddAssetScreenState extends State<AddAssetScreen> {
         );
       },
     );
-
     if (created == true && createdId != null && createdId!.isNotEmpty) {
       await _loadLocalCategories();
-      if (mounted) {
-        setState(() => _selectedCategoryId = createdId);
-      }
+      if (mounted) setState(() => _selectedCategoryId = createdId);
     }
   }
 
   Future<void> _saveAsset() async {
     if (!_formKey.currentState!.validate()) return;
-
     setState(() => _isLoading = true);
-
     try {
       final now = DateTime.now();
       final asset = LocalAsset(
@@ -263,42 +225,29 @@ class _AddAssetScreenState extends State<AddAssetScreen> {
         name: _nameController.text.trim(),
         categoryId: _selectedCategoryId,
         emoji: _selectedEmoji,
-        location: _locationController.text.trim().isEmpty
-            ? null
-            : _locationController.text.trim(),
-        description: _descriptionController.text.trim().isEmpty
-            ? null
-            : _descriptionController.text.trim(),
+        location: _locationController.text.trim().isEmpty ? null : _locationController.text.trim(),
+        description: _descriptionController.text.trim().isEmpty ? null : _descriptionController.text.trim(),
         imagePath: _primaryImage?.path,
         createdAt: now,
         updatedAt: now,
         qrEnabled: _qrEnabled,
       );
-
       await _assetRepository.createAsset(asset);
-
       for (final file in _documents) {
         await _documentRepository.addDocument(
           assetId: asset.id,
           sourceFile: file,
-          displayName: file.uri.pathSegments.isEmpty
-              ? 'Document'
-              : file.uri.pathSegments.last,
+          displayName: file.uri.pathSegments.isEmpty ? 'Document' : file.uri.pathSegments.last,
         );
       }
-
       if (mounted) {
         _showSnackBar('Asset created successfully.');
         Navigator.pop(context, true);
       }
     } catch (_) {
-      if (mounted) {
-        _showSnackBar('Failed to save asset.', isError: true);
-      }
+      if (mounted) _showSnackBar('Failed to save asset.', isError: true);
     } finally {
-      if (mounted) {
-        setState(() => _isLoading = false);
-      }
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 
@@ -307,10 +256,7 @@ class _AddAssetScreenState extends State<AddAssetScreen> {
     return Scaffold(
       backgroundColor: AppColors.scaffoldBg,
       appBar: AppBar(
-        title: Text(
-          'Create Asset',
-          style: GoogleFonts.outfit(fontWeight: FontWeight.w700),
-        ),
+        title: Text('Create Asset', style: GoogleFonts.outfit(fontWeight: FontWeight.w700)),
         backgroundColor: Colors.white,
         elevation: 0,
       ),
@@ -333,27 +279,15 @@ class _AddAssetScreenState extends State<AddAssetScreen> {
                         child: Column(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            const Icon(
-                              Icons.add_a_photo_outlined,
-                              size: 38,
-                              color: AppColors.primaryPurple,
-                            ),
+                            const Icon(Icons.add_a_photo_outlined, size: 38, color: AppColors.primaryPurple),
                             const SizedBox(height: 8),
-                            Text(
-                              'Add Asset Photo',
-                              style: GoogleFonts.outfit(
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
+                            Text('Add Asset Photo', style: GoogleFonts.outfit(fontWeight: FontWeight.w600)),
                           ],
                         ),
                       )
                     : ClipRRect(
                         borderRadius: BorderRadius.circular(20),
-                        child: Image.file(
-                          _primaryImage!,
-                          fit: BoxFit.cover,
-                        ),
+                        child: Image.file(_primaryImage!, fit: BoxFit.cover),
                       ),
               ),
             ),
@@ -363,9 +297,7 @@ class _AddAssetScreenState extends State<AddAssetScreen> {
               labelText: 'Asset Name *',
               hintText: 'e.g. Honda Bike',
               validator: (value) {
-                if (value == null || value.trim().isEmpty) {
-                  return 'Enter an asset name';
-                }
+                if (value == null || value.trim().isEmpty) return 'Enter an asset name';
                 return null;
               },
             ),
@@ -381,10 +313,7 @@ class _AddAssetScreenState extends State<AddAssetScreen> {
                 ),
                 child: Row(
                   children: [
-                    Text(
-                      _selectedEmoji,
-                      style: const TextStyle(fontSize: 28),
-                    ),
+                    Text(_selectedEmoji, style: const TextStyle(fontSize: 28)),
                     const SizedBox(width: 12),
                     const Expanded(child: Text('Choose emoji')),
                     const Icon(Icons.chevron_right_rounded),
@@ -400,9 +329,7 @@ class _AddAssetScreenState extends State<AddAssetScreen> {
                 ..._categories.map(
                   (category) => DropdownMenuItem<String>(
                     value: category.id,
-                    child: Text(
-                      '${category.emoji ?? '📂'} ${category.name}',
-                    ),
+                    child: Text('${category.emoji ?? '📂'} ${category.name}'),
                   ),
                 ),
                 const DropdownMenuItem<String>(
@@ -442,17 +369,11 @@ class _AddAssetScreenState extends State<AddAssetScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    'Documents & Files',
-                    style: GoogleFonts.outfit(fontWeight: FontWeight.w700),
-                  ),
+                  Text('Documents & Files', style: GoogleFonts.outfit(fontWeight: FontWeight.w700)),
                   const SizedBox(height: 6),
                   Text(
                     'Attach receipts, warranties, manuals or other files.',
-                    style: GoogleFonts.outfit(
-                      fontSize: 12,
-                      color: AppColors.textSecondary,
-                    ),
+                    style: GoogleFonts.outfit(fontSize: 12, color: AppColors.textSecondary),
                   ),
                   const SizedBox(height: 12),
                   OutlinedButton.icon(
@@ -467,16 +388,10 @@ class _AddAssetScreenState extends State<AddAssetScreen> {
                         contentPadding: EdgeInsets.zero,
                         dense: true,
                         leading: const Icon(Icons.insert_drive_file_outlined),
-                        title: Text(
-                          file.uri.pathSegments.last,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
+                        title: Text(file.uri.pathSegments.last, maxLines: 1, overflow: TextOverflow.ellipsis),
                         trailing: IconButton(
                           icon: const Icon(Icons.close_rounded),
-                          onPressed: () {
-                            setState(() => _documents.remove(file));
-                          },
+                          onPressed: () => setState(() => _documents.remove(file)),
                         ),
                       ),
                     ),
