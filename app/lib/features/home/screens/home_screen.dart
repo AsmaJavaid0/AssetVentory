@@ -9,7 +9,6 @@ import '../../../core/di/service_locator.dart';
 import '../../assets/models/local_asset.dart';
 import '../../assets/models/local_category.dart';
 import '../../assets/screens/asset_details_screen.dart';
-import '../../assets/screens/categories_screen.dart';
 import '../../tasks/models/task_model.dart';
 import 'notifications_screen.dart';
 

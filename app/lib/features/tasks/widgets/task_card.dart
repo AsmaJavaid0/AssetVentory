@@ -51,15 +51,16 @@ class TaskCard extends StatelessWidget {
       ),
       child: ClipRRect(
         borderRadius: BorderRadius.circular(18),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Container(
-              width: 5,
-              color: isCompleted ? AppColors.success : _getPriorityColor(),
-            ),
-            Expanded(
-              child: InkWell(
+        child: IntrinsicHeight(
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Container(
+                width: 5,
+                color: isCompleted ? AppColors.success : _getPriorityColor(),
+              ),
+              Expanded(
+                child: InkWell(
                 onTap: onTap,
                 child: Padding(
                   padding: const EdgeInsets.all(14),
@@ -153,6 +154,7 @@ class TaskCard extends StatelessWidget {
           ],
         ),
       ),
-    );
-  }
+    ),
+  );
+}
 }

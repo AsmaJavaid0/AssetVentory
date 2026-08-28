@@ -163,7 +163,6 @@ class _AddAssetScreenState extends State<AddAssetScreen> {
       },
     );
   }
-  }
 
   Future<void> _saveAsset() async {
     if (!_formKey.currentState!.validate()) return;

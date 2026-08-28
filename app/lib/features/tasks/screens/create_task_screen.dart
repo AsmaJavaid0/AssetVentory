@@ -13,7 +13,6 @@ import '../../family/models/family_member_model.dart';
 import '../../family/models/family_model.dart';
 import '../models/task_model.dart';
 import '../widgets/asset_picker_sheet.dart';
-import '../widgets/family_member_picker.dart';
 
 class CreateTaskScreen extends StatefulWidget {
   final LocalAsset? preselectedAsset;
@@ -39,7 +38,6 @@ class _CreateTaskScreenState extends State<CreateTaskScreen> {
   RepeatType _repeatType = RepeatType.none;
   FamilyModel? _userFamily;
   FamilyMemberModel? _assignedMember;
-  bool _isLoadingFamily = true;
   bool _isSaving = false;
 
   @override void initState() { super.initState(); _selectedAsset = widget.preselectedAsset; _reminderMinutesBefore = serviceLocator.preferences.defaultReminderMinutes; _reminderEnabled = serviceLocator.preferences.taskRemindersEnabled; _checkFamilyMembership(); }
@@ -47,8 +45,12 @@ class _CreateTaskScreenState extends State<CreateTaskScreen> {
 
   Future<void> _checkFamilyMembership() async {
     final user = FirebaseAuth.instance.currentUser;
-    if (user != null) { try { final family = await _familyRepository.getUserFamily(user.uid); if (mounted) setState(() { _userFamily = family; _isLoadingFamily = false; }); } catch (_) { if (mounted) setState(() => _isLoadingFamily = false); } }
-    else if (mounted) setState(() => _isLoadingFamily = false);
+    if (user != null) {
+      try {
+        final family = await _familyRepository.getUserFamily(user.uid);
+        if (mounted) setState(() => _userFamily = family);
+      } catch (_) {}
+    }
   }
   Future<void> _pickDate() async { final now = DateTime.now(); final picked = await showDatePicker(context: context, initialDate: _dueDate, firstDate: now.subtract(const Duration(days: 365)), lastDate: now.add(const Duration(days: 365 * 5))); if (picked != null) setState(() => _dueDate = DateTime(picked.year, picked.month, picked.day)); }
   Future<void> _pickTime() async { final picked = await showTimePicker(context: context, initialTime: TimeOfDay.now()); if (picked != null) setState(() => _dueTime = picked); }
