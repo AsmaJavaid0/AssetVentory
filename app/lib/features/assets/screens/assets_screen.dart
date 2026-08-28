@@ -1,8 +1,6 @@
 import 'dart:io';
-
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-
 import '../../../core/constants/app_colors.dart';
 import '../../../core/database/app_database.dart';
 import '../../../core/storage/local_file_storage.dart';
@@ -11,36 +9,32 @@ import '../models/local_category.dart';
 import '../repositories/asset_repository.dart';
 import '../repositories/category_repository.dart';
 import 'asset_details_screen.dart';
-import 'categories_screen.dart';
+import 'category_detail_screen.dart';
 import '../../home/widgets/add_quick_asset_sheet.dart';
 
-enum _AssetFilter { all, categorized, uncategorized }
-
+enum _AssetView { all, categories }
 enum _AssetSort { newest, name, location }
 
 class AssetsScreen extends StatefulWidget {
   const AssetsScreen({super.key});
-
   @override
   State<AssetsScreen> createState() => _AssetsScreenState();
 }
 
-class _AssetsScreenState extends State<AssetsScreen>
-    with SingleTickerProviderStateMixin {
-  static const _localUserId = 'local_user';
+class _AssetsScreenState extends State<AssetsScreen> with SingleTickerProviderStateMixin {
+  static const _ownerId = 'local_user';
   final _searchController = TextEditingController();
   late final AppDatabase _database;
   late final AssetRepository _assetRepository;
   late final CategoryRepository _categoryRepository;
-  late final AnimationController _searchAnimController;
+  late final AnimationController _searchControllerAnim;
   late final Animation<double> _searchAnimation;
-
   List<LocalAsset> _assets = [];
   List<LocalCategory> _categories = [];
   bool _loading = true;
   bool _searchVisible = false;
   String _searchQuery = '';
-  _AssetFilter _filter = _AssetFilter.all;
+  _AssetView _view = _AssetView.all;
   _AssetSort _sort = _AssetSort.newest;
 
   @override
@@ -49,512 +43,252 @@ class _AssetsScreenState extends State<AssetsScreen>
     _database = AppDatabase();
     _assetRepository = AssetRepository(database: _database, fileStorage: LocalFileStorage());
     _categoryRepository = CategoryRepository(database: _database);
-    _searchAnimController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 220),
-    );
-    _searchAnimation = CurvedAnimation(
-      parent: _searchAnimController,
-      curve: Curves.easeOutCubic,
-    );
+    _searchControllerAnim = AnimationController(vsync: this, duration: const Duration(milliseconds: 200));
+    _searchAnimation = CurvedAnimation(parent: _searchControllerAnim, curve: Curves.easeOutCubic);
     _load();
+  }
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    _searchControllerAnim.dispose();
+    super.dispose();
   }
 
   Future<void> _load() async {
     try {
-      final assets = await _assetRepository.getAssets(_localUserId);
-      final categories = await _categoryRepository.getCategories(_localUserId);
+      final assets = await _assetRepository.getAssets(_ownerId);
+      final categories = await _categoryRepository.getCategories(_ownerId);
       if (!mounted) return;
-      setState(() {
-        _assets = assets;
-        _categories = categories;
-        _loading = false;
-      });
-    } catch (e, stackTrace) {
+      setState(() { _assets = assets; _categories = categories; _loading = false; });
+    } catch (e, st) {
       debugPrint('Assets load error: $e');
-      debugPrintStack(stackTrace: stackTrace);
-      if (!mounted) return;
-      setState(() => _loading = false);
+      debugPrintStack(stackTrace: st);
+      if (mounted) setState(() => _loading = false);
     }
   }
 
   List<LocalAsset> get _filteredAssets {
     final query = _searchQuery.toLowerCase();
-    final result = _assets.where((asset) {
-      final filterMatches = switch (_filter) {
-        _AssetFilter.all => true,
-        _AssetFilter.categorized => asset.categoryId != null,
-        _AssetFilter.uncategorized => asset.categoryId == null,
-      };
-      final searchMatches = query.isEmpty ||
-          asset.name.toLowerCase().contains(query) ||
-          (asset.location?.toLowerCase().contains(query) ?? false) ||
-          (asset.description?.toLowerCase().contains(query) ?? false);
-      return filterMatches && searchMatches;
+    final result = _assets.where((a) {
+      if (query.isNotEmpty && !a.name.toLowerCase().contains(query) && !(a.location?.toLowerCase().contains(query) ?? false) && !(a.description?.toLowerCase().contains(query) ?? false)) return false;
+      return _view == _AssetView.all;
     }).toList();
-
     result.sort((a, b) {
       switch (_sort) {
-        case _AssetSort.newest:
-          return b.createdAt.compareTo(a.createdAt);
-        case _AssetSort.name:
-          return a.name.toLowerCase().compareTo(b.name.toLowerCase());
-        case _AssetSort.location:
-          return (a.location ?? '').toLowerCase().compareTo((b.location ?? '').toLowerCase());
+        case _AssetSort.newest: return b.createdAt.compareTo(a.createdAt);
+        case _AssetSort.name: return a.name.toLowerCase().compareTo(b.name.toLowerCase());
+        case _AssetSort.location: return (a.location ?? '').toLowerCase().compareTo((b.location ?? '').toLowerCase());
       }
     });
     return result;
   }
 
-  String _categoryName(String? id) {
-    if (id == null) return 'Uncategorized';
-    for (final category in _categories) {
-      if (category.id == id) return category.name;
-    }
-    return 'Uncategorized';
-  }
+  int _countFor(String id) => _assets.where((a) => a.categoryId == id).length;
 
-  Future<void> _openDetails(LocalAsset asset) async {
+  Future<void> _openAsset(LocalAsset asset) async {
     await AssetDetailsScreen.navigateTo(context, asset);
     if (mounted) await _load();
   }
 
-  Future<void> _openCategories() async {
-    await CategoriesScreen.navigateTo(context);
+  Future<void> _openCategory(LocalCategory category) async {
+    await CategoryDetailScreen.navigateTo(context, category);
     if (mounted) await _load();
   }
 
   void _toggleSearch() {
     setState(() => _searchVisible = !_searchVisible);
     if (_searchVisible) {
-      _searchAnimController.forward();
+      _searchControllerAnim.forward();
     } else {
-      _searchAnimController.reverse();
+      _searchControllerAnim.reverse();
       _searchController.clear();
       setState(() => _searchQuery = '');
     }
   }
 
+  Future<void> _addAsset() async {
+    await AddQuickAssetSheet.show(context);
+    if (mounted) await _load();
+  }
+
   @override
   Widget build(BuildContext context) {
-    if (_loading) {
-      return const Scaffold(body: Center(child: CircularProgressIndicator()));
-    }
-
-    final assets = _filteredAssets;
+    if (_loading) return const Scaffold(body: Center(child: CircularProgressIndicator()));
     return Scaffold(
       backgroundColor: AppColors.scaffoldBg,
-      body: Stack(
-        children: [
-          Column(
-            children: [
-              _buildHeader(),
-              _buildFilterPills(),
-              Expanded(
-                child: assets.isEmpty ? _buildEmptyState() : _buildAssetList(assets),
-              ),
-            ],
-          ),
-          // Floating Search Overlay
-          if (_searchVisible)
-            Positioned(
-              top: MediaQuery.of(context).padding.top + 60,
-              left: 16,
-              right: 16,
-              child: FadeTransition(
-                opacity: _searchAnimation,
-                child: Material(
-                  elevation: 8,
-                  borderRadius: BorderRadius.circular(14),
-                  child: _buildSearchBar(),
-                ),
-              ),
-            ),
-        ],
-      ),
       floatingActionButton: FloatingActionButton.extended(
         heroTag: 'assets_fab',
-        onPressed: () async {
-          await AddQuickAssetSheet.show(context);
-          if (mounted) await _load();
-        },
+        onPressed: _addAsset,
         backgroundColor: AppColors.primaryPurple,
-        elevation: 4,
         icon: const Icon(Icons.add_rounded, color: Colors.white),
-        label: Text(
-          'Add Asset',
-          style: GoogleFonts.outfit(color: Colors.white, fontWeight: FontWeight.w600),
-        ),
+        label: Text('Add Asset', style: GoogleFonts.outfit(color: Colors.white, fontWeight: FontWeight.w700)),
       ),
+      body: Column(children: [
+        _header(),
+        _tabs(),
+        Expanded(child: _view == _AssetView.categories ? _categoriesView() : _assetsView()),
+      ]),
     );
   }
 
-  Widget _buildHeader() {
-    final topPad = MediaQuery.of(context).padding.top;
+  Widget _header() {
+    final top = MediaQuery.of(context).padding.top;
     return Container(
-      width: double.infinity,
+      padding: EdgeInsets.fromLTRB(20, top + 16, 12, 20),
       decoration: const BoxDecoration(
         color: AppColors.heroDarkBg,
         borderRadius: BorderRadius.vertical(bottom: Radius.circular(24)),
       ),
-      padding: EdgeInsets.fromLTRB(20, topPad + 16, 12, 24),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.center,
-        children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  'My Assets',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: GoogleFonts.outfit(
-                    fontSize: 24,
-                    color: Colors.white,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  '${_assets.length} item${_assets.length == 1 ? '' : 's'} in your collection',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: GoogleFonts.outfit(
-                    fontSize: 12,
-                    color: const Color(0xFFB8AED6),
-                  ),
-                ),
-              ],
-            ),
-          ),
-          _headerIconBtn(
-            icon: _searchVisible ? Icons.search_off_rounded : Icons.search_rounded,
-            tooltip: _searchVisible ? 'Close search' : 'Search assets',
-            onTap: _toggleSearch,
-            active: _searchVisible,
-          ),
-          _headerIconBtn(
-            icon: Icons.folder_outlined,
-            tooltip: 'Categories',
-            onTap: _openCategories,
-          ),
-          PopupMenuButton<_AssetSort>(
-            tooltip: 'Sort',
-            icon: const Icon(Icons.sort_rounded, color: Colors.white, size: 22),
-            color: Colors.white,
-            onSelected: (value) => setState(() => _sort = value),
-            itemBuilder: (_) => const [
-              PopupMenuItem(value: _AssetSort.newest, child: Text('Newest first')),
-              PopupMenuItem(value: _AssetSort.name, child: Text('Name A–Z')),
-              PopupMenuItem(value: _AssetSort.location, child: Text('Location A–Z')),
-            ],
-          ),
-        ],
-      ),
+      child: Row(children: [
+        Expanded(child: Text('My Assets', style: GoogleFonts.outfit(fontSize: 24, color: Colors.white, fontWeight: FontWeight.w700))),
+        IconButton(onPressed: _toggleSearch, tooltip: 'Search', icon: Icon(_searchVisible ? Icons.close_rounded : Icons.search_rounded, color: Colors.white)),
+        PopupMenuButton<_AssetSort>(
+          tooltip: 'Sort', icon: const Icon(Icons.sort_rounded, color: Colors.white), color: Colors.white,
+          onSelected: (v) => setState(() => _sort = v),
+          itemBuilder: (_) => const [
+            PopupMenuItem(value: _AssetSort.newest, child: Text('Newest first')),
+            PopupMenuItem(value: _AssetSort.name, child: Text('Name A–Z')),
+            PopupMenuItem(value: _AssetSort.location, child: Text('Location A–Z')),
+          ],
+        ),
+      ]),
     );
   }
 
-  Widget _headerIconBtn({
-    required IconData icon,
-    required String tooltip,
-    required VoidCallback onTap,
-    bool active = false,
-  }) {
-    return Tooltip(
-      message: tooltip,
-      child: GestureDetector(
-        onTap: onTap,
-        child: Container(
-          width: 36,
-          height: 36,
-          margin: const EdgeInsets.symmetric(horizontal: 2),
-          decoration: BoxDecoration(
-            color: active ? Colors.white.withAlpha(40) : Colors.transparent,
-            shape: BoxShape.circle,
-          ),
-          child: Icon(icon, color: Colors.white, size: 22),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildSearchBar() {
-    return Container(
-      color: const Color(0xFF1F1040),
-      padding: const EdgeInsets.fromLTRB(16, 0, 16, 14),
-      child: Container(
-        decoration: BoxDecoration(
-          color: Colors.white.withAlpha(18),
-          borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: Colors.white.withAlpha(35)),
-        ),
-        child: TextField(
-          controller: _searchController,
-          autofocus: true,
-          onChanged: (value) => setState(() => _searchQuery = value.trim()),
-          style: GoogleFonts.outfit(color: Colors.white, fontSize: 14),
-          decoration: InputDecoration(
-            hintText: 'Search by name, location…',
-            hintStyle: GoogleFonts.outfit(color: const Color(0xFFB8AED6), fontSize: 14),
-            prefixIcon: const Icon(Icons.search_rounded, color: Color(0xFFB8AED6), size: 20),
-            suffixIcon: _searchQuery.isNotEmpty
-                ? IconButton(
-                    icon: const Icon(Icons.clear, color: Colors.white, size: 18),
-                    onPressed: () {
-                      _searchController.clear();
-                      setState(() => _searchQuery = '');
-                    },
-                  )
-                : null,
-            border: InputBorder.none,
-            contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildFilterPills() {
+  Widget _tabs() {
     return Container(
       color: Colors.white,
       padding: const EdgeInsets.fromLTRB(16, 10, 16, 10),
-      child: Row(
-        children: [
-          Expanded(child: _filterPill('All', _AssetFilter.all)),
-          const SizedBox(width: 8),
-          Expanded(child: _filterPill('Categorized', _AssetFilter.categorized)),
-          const SizedBox(width: 8),
-          Expanded(child: _filterPill('Uncategorized', _AssetFilter.uncategorized)),
-        ],
-      ),
+      child: Row(children: [
+        Expanded(child: _tab('All', _AssetView.all)),
+        const SizedBox(width: 8),
+        Expanded(child: _tab('Categories', _AssetView.categories)),
+      ]),
     );
   }
 
-  Widget _filterPill(String label, _AssetFilter filter) {
-    final selected = _filter == filter;
+  Widget _tab(String label, _AssetView view) {
+    final selected = _view == view;
     return GestureDetector(
-      onTap: () => setState(() => _filter = filter),
+      onTap: () => setState(() => _view = view),
       child: AnimatedContainer(
-        duration: const Duration(milliseconds: 160),
-        height: 38,
+        duration: const Duration(milliseconds: 160), height: 40,
         alignment: Alignment.center,
         decoration: BoxDecoration(
           color: selected ? AppColors.primaryPurple : AppColors.scaffoldBg,
           borderRadius: BorderRadius.circular(20),
-          border: Border.all(
-            color: selected ? AppColors.primaryPurple : const Color(0xFFE7E2EF),
-          ),
+          border: Border.all(color: selected ? AppColors.primaryPurple : const Color(0xFFE5E0EC)),
         ),
-        child: Text(
-          label,
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-          style: GoogleFonts.outfit(
-            fontSize: 12,
-            fontWeight: FontWeight.w600,
-            color: selected ? Colors.white : AppColors.textSecondary,
-          ),
-        ),
+        child: Text(label, style: GoogleFonts.outfit(fontSize: 13, fontWeight: FontWeight.w700, color: selected ? Colors.white : AppColors.textSecondary)),
       ),
     );
   }
 
-  Widget _buildAssetList(List<LocalAsset> assets) {
-    return RefreshIndicator(
-      color: AppColors.primaryPurple,
-      onRefresh: _load,
-      child: ListView.separated(
-        physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
-        padding: const EdgeInsets.fromLTRB(16, 12, 16, 100),
-        itemCount: assets.length,
-        separatorBuilder: (_, _) => const SizedBox(height: 10),
-        itemBuilder: (context, index) => _buildAssetCard(assets[index]),
-      ),
-    );
-  }
-
-  Widget _buildAssetCard(LocalAsset asset) {
-    return GestureDetector(
-      onTap: () => _openDetails(asset),
+  Widget _searchBar() {
+    return SizeTransition(
+      sizeFactor: _searchAnimation,
       child: Container(
-        width: double.infinity,
-        padding: const EdgeInsets.all(12),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(18),
-          border: Border.all(color: const Color(0xFFEFEBF6)),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withAlpha(5),
-              blurRadius: 10,
-              offset: const Offset(0, 3),
-            ),
-          ],
-        ),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.center,
-          children: [
-            _thumbnail(asset),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    asset.name,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: GoogleFonts.outfit(
-                      fontSize: 15,
-                      fontWeight: FontWeight.w700,
-                      color: AppColors.textPrimary,
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  Row(
-                    children: [
-                      const Icon(Icons.folder_outlined, size: 12, color: AppColors.textSecondary),
-                      const SizedBox(width: 4),
-                      Expanded(
-                        child: Text(
-                          _categoryName(asset.categoryId),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: GoogleFonts.outfit(
-                            fontSize: 12,
-                            color: AppColors.textSecondary,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                  if (asset.location?.isNotEmpty == true) ...[
-                    const SizedBox(height: 3),
-                    Row(
-                      children: [
-                        const Icon(Icons.location_on_outlined, size: 12, color: AppColors.textMuted),
-                        const SizedBox(width: 4),
-                        Expanded(
-                          child: Text(
-                            asset.location!,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: GoogleFonts.outfit(
-                              fontSize: 11,
-                              color: AppColors.textMuted,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ],
-              ),
-            ),
-            const SizedBox(width: 4),
-            const Icon(Icons.chevron_right_rounded, color: AppColors.textMuted, size: 20),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _thumbnail(LocalAsset asset) {
-    final path = asset.imagePath;
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(14),
-      child: Container(
-        width: 80,
-        height: 68,
-        color: AppColors.primaryPurple.withAlpha(15),
-        child: path != null && path.isNotEmpty
-            ? Image.file(File(path), fit: BoxFit.cover, errorBuilder: (_, _, _) => _emoji(asset))
-            : _emoji(asset),
-      ),
-    );
-  }
-
-  Widget _emoji(LocalAsset asset) =>
-      Center(child: Text(asset.emoji ?? '📦', style: const TextStyle(fontSize: 32)));
-
-  Widget _buildEmptyState() {
-    final label = switch (_filter) {
-      _AssetFilter.all => 'No assets yet.',
-      _AssetFilter.categorized => 'No categorized assets.',
-      _AssetFilter.uncategorized => 'No uncategorized assets.',
-    };
-    return RefreshIndicator(
-      color: AppColors.primaryPurple,
-      onRefresh: _load,
-      child: ListView(
-        physics: const AlwaysScrollableScrollPhysics(),
-        children: [
-          const SizedBox(height: 80),
-          Center(
-            child: Padding(
-              padding: const EdgeInsets.all(32),
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(24),
-                    decoration: BoxDecoration(
-                      color: AppColors.lightLavender,
-                      shape: BoxShape.circle,
-                    ),
-                    child: const Icon(
-                      Icons.inventory_2_outlined,
-                      size: 64,
-                      color: AppColors.primaryPurple,
-                    ),
-                  ),
-                  const SizedBox(height: 24),
-                  Text(
-                    label,
-                    style: GoogleFonts.outfit(
-                      fontSize: 20,
-                      fontWeight: FontWeight.w700,
-                      color: AppColors.textPrimary,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    'Your inventory is looking a bit empty. Start adding your belongings to keep everything organized!',
-                    textAlign: TextAlign.center,
-                    style: GoogleFonts.outfit(
-                      fontSize: 14,
-                      color: AppColors.textSecondary,
-                    ),
-                  ),
-                  const SizedBox(height: 24),
-                  ElevatedButton.icon(
-                    onPressed: () async {
-                      await AddQuickAssetSheet.show(context);
-                      if (mounted) await _load();
-                    },
-                    icon: const Icon(Icons.add_rounded),
-                    label: const Text('Add Your First Asset'),
-                    style: ElevatedButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-                    ),
-                  ),
-                ],
-              ),
-            ),
+        color: const Color(0xFF1F1040),
+        padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+        child: TextField(
+          controller: _searchController,
+          autofocus: true,
+          onChanged: (v) => setState(() => _searchQuery = v.trim()),
+          style: const TextStyle(color: Colors.white),
+          decoration: InputDecoration(
+            hintText: 'Search assets...', hintStyle: const TextStyle(color: Color(0xFFB8AED6)),
+            prefixIcon: const Icon(Icons.search_rounded, color: Color(0xFFB8AED6)),
+            filled: true, fillColor: Colors.white.withAlpha(18), border: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: BorderSide.none),
           ),
-        ],
+        ),
       ),
     );
   }
 
-  @override
-  void dispose() {
-    _searchController.dispose();
-    _searchAnimController.dispose();
-    _database.close();
-    super.dispose();
+  Widget _assetsView() {
+    final assets = _filteredAssets;
+    return Column(children: [
+      if (_searchVisible) _searchBar(),
+      Expanded(
+        child: assets.isEmpty
+            ? _emptyAssets()
+            : RefreshIndicator(
+                color: AppColors.primaryPurple, onRefresh: _load,
+                child: ListView.separated(
+                  padding: const EdgeInsets.fromLTRB(16, 14, 16, 100),
+                  physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
+                  itemCount: assets.length,
+                  separatorBuilder: (_, _) => const SizedBox(height: 10),
+                  itemBuilder: (_, i) => _assetCard(assets[i]),
+                ),
+              ),
+      ),
+    ]);
+  }
+
+  Widget _emptyAssets() => RefreshIndicator(
+    color: AppColors.primaryPurple,
+    onRefresh: _load,
+    child: ListView(children: [
+      const SizedBox(height: 150),
+      Center(child: Icon(Icons.inventory_2_outlined, size: 58, color: AppColors.primaryPurple.withAlpha(90))),
+      const SizedBox(height: 14),
+      Center(child: Text('No assets yet', style: GoogleFonts.outfit(fontSize: 20, fontWeight: FontWeight.w700))),
+      const SizedBox(height: 6),
+      Center(child: Text('Tap the + button below to add your first asset.', style: GoogleFonts.outfit(color: AppColors.textSecondary))),
+    ]),
+  );
+
+  Widget _assetCard(LocalAsset a) => GestureDetector(
+    onTap: () => _openAsset(a),
+    child: Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(18), border: Border.all(color: const Color(0xFFEFEBF6))),
+      child: Row(children: [
+        ClipRRect(borderRadius: BorderRadius.circular(14), child: Container(width: 78, height: 68, color: AppColors.primaryPurple.withAlpha(15), child: a.imagePath?.isNotEmpty == true ? Image.file(File(a.imagePath!), fit: BoxFit.cover, errorBuilder: (_, _, _) => _assetEmoji(a)) : _assetEmoji(a))),
+        const SizedBox(width: 12),
+        Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
+          Text(a.name, maxLines: 1, overflow: TextOverflow.ellipsis, style: GoogleFonts.outfit(fontWeight: FontWeight.w700, fontSize: 15)),
+          const SizedBox(height: 5),
+          Text(a.categoryId == null ? 'No category' : (_categories.where((c) => c.id == a.categoryId).map((c) => c.name).firstOrNull ?? 'Category'), maxLines: 1, overflow: TextOverflow.ellipsis, style: GoogleFonts.outfit(fontSize: 12, color: AppColors.textSecondary)),
+          if (a.location?.isNotEmpty == true) Text(a.location!, maxLines: 1, overflow: TextOverflow.ellipsis, style: GoogleFonts.outfit(fontSize: 11, color: AppColors.textMuted)),
+        ])),
+        const Icon(Icons.chevron_right_rounded, color: AppColors.textMuted),
+      ]),
+    ),
+  );
+
+  Widget _assetEmoji(LocalAsset a) => Center(child: Text(a.emoji ?? '📦', style: const TextStyle(fontSize: 32)));
+
+  Widget _categoriesView() {
+    return RefreshIndicator(
+      color: AppColors.primaryPurple, onRefresh: _load,
+      child: _categories.isEmpty
+          ? ListView(children: [const SizedBox(height: 170), Center(child: Text('No categories yet.'))])
+          : ListView.separated(
+              padding: const EdgeInsets.fromLTRB(16, 14, 16, 100),
+              physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
+              itemCount: _categories.length,
+              separatorBuilder: (_, _) => const SizedBox(height: 10),
+              itemBuilder: (_, i) {
+                final c = _categories[i];
+                final count = _countFor(c.id);
+                return GestureDetector(
+                  onTap: () => _openCategory(c),
+                  child: Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(18), border: Border.all(color: const Color(0xFFEFEBF6))),
+                    child: Row(children: [
+                      Container(width: 54, height: 54, alignment: Alignment.center, decoration: BoxDecoration(gradient: AppColors.primaryGradient, borderRadius: BorderRadius.circular(15)), child: Text(c.emoji ?? '📂', style: const TextStyle(fontSize: 27))),
+                      const SizedBox(width: 14),
+                      Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text(c.name, maxLines: 1, overflow: TextOverflow.ellipsis, style: GoogleFonts.outfit(fontSize: 16, fontWeight: FontWeight.w700)), const SizedBox(height: 4), Text('$count ${count == 1 ? 'asset' : 'assets'}', style: GoogleFonts.outfit(fontSize: 12, color: AppColors.textSecondary))])),
+                      const Icon(Icons.chevron_right_rounded, color: AppColors.textMuted),
+                    ]),
+                  ),
+                );
+              },
+            ),
+    );
   }
 }
