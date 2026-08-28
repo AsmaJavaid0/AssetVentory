@@ -13,6 +13,7 @@ import '../../features/family/repositories/interfaces/i_family_repository.dart';
 import '../../features/family/repositories/family_repository.dart';
 
 import '../../features/tasks/services/task_service.dart';
+import '../../features/tasks/services/local_task_store.dart';
 import '../../features/tasks/services/task_notification_service.dart';
 import '../../features/tasks/services/fcm_service.dart';
 
@@ -24,6 +25,7 @@ class ServiceLocator {
   ICategoryRepository get categoryRepository => getIt<ICategoryRepository>();
   IFamilyRepository get familyRepository => getIt<IFamilyRepository>();
   TaskService get taskService => getIt<TaskService>();
+  LocalTaskStore get localTaskStore => getIt<LocalTaskStore>();
   TaskNotificationService get taskNotificationService => getIt<TaskNotificationService>();
   FcmService get fcmService => getIt<FcmService>();
   AppDatabase get database => getIt<AppDatabase>();
@@ -37,40 +39,28 @@ class ServiceLocator {
 final serviceLocator = ServiceLocator();
 
 Future<void> setupServiceLocator() async {
-  // Core Services
   getIt.registerLazySingleton<AppDatabase>(() => AppDatabase());
   getIt.registerLazySingleton<LocalFileStorage>(() => LocalFileStorage());
   getIt.registerLazySingleton<AppPreferencesService>(() => AppPreferencesService());
 
-  // Task & Notification Services
+  getIt.registerLazySingleton<LocalTaskStore>(() => LocalTaskStore());
   getIt.registerLazySingleton<TaskNotificationService>(() => TaskNotificationService());
   getIt.registerLazySingleton<FcmService>(() => FcmService());
-  getIt.registerLazySingleton<TaskService>(() => TaskService());
+  getIt.registerLazySingleton<TaskService>(() => TaskService(localStore: getIt<LocalTaskStore>()));
 
-  // Repositories - Registered as their interfaces for better testability
-  getIt.registerLazySingleton<IAssetRepository>(
-    () => AssetRepository(
-      database: getIt<AppDatabase>(),
-      fileStorage: getIt<LocalFileStorage>(),
-    ),
-  );
+  getIt.registerLazySingleton<IFamilyRepository>(() => FamilyRepository());
 
-  getIt.registerLazySingleton<IAssetDocumentRepository>(
-    () => AssetDocumentRepository(
-      database: getIt<AppDatabase>(),
-      fileStorage: getIt<LocalFileStorage>(),
-    ),
-  );
-
-  getIt.registerLazySingleton<ICategoryRepository>(
-    () => CategoryRepository(
-      database: getIt<AppDatabase>(),
-    ),
-  );
-
-  getIt.registerLazySingleton<IFamilyRepository>(
-    () => FamilyRepository(),
-  );
+  getIt.registerLazySingleton<IAssetRepository>(() => AssetRepository(
+        database: getIt<AppDatabase>(),
+        fileStorage: getIt<LocalFileStorage>(),
+      ));
+  getIt.registerLazySingleton<IAssetDocumentRepository>(() => AssetDocumentRepository(
+        database: getIt<AppDatabase>(),
+        fileStorage: getIt<LocalFileStorage>(),
+      ));
+  getIt.registerLazySingleton<ICategoryRepository>(() => CategoryRepository(
+        database: getIt<AppDatabase>(),
+      ));
 }
 
 void disposeServiceLocator() {
