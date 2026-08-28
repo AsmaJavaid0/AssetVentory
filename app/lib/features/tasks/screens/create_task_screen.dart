@@ -9,8 +9,6 @@ import '../../../core/utils/error_formatter.dart';
 import '../../../core/widgets/custom_button.dart';
 import '../../../core/widgets/custom_text_field.dart';
 import '../../assets/models/local_asset.dart';
-import '../../family/models/family_member_model.dart';
-import '../../family/models/family_model.dart';
 import '../models/task_model.dart';
 import '../widgets/asset_picker_sheet.dart';
 
@@ -26,7 +24,6 @@ class _CreateTaskScreenState extends State<CreateTaskScreen> {
   final _titleController = TextEditingController();
   final _descriptionController = TextEditingController();
   final _taskService = serviceLocator.taskService;
-  final _familyRepository = serviceLocator.familyRepository;
   TaskType _taskType = TaskType.generalTask;
   final TaskPriority _priority = TaskPriority.medium;
   LocalAsset? _selectedAsset;
@@ -36,22 +33,11 @@ class _CreateTaskScreenState extends State<CreateTaskScreen> {
   bool _reminderEnabled = true;
   int _reminderMinutesBefore = 15;
   final RepeatType _repeatType = RepeatType.none;
-  FamilyModel? _userFamily;
-  FamilyMemberModel? _assignedMember;
   bool _isSaving = false;
 
-  @override void initState() { super.initState(); _selectedAsset = widget.preselectedAsset; _reminderMinutesBefore = serviceLocator.preferences.defaultReminderMinutes; _reminderEnabled = serviceLocator.preferences.taskRemindersEnabled; _checkFamilyMembership(); }
+  @override void initState() { super.initState(); _selectedAsset = widget.preselectedAsset; _reminderMinutesBefore = serviceLocator.preferences.defaultReminderMinutes; _reminderEnabled = serviceLocator.preferences.taskRemindersEnabled; }
   @override void dispose() { _titleController.dispose(); _descriptionController.dispose(); super.dispose(); }
 
-  Future<void> _checkFamilyMembership() async {
-    final user = FirebaseAuth.instance.currentUser;
-    if (user != null) {
-      try {
-        final family = await _familyRepository.getUserFamily(user.uid);
-        if (mounted) setState(() => _userFamily = family);
-      } catch (_) {}
-    }
-  }
   Future<void> _pickDate() async { final now = DateTime.now(); final picked = await showDatePicker(context: context, initialDate: _dueDate, firstDate: now.subtract(const Duration(days: 365)), lastDate: now.add(const Duration(days: 365 * 5))); if (picked != null) setState(() => _dueDate = DateTime(picked.year, picked.month, picked.day)); }
   Future<void> _pickTime() async { final picked = await showTimePicker(context: context, initialTime: TimeOfDay.now()); if (picked != null) setState(() => _dueTime = picked); }
 
@@ -64,12 +50,22 @@ class _CreateTaskScreenState extends State<CreateTaskScreen> {
     try {
       final now = DateTime.now();
       final dueDateTime = !_isAllDay ? DateTime(_dueDate.year, _dueDate.month, _dueDate.day, _dueTime.hour, _dueTime.minute) : null;
-      final isFamilyAssignment = _assignedMember != null && _assignedMember!.userId != uid;
-      final task = TaskModel(id: '', title: _titleController.text.trim(), description: _descriptionController.text.trim().isEmpty ? null : _descriptionController.text.trim(), taskType: isFamilyAssignment ? TaskType.familyTask : _taskType, priority: _priority, status: TaskStatus.pending, ownerId: uid, createdBy: uid, createdByName: uname, assignedTo: _assignedMember?.userId ?? uid, assignedToName: _assignedMember?.name ?? uname, familyId: _userFamily?.id, visibility: isFamilyAssignment ? 'family' : 'personal', assetId: _selectedAsset?.id, assetName: _selectedAsset?.name, assetEmoji: _selectedAsset?.emoji, dueDate: _dueDate, dueTime: dueDateTime, isAllDay: _isAllDay, reminderEnabled: _reminderEnabled, reminderMinutesBefore: _reminderMinutesBefore, repeatType: _repeatType, createdAt: now, updatedAt: now);
+      final task = TaskModel(
+        id: '', title: _titleController.text.trim(),
+        description: _descriptionController.text.trim().isEmpty ? null : _descriptionController.text.trim(),
+        taskType: _taskType, priority: _priority, status: TaskStatus.pending,
+        ownerId: uid, createdBy: uid, createdByName: uname,
+        assignedTo: uid, assignedToName: uname, familyId: null, visibility: 'personal',
+        assetId: _selectedAsset?.id, assetName: _selectedAsset?.name, assetEmoji: _selectedAsset?.emoji,
+        dueDate: _dueDate, dueTime: dueDateTime, isAllDay: _isAllDay,
+        reminderEnabled: _reminderEnabled, reminderMinutesBefore: _reminderMinutesBefore,
+        repeatType: _repeatType, createdAt: now, updatedAt: now,
+      );
       await _taskService.createTask(task);
       if (mounted) { ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Task created successfully!'), backgroundColor: AppColors.success)); Navigator.pop(context); }
-    } catch (e) { if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(ErrorFormatter.format(e)), backgroundColor: AppColors.error)); }
-    finally { if (mounted) setState(() => _isSaving = false); }
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(ErrorFormatter.format(e)), backgroundColor: AppColors.error));
+    } finally { if (mounted) setState(() => _isSaving = false); }
   }
 
   @override Widget build(BuildContext context) => Scaffold(
