@@ -1,3 +1,4 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
@@ -40,9 +41,10 @@ class _JoinFamilyScreenState extends State<JoinFamilyScreen> {
 
   Future<void> _handleJoinByCode() async {
     final code = _codeController.text.trim();
+
     if (code.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please enter an invitation code')),
+        const SnackBar(content: Text('Please enter an invitation code.')),
       );
       return;
     }
@@ -56,19 +58,33 @@ class _JoinFamilyScreenState extends State<JoinFamilyScreen> {
       );
 
       if (!mounted) return;
+
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('Joined "${family.name}" successfully!'),
           backgroundColor: AppColors.success,
         ),
       );
+
       Navigator.pop(context, true);
+    } on FirebaseException catch (e) {
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(_formatFamilyShareError(e)),
+          backgroundColor: AppColors.error,
+          duration: const Duration(seconds: 4),
+        ),
+      );
     } catch (e) {
       if (!mounted) return;
+
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(ErrorFormatter.format(e)),
           backgroundColor: AppColors.error,
+          duration: const Duration(seconds: 4),
         ),
       );
     } finally {
@@ -78,29 +94,61 @@ class _JoinFamilyScreenState extends State<JoinFamilyScreen> {
 
   Future<void> _handleAcceptInvite(FamilyInvitationModel invite) async {
     setState(() => _isJoining = true);
+
     try {
       final family = await _familyRepository.acceptInvitation(
         invitation: invite,
         user: widget.currentUser,
       );
+
       if (!mounted) return;
+
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Joined "${family.name}"!'),
+          content: Text('Joined "${family.name}" successfully!'),
           backgroundColor: AppColors.success,
         ),
       );
+
       Navigator.pop(context, true);
+    } on FirebaseException catch (e) {
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(_formatFamilyShareError(e)),
+          backgroundColor: AppColors.error,
+          duration: const Duration(seconds: 4),
+        ),
+      );
     } catch (e) {
       if (!mounted) return;
+
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(ErrorFormatter.format(e)),
           backgroundColor: AppColors.error,
+          duration: const Duration(seconds: 4),
         ),
       );
     } finally {
       if (mounted) setState(() => _isJoining = false);
+    }
+  }
+
+  String _formatFamilyShareError(FirebaseException error) {
+    switch (error.code) {
+      case 'permission-denied':
+        return 'Family Sharing is not allowed to access the database. Please check your Firebase Firestore rules.';
+      case 'unavailable':
+      case 'network-request-failed':
+        return 'No internet connection. Connect to the internet and try again.';
+      case 'deadline-exceeded':
+        return 'The connection timed out. Please check your internet connection and try again.';
+      case 'failed-precondition':
+        return 'Family Sharing is not configured correctly in Firebase yet. Please check the Firestore database and indexes.';
+      default:
+        return ErrorFormatter.format(error);
     }
   }
 
@@ -230,8 +278,6 @@ class _JoinFamilyScreenState extends State<JoinFamilyScreen> {
               ),
             ),
             const SizedBox(height: 32),
-
-            // Pending invitations stream
             Text(
               'Pending Invitations',
               style: GoogleFonts.outfit(
@@ -242,9 +288,47 @@ class _JoinFamilyScreenState extends State<JoinFamilyScreen> {
             ),
             const SizedBox(height: 12),
             StreamBuilder<List<FamilyInvitationModel>>(
-              stream: _familyRepository.streamPendingInvitationsForEmail(widget.currentUser.email),
+              stream: _familyRepository.streamPendingInvitationsForEmail(
+                widget.currentUser.email,
+              ),
               builder: (context, snapshot) {
-                final invites = snapshot.data ?? [];
+                if (snapshot.hasError) {
+                  final error = snapshot.error;
+                  final message = error is FirebaseException
+                      ? _formatFamilyShareError(error)
+                      : ErrorFormatter.format(error);
+
+                  return Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(20),
+                    decoration: BoxDecoration(
+                      color: AppColors.surfaceWhite,
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(
+                        color: AppColors.error.withAlpha(60),
+                      ),
+                    ),
+                    child: Column(
+                      children: [
+                        const Icon(
+                          Icons.cloud_off_rounded,
+                          size: 36,
+                          color: AppColors.error,
+                        ),
+                        const SizedBox(height: 10),
+                        Text(
+                          message,
+                          textAlign: TextAlign.center,
+                          style: GoogleFonts.outfit(
+                            fontSize: 13,
+                            color: AppColors.textSecondary,
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                }
+
                 if (snapshot.connectionState == ConnectionState.waiting) {
                   return const Center(
                     child: Padding(
@@ -254,6 +338,8 @@ class _JoinFamilyScreenState extends State<JoinFamilyScreen> {
                   );
                 }
 
+                final invites = snapshot.data ?? [];
+
                 if (invites.isEmpty) {
                   return Container(
                     width: double.infinity,
@@ -261,7 +347,9 @@ class _JoinFamilyScreenState extends State<JoinFamilyScreen> {
                     decoration: BoxDecoration(
                       color: AppColors.surfaceWhite,
                       borderRadius: BorderRadius.circular(16),
-                      border: Border.all(color: AppColors.lightLavenderBorder),
+                      border: Border.all(
+                        color: AppColors.lightLavenderBorder,
+                      ),
                     ),
                     child: Center(
                       child: Text(
@@ -284,7 +372,9 @@ class _JoinFamilyScreenState extends State<JoinFamilyScreen> {
                       decoration: BoxDecoration(
                         color: AppColors.surfaceWhite,
                         borderRadius: BorderRadius.circular(18),
-                        border: Border.all(color: AppColors.primaryPurple.withAlpha(50)),
+                        border: Border.all(
+                          color: AppColors.primaryPurple.withAlpha(50),
+                        ),
                         boxShadow: [
                           BoxShadow(
                             color: AppColors.primaryPurple.withAlpha(8),
@@ -297,7 +387,8 @@ class _JoinFamilyScreenState extends State<JoinFamilyScreen> {
                         children: [
                           CircleAvatar(
                             radius: 20,
-                            backgroundColor: AppColors.primaryPurple.withAlpha(20),
+                            backgroundColor:
+                                AppColors.primaryPurple.withAlpha(20),
                             child: const Icon(
                               Icons.home_rounded,
                               color: AppColors.primaryPurple,
@@ -328,11 +419,16 @@ class _JoinFamilyScreenState extends State<JoinFamilyScreen> {
                             ),
                           ),
                           ElevatedButton(
-                            onPressed: _isJoining ? null : () => _handleAcceptInvite(invite),
+                            onPressed: _isJoining
+                                ? null
+                                : () => _handleAcceptInvite(invite),
                             style: ElevatedButton.styleFrom(
                               backgroundColor: AppColors.primaryPurple,
                               foregroundColor: Colors.white,
-                              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 14,
+                                vertical: 8,
+                              ),
                               shape: RoundedRectangleBorder(
                                 borderRadius: BorderRadius.circular(12),
                               ),
