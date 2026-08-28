@@ -14,6 +14,7 @@ import '../models/local_category.dart';
 import '../repositories/category_repository.dart';
 import '../repositories/asset_repository.dart';
 import '../repositories/asset_document_repository.dart';
+import '../widgets/create_category_sheet.dart';
 
 class AddAssetScreen extends StatefulWidget {
   final String? initialCategoryId;
@@ -69,7 +70,7 @@ class _AddAssetScreenState extends State<AddAssetScreen> {
   }
 
   Future<void> _showPrimaryImageSourcePicker() async {
-    await showModalBottomSheet<void>(context: context, shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))), builder: (sheetContext) => SafeArea(child: Column(mainAxisSize: MainAxisSize.min, children: [const SizedBox(height: 12), Text('Asset Photo', style: GoogleFonts.outfit(fontSize: 18, fontWeight: FontWeight.w700)), ListTile(leading: const Icon(Icons.camera_alt_rounded), title: const Text('Take Photo'), onTap: () { Navigator.pop(sheetContext); _pickPrimaryImage(ImageSource.camera); }), ListTile(leading: const Icon(Icons.photo_library_rounded), title: const Text('Choose from Gallery'), onTap: () { Navigator.pop(sheetContext); _pickPrimaryImage(ImageSource.gallery); }), const SizedBox(height: 8)])));
+    await showModalBottomSheet<void>(context: context, shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))), builder: (sheetContext) => SafeArea(child: Column(mainAxisSize: MainAxisSize.min, children: [const SizedBox(height: 12), Text('Asset Photo', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700)), ListTile(leading: const Icon(Icons.camera_alt_rounded), title: const Text('Take Photo'), onTap: () { Navigator.pop(sheetContext); _pickPrimaryImage(ImageSource.camera); }), ListTile(leading: const Icon(Icons.photo_library_rounded), title: const Text('Choose from Gallery'), onTap: () { Navigator.pop(sheetContext); _pickPrimaryImage(ImageSource.gallery); }), const SizedBox(height: 8)])));
   }
 
   Future<void> _pickDocuments() async {
@@ -99,9 +100,7 @@ class _AddAssetScreenState extends State<AddAssetScreen> {
     );
     if (created == true && createdId != null && createdId!.isNotEmpty) {
       await _loadLocalCategories();
-      if (mounted) {
-        setState(() => _selectedCategoryId = createdId);
-      }
+      if (mounted) setState(() => _selectedCategoryId = createdId);
     }
   }
 
@@ -121,7 +120,7 @@ class _AddAssetScreenState extends State<AddAssetScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(backgroundColor: AppColors.scaffoldBg, appBar: AppBar(title: Text('Create Asset', style: GoogleFonts.outfit(fontWeight: FontWeight.w700)), backgroundColor: Colors.white, elevation: 0), body: Form(key: _formKey, child: ListView(padding: const EdgeInsets.fromLTRB(20, 20, 20, 40), children: [
-      InkWell(onTap: _showPrimaryImageSourcePicker, child: Container(height: 170, decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(20), border: Border.all(color: AppColors.inputBorder)), child: _primaryImage == null ? Center(child: Column(mainAxisSize: MainAxisSize.min, children: [const Icon(Icons.add_a_photo_outlined, size: 38, color: AppColors.primaryPurple), const SizedBox(height: 8), Text('Add Asset Photo', style: GoogleFonts.outfit(fontWeight: FontWeight.w600))])) : ClipRRect(borderRadius: BorderRadius.circular(20), child: Image.file(_primaryImage!, fit: BoxFit.cover)))) ,
+      InkWell(onTap: _showPrimaryImageSourcePicker, child: Container(height: 170, decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(20), border: Border.all(color: AppColors.inputBorder)), child: _primaryImage == null ? Center(child: Column(mainAxisSize: MainAxisSize.min, children: [const Icon(Icons.add_a_photo_outlined, size: 38, color: AppColors.primaryPurple), const SizedBox(height: 8), Text('Add Asset Photo', style: GoogleFonts.outfit(fontWeight: FontWeight.w600))])) : ClipRRect(borderRadius: BorderRadius.circular(20), child: Image.file(_primaryImage!, fit: BoxFit.cover)))),
       const SizedBox(height: 18),
       CustomTextField(controller: _nameController, labelText: 'Asset Name *', hintText: 'e.g. Honda Bike', validator: (v) => v == null || v.trim().isEmpty ? 'Enter an asset name' : null),
       const SizedBox(height: 14),
@@ -133,7 +132,7 @@ class _AddAssetScreenState extends State<AddAssetScreen> {
       const SizedBox(height: 14),
       CustomTextField(controller: _descriptionController, labelText: 'Description', hintText: 'Add details...', maxLines: 3),
       const SizedBox(height: 18),
-      Container(padding: const EdgeInsets.all(16), decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(18), border: Border.all(color: AppColors.inputBorder)), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text('Documents & Files', style: GoogleFonts.outfit(fontWeight: FontWeight.w700)), const SizedBox(height: 6), Text('Attach receipts, warranties, manuals or other files.', style: GoogleFonts.outfit(fontSize: 12, color: AppColors.textSecondary)), const SizedBox(height: 12), OutlinedButton.icon(onPressed: _pickDocuments, icon: const Icon(Icons.attach_file_rounded), label: const Text('Add Files')), if (_documents.isNotEmpty) ...[const SizedBox(height: 8), ..._documents.map((file) => ListTile(contentPadding: EdgeInsets.zero, dense: true, leading: const Icon(Icons.insert_drive_file_outlined), title: Text(file.uri.pathSegments.last, maxLines: 1, overflow: TextOverflow.ellipsis), trailing: IconButton(icon: const Icon(Icons.close_rounded), onPressed: () => setState(() => _documents.remove(file)))))] ])),
+      Container(padding: const EdgeInsets.all(16), decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(18), border: Border.all(color: AppColors.inputBorder)), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text('Documents & Files', style: GoogleFonts.outfit(fontWeight: FontWeight.w700)), const SizedBox(height: 6), Text('Attach receipts, warranties, manuals or other files.', style: GoogleFonts.outfit(fontSize: 12, color: AppColors.textSecondary)), const SizedBox(height: 12), OutlinedButton.icon(onPressed: _pickDocuments, icon: const Icon(Icons.attach_file_rounded), label: const Text('Add Files')), if (_documents.isNotEmpty) ...[const SizedBox(height: 8), ..._documents.map((file) => ListTile(contentPadding: EdgeInsets.zero, dense: true, leading: const Icon(Icons.insert_drive_file_outlined), title: Text(file.uri.pathSegments.last, maxLines: 1, overflow: TextOverflow.ellipsis), trailing: IconButton(icon: const Icon(Icons.close_rounded), onPressed: () => setState(() => _documents.remove(file))))] ])),
       const SizedBox(height: 18),
       SwitchListTile.adaptive(contentPadding: EdgeInsets.zero, title: const Text('Enable QR Code'), value: _qrEnabled, activeTrackColor: AppColors.primaryPurple, onChanged: (v) => setState(() => _qrEnabled = v)),
       const SizedBox(height: 24),
