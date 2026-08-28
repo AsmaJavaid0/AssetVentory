@@ -4,6 +4,7 @@ import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter_timezone/flutter_timezone.dart';
 import 'package:timezone/data/latest_all.dart' as tz;
 import 'package:timezone/timezone.dart' as timezone;
+import '../../../core/di/service_locator.dart';
 import '../models/task_model.dart';
 
 typedef NotificationSelectCallback = void Function(String? taskId);
@@ -25,32 +26,23 @@ class TaskNotificationService {
 
     tz.initializeTimeZones();
     try {
-      final deviceTimeZone = await FlutterTimezone.getLocalTimezone();
-      timezone.setLocalLocation(timezone.getLocation(deviceTimeZone.identifier));
-    } catch (_) {
+      final dynamic tzResult = await FlutterTimezone.getLocalTimezone();
+      final String timeZoneName = tzResult is String ? tzResult : tzResult.toString();
+      timezone.setLocalLocation(timezone.getLocation(timeZoneName));
+      debugPrint('TaskNotificationService: Timezone set to $timeZoneName');
+    } catch (e) {
+      debugPrint('TaskNotificationService: Timezone detection fallback: $e');
       final now = DateTime.now();
-      final tzName = now.timeZoneName;
+      final offsetMillis = now.timeZoneOffset.inMilliseconds;
       timezone.Location? matchedLoc;
-      try {
-        matchedLoc = timezone.getLocation(tzName);
-      } catch (_) {
-        for (final loc in timezone.timeZoneDatabase.locations.values) {
-          if (loc.name.toLowerCase().contains(tzName.toLowerCase())) {
-            matchedLoc = loc;
-            break;
-          }
-        }
-        if (matchedLoc == null) {
-          final offsetMillis = now.timeZoneOffset.inMilliseconds;
-          for (final loc in timezone.timeZoneDatabase.locations.values) {
-            if (loc.currentTimeZone.offset == offsetMillis) {
-              matchedLoc = loc;
-              break;
-            }
-          }
+      for (final loc in timezone.timeZoneDatabase.locations.values) {
+        if (loc.currentTimeZone.offset == offsetMillis) {
+          matchedLoc = loc;
+          break;
         }
       }
       timezone.setLocalLocation(matchedLoc ?? timezone.getLocation('UTC'));
+      debugPrint('TaskNotificationService: Timezone fallback to ${timezone.local.name}');
     }
 
     const androidSettings = AndroidInitializationSettings('@mipmap/ic_launcher');
@@ -62,21 +54,68 @@ class TaskNotificationService {
 
     await _notificationsPlugin.initialize(
       const InitializationSettings(android: androidSettings, iOS: darwinSettings, macOS: darwinSettings),
-      onDidReceiveNotificationResponse: (response) {
+      onDidReceiveNotificationResponse: (NotificationResponse response) async {
+        final actionId = response.actionId;
         final payload = response.payload;
-        if (payload != null && payload.isNotEmpty) _onNotificationSelected?.call(payload);
+
+        if (actionId == 'dismiss_alarm' && payload != null && payload.isNotEmpty) {
+          await cancelTaskNotification(payload);
+          return;
+        }
+
+        if (actionId == 'snooze_10' && payload != null && payload.isNotEmpty) {
+          await cancelTaskNotification(payload);
+          try {
+            final taskService = serviceLocator.taskService;
+            final task = await taskService.getTask(payload);
+            if (task != null) {
+              await taskService.snoozeTask(task, DateTime.now().add(const Duration(minutes: 10)));
+            }
+          } catch (e) {
+            debugPrint('Error snoozing task from alarm action: $e');
+          }
+          return;
+        }
+
+        if (payload != null && payload.isNotEmpty) {
+          _onNotificationSelected?.call(payload);
+        }
       },
     );
 
     final android = _notificationsPlugin.resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>();
+
+    // Delete legacy notification channels to clear cached sounds
+    try {
+      await android?.deleteNotificationChannel('task_alarms_channel');
+      await android?.deleteNotificationChannel('task_reminders_channel');
+    } catch (_) {}
+
+    const defaultAlarmSound = UriAndroidNotificationSound('content://settings/system/alarm_alert');
+
     await android?.createNotificationChannel(
       const AndroidNotificationChannel(
-        'task_reminders_channel',
-        'Task Reminders',
-        description: 'Notifications for upcoming asset tasks and reminders',
-        importance: Importance.high,
+        'assetventory_alarm_clock_v2',
+        'AssetVentory Alarm Clock',
+        description: 'Loud alarm clock ringtone for scheduled tasks',
+        importance: Importance.max,
+        playSound: true,
+        sound: defaultAlarmSound,
+        enableVibration: true,
+        enableLights: true,
+        audioAttributesUsage: AudioAttributesUsage.alarm,
+      ),
+    );
+    await android?.createNotificationChannel(
+      const AndroidNotificationChannel(
+        'assetventory_reminders_v2',
+        'AssetVentory Reminders',
+        description: 'Notifications and reminders for scheduled tasks',
+        importance: Importance.max,
         playSound: true,
         enableVibration: true,
+        enableLights: true,
+        audioAttributesUsage: AudioAttributesUsage.notification,
       ),
     );
     _isInitialized = true;
@@ -88,9 +127,9 @@ class TaskNotificationService {
     if (Platform.isAndroid) {
       final android = _notificationsPlugin.resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>();
       final notificationGranted = await android?.requestNotificationsPermission() ?? false;
-      if (notificationGranted) {
+      try {
         await android?.requestExactAlarmsPermission();
-      }
+      } catch (_) {}
       _permissionRequested = true;
       return notificationGranted;
     }
@@ -116,8 +155,7 @@ class TaskNotificationService {
 
       final exactAlarmGranted = await android?.canScheduleExactNotifications() ?? true;
       if (!exactAlarmGranted) {
-        debugPrint('Task reminder not scheduled: exact alarm permission is disabled.');
-        return false;
+        debugPrint('Task reminder: exact alarm permission not granted, will attempt schedule with fallback.');
       }
     }
     return true;
@@ -131,45 +169,114 @@ class TaskNotificationService {
       return;
     }
     if (!await ensureReadyForScheduling()) {
-      debugPrint('Task reminder not scheduled: notification/alarm permission is disabled.');
+      debugPrint('Task reminder not scheduled: notification permission is disabled.');
       return;
     }
 
-    final scheduledDateTime = task.effectiveDueDateTime.subtract(Duration(minutes: task.reminderMinutesBefore));
-    if (!scheduledDateTime.isAfter(DateTime.now())) {
-      debugPrint('Task reminder not scheduled because its reminder time is in the past: $scheduledDateTime');
+    final now = DateTime.now();
+    final effectiveDue = task.effectiveDueDateTime;
+
+    // If the task itself is in the past by more than 1 minute, don't schedule
+    if (effectiveDue.isBefore(now.subtract(const Duration(minutes: 1)))) {
+      debugPrint('Task reminder not scheduled because task due time has passed: $effectiveDue');
       return;
     }
 
-    final details = const NotificationDetails(
+    DateTime scheduledDateTime = effectiveDue.subtract(Duration(minutes: task.reminderMinutesBefore));
+
+    // If the scheduled pre-reminder time is already in the past, but the due time is upcoming or right now:
+    if (!scheduledDateTime.isAfter(now)) {
+      if (effectiveDue.isAfter(now)) {
+        scheduledDateTime = effectiveDue;
+      } else {
+        // Due right now: schedule 2 seconds ahead so zonedSchedule accepts it
+        scheduledDateTime = now.add(const Duration(seconds: 2));
+      }
+    }
+
+    final bool isAlarm = task.taskType == TaskType.alarm;
+    final String channelId = isAlarm ? 'assetventory_alarm_clock_v2' : 'assetventory_reminders_v2';
+    final String channelName = isAlarm ? 'AssetVentory Alarm Clock' : 'AssetVentory Reminders';
+    const defaultAlarmSound = UriAndroidNotificationSound('content://settings/system/alarm_alert');
+
+    final details = NotificationDetails(
       android: AndroidNotificationDetails(
-        'task_reminders_channel',
-        'Task Reminders',
-        channelDescription: 'Notifications for upcoming asset tasks and reminders',
-        importance: Importance.high,
-        priority: Priority.high,
+        channelId,
+        channelName,
+        channelDescription: 'Notifications and alarms for asset tasks',
+        importance: Importance.max,
+        priority: Priority.max,
         playSound: true,
+        sound: isAlarm ? defaultAlarmSound : null,
         enableVibration: true,
+        enableLights: true,
+        fullScreenIntent: true,
+        ongoing: isAlarm,
+        autoCancel: !isAlarm,
+        category: isAlarm ? AndroidNotificationCategory.alarm : AndroidNotificationCategory.reminder,
+        audioAttributesUsage: isAlarm ? AudioAttributesUsage.alarm : AudioAttributesUsage.notification,
+        visibility: NotificationVisibility.public,
         icon: '@mipmap/ic_launcher',
+        actions: isAlarm
+            ? <AndroidNotificationAction>[
+                const AndroidNotificationAction(
+                  'dismiss_alarm',
+                  'Stop Alarm ⏹️',
+                  cancelNotification: true,
+                  showsUserInterface: false,
+                ),
+                const AndroidNotificationAction(
+                  'snooze_10',
+                  'Snooze 10m ⏳',
+                  cancelNotification: true,
+                  showsUserInterface: false,
+                ),
+              ]
+            : null,
       ),
-      iOS: DarwinNotificationDetails(presentAlert: true, presentBadge: true, presentSound: true),
-      macOS: DarwinNotificationDetails(presentAlert: true, presentBadge: true, presentSound: true),
+      iOS: DarwinNotificationDetails(
+        presentAlert: true,
+        presentBadge: true,
+        presentSound: true,
+        interruptionLevel: isAlarm ? InterruptionLevel.critical : InterruptionLevel.timeSensitive,
+      ),
+      macOS: const DarwinNotificationDetails(presentAlert: true, presentBadge: true, presentSound: true),
     );
 
     final notificationId = _generateNotificationId(task.id);
     final scheduled = timezone.TZDateTime.from(scheduledDateTime, timezone.local);
 
-    await _notificationsPlugin.zonedSchedule(
-      notificationId,
-      '${task.taskType.icon} ${task.title}',
-      task.assetName != null ? 'Asset: ${task.assetName}' : task.description ?? 'Scheduled Task',
-      scheduled,
-      details,
-      androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
-      payload: task.id,
-    );
+    // Cancel any previous notification with this ID before scheduling a new one
+    await _notificationsPlugin.cancel(notificationId);
 
-    debugPrint('Task reminder scheduled for $scheduled (id=$notificationId, tz=${timezone.local.name})');
+    try {
+      await _notificationsPlugin.zonedSchedule(
+        notificationId,
+        '${task.taskType.icon} ${task.title}',
+        task.assetName != null ? 'Asset: ${task.assetName}' : (task.description?.isNotEmpty == true ? task.description! : 'Scheduled Task Alarm'),
+        scheduled,
+        details,
+        androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
+        payload: task.id,
+      );
+      debugPrint('Task alarm successfully scheduled for $scheduled (id=$notificationId, isAlarm=$isAlarm, tz=${timezone.local.name})');
+    } catch (e) {
+      debugPrint('Exact alarm scheduling failed with exactAllowWhileIdle ($e), falling back to inexact schedule');
+      try {
+        await _notificationsPlugin.zonedSchedule(
+          notificationId,
+          '${task.taskType.icon} ${task.title}',
+          task.assetName != null ? 'Asset: ${task.assetName}' : (task.description?.isNotEmpty == true ? task.description! : 'Scheduled Task Alarm'),
+          scheduled,
+          details,
+          androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
+          payload: task.id,
+        );
+        debugPrint('Task alarm fallback scheduled for $scheduled');
+      } catch (fallbackError) {
+        debugPrint('Fallback zonedSchedule failed: $fallbackError');
+      }
+    }
   }
 
   Future<void> cancelTaskNotification(String taskId) async {

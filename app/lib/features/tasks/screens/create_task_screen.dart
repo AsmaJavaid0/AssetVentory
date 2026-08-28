@@ -81,15 +81,67 @@ class _CreateTaskScreenState extends State<CreateTaskScreen> {
       CustomTextField(controller: _descriptionController, labelText: 'Description (Optional)', hintText: 'Add details, notes or instructions...', maxLines: 3),
       const SizedBox(height: 20),
       Text('Task Type', style: GoogleFonts.outfit(fontSize: 13, fontWeight: FontWeight.w600, color: AppColors.textSecondary)), const SizedBox(height: 8),
-      Wrap(spacing: 8, runSpacing: 8, children: TaskType.values.where((t) => t != TaskType.familyTask).map((type) { final selected = type == _taskType; return ChoiceChip(label: Text('${type.icon} ${type.label}'), selected: selected, selectedColor: AppColors.primaryPurple, backgroundColor: Colors.white, labelStyle: GoogleFonts.outfit(color: selected ? Colors.white : AppColors.textPrimary, fontWeight: selected ? FontWeight.w600 : FontWeight.normal, fontSize: 13), onSelected: (_) => setState(() => _taskType = type)); }).toList()),
+      Wrap(
+        spacing: 8,
+        runSpacing: 8,
+        children: TaskType.values.where((t) => t != TaskType.familyTask).map((type) {
+          final selected = type == _taskType;
+          return ChoiceChip(
+            label: Text('${type.icon} ${type.label}'),
+            selected: selected,
+            selectedColor: AppColors.primaryPurple,
+            backgroundColor: Colors.white,
+            labelStyle: GoogleFonts.outfit(
+              color: selected ? Colors.white : AppColors.textPrimary,
+              fontWeight: selected ? FontWeight.w600 : FontWeight.normal,
+              fontSize: 13,
+            ),
+            onSelected: (_) => setState(() {
+              _taskType = type;
+              if (type == TaskType.alarm) {
+                _reminderMinutesBefore = 0;
+              }
+            }),
+          );
+        }).toList(),
+      ),
       const SizedBox(height: 20),
       Text('Associated Asset', style: GoogleFonts.outfit(fontSize: 13, fontWeight: FontWeight.w600, color: AppColors.textSecondary)), const SizedBox(height: 6),
       InkWell(onTap: () async { final asset = await AssetPickerSheet.show(context, selectedAsset: _selectedAsset); if (mounted) setState(() => _selectedAsset = asset); }, borderRadius: BorderRadius.circular(16), child: Container(padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14), decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16), border: Border.all(color: AppColors.inputBorder)), child: Row(children: [Text(_selectedAsset?.emoji ?? '📦', style: const TextStyle(fontSize: 20)), const SizedBox(width: 12), Expanded(child: Text(_selectedAsset?.name ?? 'No asset selected', style: GoogleFonts.outfit(fontSize: 15, fontWeight: _selectedAsset != null ? FontWeight.w600 : FontWeight.normal, color: _selectedAsset != null ? AppColors.textPrimary : AppColors.textMuted))), const Icon(Icons.chevron_right_rounded, color: AppColors.textMuted)]))),
       const SizedBox(height: 20),
       Row(children: [Expanded(child: _dateField()), const SizedBox(width: 12), Expanded(child: _timeField())]),
       const SizedBox(height: 20),
-      SwitchListTile.adaptive(contentPadding: EdgeInsets.zero, title: Text('Reminder', style: GoogleFonts.outfit(fontWeight: FontWeight.w600)), subtitle: Text('Use this phone\'s local time for the alarm', style: GoogleFonts.outfit(fontSize: 12, color: AppColors.textSecondary)), value: _reminderEnabled, activeColor: AppColors.primaryPurple, onChanged: (v) => setState(() => _reminderEnabled = v)),
-      if (_reminderEnabled) ...[const SizedBox(height: 8), DropdownButtonFormField<int>(value: _reminderMinutesBefore, decoration: const InputDecoration(labelText: 'Remind me before'), items: const [5, 10, 15, 30, 60, 120].map((m) => DropdownMenuItem(value: m, child: Text('$m minutes before'))).toList(), onChanged: (v) { if (v != null) setState(() => _reminderMinutesBefore = v); })],
+      SwitchListTile.adaptive(
+        contentPadding: EdgeInsets.zero,
+        title: Text('Alarm & Reminder', style: GoogleFonts.outfit(fontWeight: FontWeight.w600)),
+        subtitle: Text('Rings alarm on phone at scheduled time', style: GoogleFonts.outfit(fontSize: 12, color: AppColors.textSecondary)),
+        value: _reminderEnabled,
+        activeTrackColor: AppColors.primaryPurple,
+        onChanged: (v) => setState(() => _reminderEnabled = v),
+      ),
+      if (_reminderEnabled) ...[
+        const SizedBox(height: 8),
+        DropdownButtonFormField<int>(
+          key: ValueKey(_reminderMinutesBefore),
+          value: _reminderMinutesBefore,
+          decoration: const InputDecoration(
+            labelText: 'Remind me',
+            prefixIcon: Icon(Icons.notifications_active_outlined),
+          ),
+          items: const [
+            DropdownMenuItem(value: 0, child: Text('At time of task (On time)')),
+            DropdownMenuItem(value: 5, child: Text('5 minutes before')),
+            DropdownMenuItem(value: 10, child: Text('10 minutes before')),
+            DropdownMenuItem(value: 15, child: Text('15 minutes before')),
+            DropdownMenuItem(value: 30, child: Text('30 minutes before')),
+            DropdownMenuItem(value: 60, child: Text('1 hour before')),
+            DropdownMenuItem(value: 1440, child: Text('1 day before')),
+          ],
+          onChanged: (v) {
+            if (v != null) setState(() => _reminderMinutesBefore = v);
+          },
+        ),
+      ],
       const SizedBox(height: 24),
       GradientButton(text: _isSaving ? 'Saving...' : 'Save Task', onPressed: _isSaving ? null : _saveTask, isLoading: _isSaving),
     ]),),
