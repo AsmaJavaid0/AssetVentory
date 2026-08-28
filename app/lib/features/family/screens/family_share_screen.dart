@@ -33,6 +33,7 @@ class _FamilyShareScreenState extends State<FamilyShareScreen> {
   UserModel? _currentUser;
   FamilyModel? _family;
   List<FamilyInvitationModel> _pendingInvitations = [];
+  Stream<List<FamilyInvitationModel>>? _invitationStream;
   bool _isLoading = true;
   String? _errorMessage;
 
@@ -58,40 +59,37 @@ class _FamilyShareScreenState extends State<FamilyShareScreen> {
       setState(() {
         _currentUser = null;
         _family = null;
+        _pendingInvitations = [];
+        _invitationStream = null;
         _isLoading = false;
       });
       return;
     }
 
     try {
-      // 1. Fetch user model
       final userResult = await _firestoreService.getUser(firebaseUser.uid);
-      final user = userResult.orNull ??
-          UserModel(
-            id: firebaseUser.uid,
-            name: firebaseUser.displayName ?? '',
-            email: firebaseUser.email ?? '',
-            photoUrl: firebaseUser.photoURL ?? '',
-            createdAt: DateTime.now(),
-            updatedAt: DateTime.now(),
-          );
+      final user = userResult.orNull ?? UserModel(
+        id: firebaseUser.uid,
+        name: firebaseUser.displayName ?? '',
+        email: firebaseUser.email ?? '',
+        photoUrl: firebaseUser.photoURL ?? '',
+        createdAt: DateTime.now(),
+        updatedAt: DateTime.now(),
+      );
 
-      // 2. Fetch family
       final family = await _familyRepository.getUserFamily(user.id);
-
-      // 3. Fetch pending invitations if no family
-      List<FamilyInvitationModel> invitations = [];
-      if (family == null && user.email.isNotEmpty) {
-        try {
-          invitations = await _familyRepository.getPendingInvitationsForEmail(user.email);
-        } catch (_) {}
-      }
+      final invitations = family == null && user.email.isNotEmpty
+          ? await _familyRepository.getPendingInvitationsForEmail(user.email)
+          : <FamilyInvitationModel>[];
 
       if (!mounted) return;
       setState(() {
         _currentUser = user;
         _family = family;
         _pendingInvitations = invitations;
+        _invitationStream = family == null && user.email.isNotEmpty
+            ? _familyRepository.streamPendingInvitationsForEmail(user.email)
+            : null;
         _isLoading = false;
       });
     } catch (e) {
@@ -100,61 +98,6 @@ class _FamilyShareScreenState extends State<FamilyShareScreen> {
         _isLoading = false;
         _errorMessage = ErrorFormatter.format(e);
       });
-    }
-  }
-
-  Future<void> _handleLogout() async {
-    final confirm = await showDialog<bool>(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: Text(
-          'Log Out from Family Sharing?',
-          style: GoogleFonts.outfit(fontWeight: FontWeight.w700),
-        ),
-        content: Text(
-          'Your local personal vault and assets will remain safe on your device.',
-          style: GoogleFonts.outfit(height: 1.4),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext, false),
-            child: const Text('Cancel'),
-          ),
-          ElevatedButton(
-            onPressed: () => Navigator.pop(dialogContext, true),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.error,
-              foregroundColor: Colors.white,
-              elevation: 0,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-            ),
-            child: const Text('Log Out'),
-          ),
-        ],
-      ),
-    );
-
-    if (confirm != true) return;
-
-    try {
-      await _authService.signOut();
-      if (!mounted) return;
-      _loadState();
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Logged out from Family Sharing.'),
-          backgroundColor: AppColors.success,
-        ),
-      );
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(ErrorFormatter.format(e)),
-          backgroundColor: AppColors.error,
-        ),
-      );
     }
   }
 
@@ -172,7 +115,7 @@ class _FamilyShareScreenState extends State<FamilyShareScreen> {
           backgroundColor: AppColors.success,
         ),
       );
-      _loadState();
+      await _loadState();
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -210,68 +153,27 @@ class _FamilyShareScreenState extends State<FamilyShareScreen> {
     if (_isLoading) {
       return Scaffold(
         backgroundColor: AppColors.scaffoldBg,
-        body: Center(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const CircularProgressIndicator(
-                color: AppColors.primaryPurple,
-                strokeWidth: 3,
-              ),
-              const SizedBox(height: 16),
-              Text(
-                'Loading Family Sharing...',
-                style: GoogleFonts.outfit(
-                  fontSize: 14,
-                  color: AppColors.textSecondary,
-                ),
-              ),
-            ],
-          ),
-        ),
+        body: const Center(child: CircularProgressIndicator()),
       );
     }
 
     if (_errorMessage != null) {
       return Scaffold(
         backgroundColor: AppColors.scaffoldBg,
-        appBar: AppBar(
-          title: Text(
-            'Family Sharing',
-            style: GoogleFonts.outfit(fontWeight: FontWeight.w700),
-          ),
-          backgroundColor: Colors.white,
-          elevation: 0,
-        ),
+        appBar: AppBar(title: const Text('Family Sharing')),
         body: Center(
           child: Padding(
             padding: const EdgeInsets.all(24),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                const Icon(Icons.wifi_off_rounded, size: 56, color: AppColors.textMuted),
+                const Icon(Icons.wifi_off_rounded, size: 56),
                 const SizedBox(height: 16),
-                Text(
-                  'Connection Notice',
-                  style: GoogleFonts.outfit(fontSize: 18, fontWeight: FontWeight.w700),
-                ),
+                Text('Connection Notice', style: GoogleFonts.outfit(fontSize: 18, fontWeight: FontWeight.w700)),
                 const SizedBox(height: 8),
-                Text(
-                  _errorMessage!,
-                  textAlign: TextAlign.center,
-                  style: GoogleFonts.outfit(fontSize: 13, color: AppColors.textSecondary),
-                ),
-                const SizedBox(height: 20),
-                ElevatedButton.icon(
-                  onPressed: _loadState,
-                  icon: const Icon(Icons.refresh_rounded),
-                  label: const Text('Retry Connection'),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.primaryPurple,
-                    foregroundColor: Colors.white,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                  ),
-                ),
+                Text(_errorMessage!, textAlign: TextAlign.center),
+                const SizedBox(height: 16),
+                ElevatedButton(onPressed: _loadState, child: const Text('Retry')),
               ],
             ),
           ),
@@ -279,100 +181,75 @@ class _FamilyShareScreenState extends State<FamilyShareScreen> {
       );
     }
 
-    // State B: User belongs to a family -> Show Family Dashboard
-    if (_currentUser != null && _family != null) {
-      return FamilyDashboardScreen(
-        family: _family!,
-        currentUser: _currentUser!,
-        onFamilyUpdated: _loadState,
-      );
+    if (_currentUser == null) {
+      return const Scaffold(body: FamilyAuthPrompt());
     }
 
-    // State A: User does not belong to a family -> Show Landing Empty State
+    if (_family != null) {
+      return FamilyDashboardScreen(family: _family!, currentUser: _currentUser!);
+    }
+
     return Scaffold(
       backgroundColor: AppColors.scaffoldBg,
       appBar: AppBar(
-        title: Text(
-          'Family Sharing',
-          style: GoogleFonts.outfit(
-            fontWeight: FontWeight.w700,
-            color: AppColors.textPrimary,
-          ),
-        ),
+        title: Text('Family Sharing', style: GoogleFonts.outfit(fontWeight: FontWeight.w700)),
         backgroundColor: Colors.white,
         elevation: 0,
-        centerTitle: true,
-        actions: [
-          if (_currentUser != null)
-            IconButton(
-              icon: const Icon(Icons.logout_rounded, color: AppColors.textSecondary),
-              tooltip: 'Log Out (${_currentUser!.email})',
-              onPressed: _handleLogout,
-            ),
-        ],
       ),
-      body: SingleChildScrollView(
-        child: Column(
-          children: [
-            if (_currentUser != null)
-              Container(
-                margin: const EdgeInsets.fromLTRB(20, 12, 20, 0),
-                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                decoration: BoxDecoration(
-                  color: AppColors.primaryPurple.withAlpha(12),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Row(
-                  children: [
-                    const Icon(Icons.account_circle_outlined, size: 18, color: AppColors.primaryPurple),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        'Signed in as ${_currentUser!.email}',
-                        style: GoogleFonts.outfit(fontSize: 12, color: AppColors.primaryPurple, fontWeight: FontWeight.w500),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
+      body: StreamBuilder<List<FamilyInvitationModel>>(
+        stream: _invitationStream,
+        initialData: _pendingInvitations,
+        builder: (context, snapshot) {
+          final invitations = snapshot.data ?? _pendingInvitations;
+          if (snapshot.hasError) {
+            return _buildEmptyFamilyState('Unable to load invitations. Please check your connection and try again.');
+          }
+
+          return RefreshIndicator(
+            onRefresh: _loadState,
+            child: ListView(
+              padding: const EdgeInsets.all(20),
+              children: [
+                if (invitations.isNotEmpty) ...[
+                  Text('Family Invitations', style: GoogleFonts.outfit(fontSize: 20, fontWeight: FontWeight.w700)),
+                  const SizedBox(height: 12),
+                  ...invitations.map((invite) => Padding(
+                    padding: const EdgeInsets.only(bottom: 12),
+                    child: InvitationBanner(
+                      invitation: invite,
+                      onAccept: () => _acceptInvitation(invite),
+                      onDecline: () => _declineInvitation(invite),
                     ),
-                    InkWell(
-                      onTap: _handleLogout,
-                      child: Text(
-                        'Switch',
-                        style: GoogleFonts.outfit(fontSize: 12, color: AppColors.error, fontWeight: FontWeight.bold),
-                      ),
-                    ),
-                  ],
+                  )),
+                  const SizedBox(height: 20),
+                ],
+                FamilyEmptyState(
+                  title: invitations.isEmpty ? 'No Family Yet' : 'Want to join another way?',
+                  subtitle: 'Create a family or enter an invitation code from a family admin.',
+                  primaryButtonText: 'Create Family',
+                  onPrimaryPressed: () async {
+                    await Navigator.push(context, MaterialPageRoute(builder: (_) => CreateFamilyScreen(currentUser: _currentUser!)));
+                    _loadState();
+                  },
+                  secondaryButtonText: 'Join Family',
+                  onSecondaryPressed: () async {
+                    await Navigator.push(context, MaterialPageRoute(builder: (_) => JoinFamilyScreen(currentUser: _currentUser!)));
+                    _loadState();
+                  },
                 ),
-              ),
-            if (_pendingInvitations.isNotEmpty)
-              Padding(
-                padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
-                child: InvitationBanner(
-                  invitations: _pendingInvitations,
-                  onAccept: _acceptInvitation,
-                  onDecline: _declineInvitation,
-                ),
-              ),
-            FamilyEmptyState(
-              onCreateFamily: () async {
-                if (_currentUser == null) {
-                  FamilyAuthPrompt.show(context, onSignedIn: _loadState);
-                  return;
-                }
-                final created = await CreateFamilyScreen.navigateTo(context, _currentUser!);
-                if (created == true) _loadState();
-              },
-              onJoinFamily: () async {
-                if (_currentUser == null) {
-                  FamilyAuthPrompt.show(context, onSignedIn: _loadState);
-                  return;
-                }
-                final joined = await JoinFamilyScreen.navigateTo(context, _currentUser!);
-                if (joined == true) _loadState();
-              },
+              ],
             ),
-          ],
-        ),
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _buildEmptyFamilyState(String message) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Text(message, textAlign: TextAlign.center),
       ),
     );
   }
