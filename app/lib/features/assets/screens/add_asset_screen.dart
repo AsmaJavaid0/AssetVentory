@@ -88,7 +88,81 @@ class _AddAssetScreenState extends State<AddAssetScreen> {
   void _showCreateCategoryDialog() {
     final nameCtrl = TextEditingController();
     String catEmoji = '📂';
-    showDialog(context: context, builder: (dialogCtx) => StatefulBuilder(builder: (ctx, setDialogState) => AlertDialog(shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)), title: Text('Create New Category', style: GoogleFonts.outfit(fontWeight: FontWeight.w700)), content: Column(mainAxisSize: MainAxisSize.min, children: [CustomTextField(controller: nameCtrl, hintText: 'e.g. Tools, Books, Office', labelText: 'Category Name'), const SizedBox(height: 12), InkWell(onTap: () async { final selected = await showModalBottomSheet<String>(context: ctx, backgroundColor: Colors.white, builder: (pickerCtx) => SafeArea(child: SizedBox(height: 390, child: EmojiPicker(onEmojiSelected: (_, value) => Navigator.pop(pickerCtx, value.emoji))))); if (selected != null) setDialogState(() => catEmoji = selected); }, child: Container(width: double.infinity, padding: const EdgeInsets.all(12), child: Row(children: [Text(catEmoji, style: const TextStyle(fontSize: 30)), const SizedBox(width: 12), const Expanded(child: Text('Choose any emoji')), const Icon(Icons.chevron_right_rounded)]))) ]), actions: [TextButton(onPressed: () => Navigator.pop(dialogCtx), child: const Text('Cancel')), ElevatedButton(onPressed: () async { final name = nameCtrl.text.trim(); if (name.isEmpty) return; try { final id = await _categoryRepository.createCategoryIfNotExists(ownerId: 'local_user', name: name, emoji: catEmoji); await _loadLocalCategories(); if (mounted) setState(() => _selectedCategoryId = id); if (dialogCtx.mounted) Navigator.pop(dialogCtx); } catch (_) { if (mounted) _showSnackBar('Failed to create category.', isError: true); } }, child: const Text('Create'))]));
+    showDialog(
+      context: context,
+      builder: (dialogCtx) {
+        return StatefulBuilder(
+          builder: (ctx, setDialogState) {
+            return AlertDialog(
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+              title: Text('Create New Category', style: GoogleFonts.outfit(fontWeight: FontWeight.w700)),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  CustomTextField(controller: nameCtrl, hintText: 'e.g. Tools, Books, Office', labelText: 'Category Name'),
+                  const SizedBox(height: 12),
+                  InkWell(
+                    onTap: () async {
+                      final selected = await showModalBottomSheet<String>(
+                        context: ctx,
+                        backgroundColor: Colors.white,
+                        builder: (pickerCtx) {
+                          return SafeArea(
+                            child: SizedBox(
+                              height: 390,
+                              child: EmojiPicker(
+                                onEmojiSelected: (_, value) => Navigator.pop(pickerCtx, value.emoji),
+                              ),
+                            ),
+                          );
+                        },
+                      );
+                      if (selected != null) {
+                        setDialogState(() => catEmoji = selected);
+                      }
+                    },
+                    child: Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(12),
+                      child: Row(
+                        children: [
+                          Text(catEmoji, style: const TextStyle(fontSize: 30)),
+                          const SizedBox(width: 12),
+                          const Expanded(child: Text('Choose any emoji')),
+                          const Icon(Icons.chevron_right_rounded),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(dialogCtx),
+                  child: const Text('Cancel'),
+                ),
+                ElevatedButton(
+                  onPressed: () async {
+                    final name = nameCtrl.text.trim();
+                    if (name.isEmpty) return;
+                    try {
+                      final id = await _categoryRepository.createCategoryIfNotExists(ownerId: 'local_user', name: name, emoji: catEmoji);
+                      await _loadLocalCategories();
+                      if (mounted) setState(() => _selectedCategoryId = id);
+                      if (dialogCtx.mounted) Navigator.pop(dialogCtx);
+                    } catch (_) {
+                      if (mounted) _showSnackBar('Failed to create category.', isError: true);
+                    }
+                  },
+                  child: const Text('Create'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
   }
 
   Future<void> _saveAsset() async {
