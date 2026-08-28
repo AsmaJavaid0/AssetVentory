@@ -85,83 +85,136 @@ class _AddAssetScreenState extends State<AddAssetScreen> {
 
   void _showEmojiPicker() { showModalBottomSheet(context: context, backgroundColor: Colors.white, shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))), builder: (pickerContext) => SafeArea(child: SizedBox(height: 390, child: EmojiPicker(onEmojiSelected: (_, emoji) { setState(() => _selectedEmoji = emoji.emoji); Navigator.pop(pickerContext); })))); }
 
-  void _showCreateCategoryDialog() {
+  Future<void> _showCreateCategoryDialog() async {
     final nameCtrl = TextEditingController();
     String catEmoji = '📂';
-    showDialog(
+    final popularEmojis = [
+      '📂', '💻', '📱', '🚗', '🏠', '🛠️', '📚', '👕', '🎨',
+      '🍳', '👟', '💍', '🎮', '🎧', '🚲', '🍕', '⚽', '🏷️',
+      '📦', '📷', '💡', '🎸', '⌚', '💼'
+    ];
+
+    final createdId = await showModalBottomSheet<String>(
       context: context,
-      builder: (dialogCtx) {
-        return StatefulBuilder(
-          builder: (ctx, setDialogState) {
-            return AlertDialog(
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-              title: Text('Create New Category', style: GoogleFonts.outfit(fontWeight: FontWeight.w700)),
-              content: Column(
-                mainAxisSize: MainAxisSize.min,
+      isScrollControlled: true,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (sheetContext) => StatefulBuilder(
+        builder: (ctx, setSheetState) => Padding(
+          padding: EdgeInsets.only(
+            left: 20,
+            right: 20,
+            top: 20,
+            bottom: MediaQuery.of(ctx).viewInsets.bottom + 24,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  CustomTextField(controller: nameCtrl, hintText: 'e.g. Tools, Books, Office', labelText: 'Category Name'),
-                  const SizedBox(height: 12),
-                  InkWell(
-                    onTap: () async {
-                      final selected = await showModalBottomSheet<String>(
-                        context: ctx,
-                        backgroundColor: Colors.white,
-                        builder: (pickerCtx) {
-                          return SafeArea(
-                            child: SizedBox(
-                              height: 390,
-                              child: EmojiPicker(
-                                onEmojiSelected: (_, value) => Navigator.pop(pickerCtx, value.emoji),
-                              ),
-                            ),
-                          );
-                        },
-                      );
-                      if (selected != null) {
-                        setDialogState(() => catEmoji = selected);
-                      }
-                    },
-                    child: Container(
-                      width: double.infinity,
-                      padding: const EdgeInsets.all(12),
-                      child: Row(
-                        children: [
-                          Text(catEmoji, style: const TextStyle(fontSize: 30)),
-                          const SizedBox(width: 12),
-                          const Expanded(child: Text('Choose any emoji')),
-                          const Icon(Icons.chevron_right_rounded),
-                        ],
-                      ),
-                    ),
+                  Text(
+                    'Create New Category',
+                    style: GoogleFonts.outfit(fontSize: 18, fontWeight: FontWeight.w700),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.close_rounded),
+                    onPressed: () => Navigator.pop(sheetContext),
                   ),
                 ],
               ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.pop(dialogCtx),
-                  child: const Text('Cancel'),
+              const SizedBox(height: 12),
+              TextField(
+                controller: nameCtrl,
+                autofocus: true,
+                style: GoogleFonts.outfit(fontSize: 15),
+                decoration: InputDecoration(
+                  labelText: 'Category Name',
+                  hintText: 'e.g. Tools, Books, Office',
+                  prefixIcon: Container(
+                    padding: const EdgeInsets.all(10),
+                    child: Text(catEmoji, style: const TextStyle(fontSize: 22)),
+                  ),
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(16)),
                 ),
-                ElevatedButton(
+              ),
+              const SizedBox(height: 16),
+              Text(
+                'Select Emoji Icon',
+                style: GoogleFonts.outfit(fontSize: 13, fontWeight: FontWeight.w600, color: AppColors.textSecondary),
+              ),
+              const SizedBox(height: 10),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: popularEmojis.map((emoji) {
+                  final isSelected = emoji == catEmoji;
+                  return InkWell(
+                    onTap: () => setSheetState(() => catEmoji = emoji),
+                    borderRadius: BorderRadius.circular(12),
+                    child: Container(
+                      width: 44,
+                      height: 44,
+                      alignment: Alignment.center,
+                      decoration: BoxDecoration(
+                        color: isSelected ? AppColors.primaryPurple.withAlpha(35) : const Color(0xFFF6F4FA),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                          color: isSelected ? AppColors.primaryPurple : Colors.transparent,
+                          width: 2,
+                        ),
+                      ),
+                      child: Text(emoji, style: const TextStyle(fontSize: 22)),
+                    ),
+                  );
+                }).toList(),
+              ),
+              const SizedBox(height: 20),
+              SizedBox(
+                width: double.infinity,
+                height: 50,
+                child: ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.primaryPurple,
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                  ),
                   onPressed: () async {
                     final name = nameCtrl.text.trim();
                     if (name.isEmpty) return;
                     try {
-                      final id = await _categoryRepository.createCategoryIfNotExists(ownerId: 'local_user', name: name, emoji: catEmoji);
-                      await _loadLocalCategories();
-                      if (mounted) setState(() => _selectedCategoryId = id);
-                      if (dialogCtx.mounted) Navigator.pop(dialogCtx);
-                    } catch (_) {
-                      if (mounted) _showSnackBar('Failed to create category.', isError: true);
+                      final id = await _categoryRepository.createCategoryIfNotExists(
+                        ownerId: 'local_user',
+                        name: name,
+                        emoji: catEmoji,
+                      );
+                      if (sheetContext.mounted) Navigator.pop(sheetContext, id);
+                    } catch (e) {
+                      debugPrint('Error creating category in add_asset: $e');
                     }
                   },
-                  child: const Text('Create'),
+                  child: Text(
+                    'Create & Select',
+                    style: GoogleFonts.outfit(fontSize: 15, fontWeight: FontWeight.w700),
+                  ),
                 ),
-              ],
-            );
-          },
-        );
-      },
+              ),
+            ],
+          ),
+        ),
+      ),
     );
+
+    nameCtrl.dispose();
+    if (createdId != null && createdId.isNotEmpty) {
+      await _loadLocalCategories();
+      if (mounted) {
+        setState(() => _selectedCategoryId = createdId);
+      }
+    }
   }
 
   Future<void> _saveAsset() async {

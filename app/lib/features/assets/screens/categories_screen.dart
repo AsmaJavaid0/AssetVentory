@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:emoji_picker_flutter/emoji_picker_flutter.dart';
 
 import '../../../core/constants/app_colors.dart';
 import '../../../core/di/service_locator.dart';
@@ -41,54 +40,127 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
 
   Future<void> _createCategory() async {
     final controller = TextEditingController();
-    var emoji = '📂';
-    final created = await showDialog<bool>(
+    var selectedEmoji = '📂';
+    final popularEmojis = [
+      '📂', '💻', '📱', '🚗', '🏠', '🛠️', '📚', '👕', '🎨',
+      '🍳', '👟', '💍', '🎮', '🎧', '🚲', '🍕', '⚽', '🏷️',
+      '📦', '📷', '💡', '🎸', '⌚', '💼'
+    ];
+
+    final created = await showModalBottomSheet<bool>(
       context: context,
-      builder: (dialogContext) => StatefulBuilder(
-        builder: (ctx, setDialogState) => AlertDialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-          title: Text('Create Category', style: GoogleFonts.outfit(fontWeight: FontWeight.w700)),
-          content: Column(mainAxisSize: MainAxisSize.min, children: [
-            TextField(controller: controller, autofocus: true, decoration: const InputDecoration(labelText: 'Category name')),
-            const SizedBox(height: 14),
-            InkWell(
-              onTap: () async {
-                final selected = await showModalBottomSheet<String>(
-                  context: ctx,
-                  backgroundColor: Colors.white,
-                  shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
-                  builder: (pickerCtx) => SafeArea(
-                    child: SizedBox(height: 380, child: EmojiPicker(
-                      onEmojiSelected: (_, value) => Navigator.pop(pickerCtx, value.emoji),
-                    )),
+      isScrollControlled: true,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (sheetContext) => StatefulBuilder(
+        builder: (ctx, setSheetState) => Padding(
+          padding: EdgeInsets.only(
+            left: 20,
+            right: 20,
+            top: 20,
+            bottom: MediaQuery.of(ctx).viewInsets.bottom + 24,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    'Create New Category',
+                    style: GoogleFonts.outfit(fontSize: 18, fontWeight: FontWeight.w700),
                   ),
-                );
-                if (selected != null) setDialogState(() => emoji = selected);
-              },
-              borderRadius: BorderRadius.circular(14),
-              child: Container(
-                width: double.infinity,
-                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-                decoration: BoxDecoration(color: AppColors.primaryPurple.withAlpha(10), borderRadius: BorderRadius.circular(14), border: Border.all(color: AppColors.primaryPurple.withAlpha(45))),
-                child: Row(children: [Text(emoji, style: const TextStyle(fontSize: 30)), const SizedBox(width: 12), Expanded(child: Text('Choose any emoji', style: GoogleFonts.outfit(fontWeight: FontWeight.w600))), const Icon(Icons.keyboard_arrow_right_rounded)]),
+                  IconButton(
+                    icon: const Icon(Icons.close_rounded),
+                    onPressed: () => Navigator.pop(sheetContext, false),
+                  ),
+                ],
               ),
-            ),
-          ]),
-          actions: [
-            TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('Cancel')),
-            ElevatedButton(
-              onPressed: () async {
-                final name = controller.text.trim();
-                if (name.isEmpty) return;
-                await serviceLocator.categoryRepository.createCategoryIfNotExists(ownerId: _ownerId, name: name, emoji: emoji);
-                if (dialogContext.mounted) Navigator.pop(dialogContext, true);
-              },
-              child: const Text('Create'),
-            ),
-          ],
+              const SizedBox(height: 12),
+              TextField(
+                controller: controller,
+                autofocus: true,
+                style: GoogleFonts.outfit(fontSize: 15),
+                decoration: InputDecoration(
+                  labelText: 'Category Name',
+                  hintText: 'e.g. Electronics, Tools, Books',
+                  prefixIcon: Container(
+                    padding: const EdgeInsets.all(10),
+                    child: Text(selectedEmoji, style: const TextStyle(fontSize: 22)),
+                  ),
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(16)),
+                ),
+              ),
+              const SizedBox(height: 16),
+              Text(
+                'Select Emoji Icon',
+                style: GoogleFonts.outfit(fontSize: 13, fontWeight: FontWeight.w600, color: AppColors.textSecondary),
+              ),
+              const SizedBox(height: 10),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: popularEmojis.map((emoji) {
+                  final isSelected = emoji == selectedEmoji;
+                  return InkWell(
+                    onTap: () => setSheetState(() => selectedEmoji = emoji),
+                    borderRadius: BorderRadius.circular(12),
+                    child: Container(
+                      width: 44,
+                      height: 44,
+                      alignment: Alignment.center,
+                      decoration: BoxDecoration(
+                        color: isSelected ? AppColors.primaryPurple.withAlpha(35) : const Color(0xFFF6F4FA),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                          color: isSelected ? AppColors.primaryPurple : Colors.transparent,
+                          width: 2,
+                        ),
+                      ),
+                      child: Text(emoji, style: const TextStyle(fontSize: 22)),
+                    ),
+                  );
+                }).toList(),
+              ),
+              const SizedBox(height: 20),
+              SizedBox(
+                width: double.infinity,
+                height: 50,
+                child: ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.primaryPurple,
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                  ),
+                  onPressed: () async {
+                    final name = controller.text.trim();
+                    if (name.isEmpty) return;
+                    try {
+                      await serviceLocator.categoryRepository.createCategoryIfNotExists(
+                        ownerId: _ownerId,
+                        name: name,
+                        emoji: selectedEmoji,
+                      );
+                      if (sheetContext.mounted) Navigator.pop(sheetContext, true);
+                    } catch (e) {
+                      debugPrint('Error creating category: $e');
+                    }
+                  },
+                  child: Text(
+                    'Create Category',
+                    style: GoogleFonts.outfit(fontSize: 15, fontWeight: FontWeight.w700),
+                  ),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
+
     controller.dispose();
     if (created == true) await _load();
   }

@@ -4,7 +4,6 @@ import 'package:google_fonts/google_fonts.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/database/app_database.dart';
 import '../../../core/storage/local_file_storage.dart';
-import '../../../core/di/service_locator.dart';
 import '../models/local_asset.dart';
 import '../models/local_category.dart';
 import '../repositories/asset_repository.dart';
@@ -83,7 +82,30 @@ class _AssetsScreenState extends State<AssetsScreen> with SingleTickerProviderSt
   Widget _tabs() => Container(color: Colors.white, padding: const EdgeInsets.fromLTRB(16, 10, 16, 10), child: Row(children: [Expanded(child: _tab('All', _AssetView.all)), const SizedBox(width: 8), Expanded(child: _tab('Categories', _AssetView.categories))]));
   Widget _tab(String label, _AssetView view) { final selected = _view == view; return GestureDetector(onTap: () => setState(() => _view = view), child: AnimatedContainer(duration: const Duration(milliseconds: 160), height: 40, alignment: Alignment.center, decoration: BoxDecoration(color: selected ? AppColors.primaryPurple : AppColors.scaffoldBg, borderRadius: BorderRadius.circular(20), border: Border.all(color: selected ? AppColors.primaryPurple : const Color(0xFFE5E0EC))), child: Text(label, style: GoogleFonts.outfit(fontSize: 13, fontWeight: FontWeight.w700, color: selected ? Colors.white : AppColors.textSecondary)))); }
 
-  Widget _searchBar() => SizeTransition(sizeFactor: _searchAnimation, child: Container(color: const Color(0xFF1F1040), padding: const EdgeInsets.fromLTRB(16, 0, 16, 12), child: TextField(controller: _searchController, autofocus: true, onChanged: (v) => setState(() => _searchQuery = v.trim()), style: const TextStyle(color: Colors.white), decoration: InputDecoration(hintText: 'Search assets...', hintStyle: const TextStyle(color: Color(0xFFB8AED6)), prefixIcon: const Icon(Icons.search_rounded, color: Color(0xFFB8AED6)), filled: true, fillColor: Colors.white.withAlpha(18), border: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: BorderSide.none))));
+  Widget _searchBar() => SizeTransition(
+        sizeFactor: _searchAnimation,
+        child: Container(
+          color: const Color(0xFF1F1040),
+          padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+          child: TextField(
+            controller: _searchController,
+            autofocus: true,
+            onChanged: (v) => setState(() => _searchQuery = v.trim()),
+            style: const TextStyle(color: Colors.white),
+            decoration: InputDecoration(
+              hintText: 'Search assets...',
+              hintStyle: const TextStyle(color: Color(0xFFB8AED6)),
+              prefixIcon: const Icon(Icons.search_rounded, color: Color(0xFFB8AED6)),
+              filled: true,
+              fillColor: Colors.white.withAlpha(18),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(14),
+                borderSide: BorderSide.none,
+              ),
+            ),
+          ),
+        ),
+      );
 
   Widget _assetsView() { final assets = _filteredAssets; return Column(children: [if (_searchVisible) _searchBar(), Expanded(child: assets.isEmpty ? _emptyAssets() : RefreshIndicator(color: AppColors.primaryPurple, onRefresh: _load, child: ListView.separated(padding: const EdgeInsets.fromLTRB(16, 14, 16, 100), physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()), itemCount: assets.length, separatorBuilder: (_, _) => const SizedBox(height: 10), itemBuilder: (_, i) => _assetCard(assets[i]))))]); }
   Widget _emptyAssets() => RefreshIndicator(color: AppColors.primaryPurple, onRefresh: _load, child: ListView(children: [const SizedBox(height: 150), Center(child: Icon(Icons.inventory_2_outlined, size: 58, color: AppColors.primaryPurple)), const SizedBox(height: 14), Center(child: Text('No assets yet', style: GoogleFonts.outfit(fontSize: 20, fontWeight: FontWeight.w700))), const SizedBox(height: 6), Center(child: Text('Tap the + button below to add your first asset.', style: GoogleFonts.outfit(color: AppColors.textSecondary)))]));
