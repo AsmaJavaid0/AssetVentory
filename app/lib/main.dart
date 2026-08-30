@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'firebase_options.dart';
 import 'core/theme/app_theme.dart';
 import 'features/auth/screens/auth_wrapper.dart';
@@ -11,6 +12,11 @@ void main() async {
   
   await Firebase.initializeApp(
     options: DefaultFirebaseOptions.currentPlatform,
+  );
+
+  await Supabase.initialize(
+    url: 'https://jlfnffzyljswzskwhpmp.supabase.co',
+    anonKey: 'sb_publishable_I7q_h1Co1eyJ9Bp-StMgiw_YrwN9_NP',
   );
 
   FirebaseFirestore.instance.settings = const Settings(
