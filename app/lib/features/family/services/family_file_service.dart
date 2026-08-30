@@ -70,7 +70,7 @@ class FamilyFileService {
       path,
       token,
       file,
-      fileOptions: FileOptions(contentType: contentType, upsert: false),
+      FileOptions(contentType: contentType, upsert: false),
     );
 
     return path;
