@@ -1,0 +1,2 @@
+[functions.family-files]
+verify_jwt = false
