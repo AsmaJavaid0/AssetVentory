@@ -18,40 +18,35 @@ class MainNavigationScreen extends StatefulWidget {
 class _MainNavigationScreenState extends State<MainNavigationScreen> {
   int _currentIndex = 0;
 
-  late final List<Widget> _pages;
-
-  @override
-  void initState() {
-    super.initState();
-
-    _pages = [
-      HomeScreen(
-        onTabSelected: (index) {
-          setState(() {
-            _currentIndex = index;
-          });
-        },
-      ),
-      const AssetsScreen(),
-      const FamilyShareScreen(),
-      const TasksScreen(),
-      ProfileScreen(
-        onNavigateTab: (index) {
-          setState(() {
-            _currentIndex = index;
-          });
-        },
-      ),
-    ];
+  Widget _buildCurrentPage() {
+    switch (_currentIndex) {
+      case 0:
+        return HomeScreen(
+          onTabSelected: (index) {
+            setState(() => _currentIndex = index);
+          },
+        );
+      case 1:
+        return const AssetsScreen();
+      case 2:
+        return const FamilyShareScreen();
+      case 3:
+        return const TasksScreen();
+      case 4:
+        return ProfileScreen(
+          onNavigateTab: (index) {
+            setState(() => _currentIndex = index);
+          },
+        );
+      default:
+        return const SizedBox.shrink();
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: IndexedStack(
-        index: _currentIndex,
-        children: _pages,
-      ),
+      body: _buildCurrentPage(),
       bottomNavigationBar: Container(
         decoration: BoxDecoration(
           color: Colors.white,
@@ -67,9 +62,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
           child: BottomNavigationBar(
             currentIndex: _currentIndex,
             onTap: (index) {
-              setState(() {
-                _currentIndex = index;
-              });
+              setState(() => _currentIndex = index);
             },
             type: BottomNavigationBarType.fixed,
             backgroundColor: Colors.white,
