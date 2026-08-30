@@ -38,16 +38,29 @@ class _ShareAssetScreenState extends State<ShareAssetScreen> {
 
   Future<void> _load() async {
     try {
-      // Personal assets are intentionally stored under local_user throughout
-      // the local AssetVentory module. Do not replace this with Firebase uid.
+      // Personal assets are local-only. Loading them must never depend on
+      // Firestore, network connectivity, or shared-assets permissions.
       final assets = await _assetRepository.getAssets('local_user');
       final categories = await _categoryRepository.getCategories('local_user');
-      final shared = await _familyRepository.streamSharedAssets(widget.family.id).first;
+
+      // Shared-state lookup is optional. A Firestore permission/network issue
+      // must not prevent the user from selecting a local asset to share.
+      Set<String> sharedIds = {};
+      try {
+        final shared = await _familyRepository
+            .streamSharedAssets(widget.family.id)
+            .first
+            .timeout(const Duration(seconds: 5));
+        sharedIds = shared.map((s) => s.assetId).toSet();
+      } catch (_) {
+        sharedIds = {};
+      }
+
       if (!mounted) return;
       setState(() {
         _assets = assets;
         _categories = {for (final c in categories) c.id: c.name};
-        _sharedIds = shared.map((s) => s.assetId).toSet();
+        _sharedIds = sharedIds;
         _loading = false;
         _error = null;
       });
