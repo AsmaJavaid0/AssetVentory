@@ -75,10 +75,10 @@ class _FamilyShareScreenState extends State<FamilyShareScreen> {
     }
 
     try {
-      final userResult =
-          await _firestoreService.getUser(firebaseUser.uid);
+      final userResult = await _firestoreService.getUser(firebaseUser.uid);
 
-      final user = userResult.orNull ??
+      final user =
+          userResult.orNull ??
           UserModel(
             id: firebaseUser.uid,
             name: firebaseUser.displayName ?? '',
@@ -88,14 +88,11 @@ class _FamilyShareScreenState extends State<FamilyShareScreen> {
             updatedAt: DateTime.now(),
           );
 
-      final family =
-          await _familyRepository.getUserFamily(user.id);
+      final family = await _familyRepository.getUserFamily(user.id);
 
-      final invitations =
-          family == null && user.email.isNotEmpty
-              ? await _familyRepository
-                  .getPendingInvitationsForEmail(user.email)
-              : <FamilyInvitationModel>[];
+      final invitations = family == null && user.email.isNotEmpty
+          ? await _familyRepository.getPendingInvitationsForEmail(user.email)
+          : <FamilyInvitationModel>[];
 
       if (!mounted) return;
 
@@ -106,11 +103,9 @@ class _FamilyShareScreenState extends State<FamilyShareScreen> {
 
         // Listen for invitations in real time when the user
         // is not already part of a family.
-        _invitationStream =
-            family == null && user.email.isNotEmpty
-                ? _familyRepository
-                    .streamPendingInvitationsForEmail(user.email)
-                : null;
+        _invitationStream = family == null && user.email.isNotEmpty
+            ? _familyRepository.streamPendingInvitationsForEmail(user.email)
+            : null;
 
         _isLoading = false;
       });
@@ -124,9 +119,7 @@ class _FamilyShareScreenState extends State<FamilyShareScreen> {
     }
   }
 
-  Future<void> _acceptInvitation(
-    FamilyInvitationModel invite,
-  ) async {
+  Future<void> _acceptInvitation(FamilyInvitationModel invite) async {
     if (_currentUser == null) return;
 
     try {
@@ -139,9 +132,7 @@ class _FamilyShareScreenState extends State<FamilyShareScreen> {
 
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(
-            'Joined "${family.name}" successfully!',
-          ),
+          content: Text('Joined "${family.name}" successfully!'),
           backgroundColor: AppColors.success,
         ),
       );
@@ -159,25 +150,26 @@ class _FamilyShareScreenState extends State<FamilyShareScreen> {
     }
   }
 
-  Future<void> _declineInvitation(
-    FamilyInvitationModel invite,
-  ) async {
+  Future<void> _declineInvitation(FamilyInvitationModel invite) async {
     try {
       await _familyRepository.declineInvitation(invite.id);
 
       if (!mounted) return;
 
       setState(() {
-        _pendingInvitations.removeWhere(
-          (i) => i.id == invite.id,
-        );
+        _pendingInvitations.removeWhere((i) => i.id == invite.id);
       });
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Invitation declined.'),
-        ),
-      );
+      // Reload rather than relying only on the stream event. This makes the
+      // landing state update immediately, including when the device has just
+      // reconnected to Firestore.
+      await _loadState();
+
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Invitation removed.')));
     } catch (e) {
       if (!mounted) return;
 
@@ -220,28 +212,21 @@ class _FamilyShareScreenState extends State<FamilyShareScreen> {
     if (_isLoading) {
       return Scaffold(
         backgroundColor: AppColors.scaffoldBg,
-        body: const Center(
-          child: CircularProgressIndicator(),
-        ),
+        body: const Center(child: CircularProgressIndicator()),
       );
     }
 
     if (_errorMessage != null) {
       return Scaffold(
         backgroundColor: AppColors.scaffoldBg,
-        appBar: AppBar(
-          title: const Text('Family Sharing'),
-        ),
+        appBar: AppBar(title: const Text('Family Sharing')),
         body: Center(
           child: Padding(
             padding: const EdgeInsets.all(24),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                const Icon(
-                  Icons.wifi_off_rounded,
-                  size: 56,
-                ),
+                const Icon(Icons.wifi_off_rounded, size: 56),
                 const SizedBox(height: 16),
                 Text(
                   'Connection Notice',
@@ -251,10 +236,7 @@ class _FamilyShareScreenState extends State<FamilyShareScreen> {
                   ),
                 ),
                 const SizedBox(height: 8),
-                Text(
-                  _errorMessage!,
-                  textAlign: TextAlign.center,
-                ),
+                Text(_errorMessage!, textAlign: TextAlign.center),
                 const SizedBox(height: 16),
                 ElevatedButton(
                   onPressed: _loadState,
@@ -273,10 +255,7 @@ class _FamilyShareScreenState extends State<FamilyShareScreen> {
         body: SafeArea(
           child: Center(
             child: SingleChildScrollView(
-              child: FamilyAuthPrompt(
-                isModal: false,
-                onSignedIn: _loadState,
-              ),
+              child: FamilyAuthPrompt(isModal: false, onSignedIn: _loadState),
             ),
           ),
         ),
@@ -303,23 +282,18 @@ class _FamilyShareScreenState extends State<FamilyShareScreen> {
               stream: _invitationStream,
               initialData: _pendingInvitations,
               builder: (context, snapshot) {
-                final invitations =
-                    snapshot.data ?? _pendingInvitations;
+                final invitations = snapshot.data ?? _pendingInvitations;
 
                 if (snapshot.hasError) {
                   return RefreshIndicator(
                     onRefresh: _loadState,
                     child: ListView(
-                      physics:
-                          const AlwaysScrollableScrollPhysics(),
+                      physics: const AlwaysScrollableScrollPhysics(),
                       padding: const EdgeInsets.all(24),
                       children: [
                         _buildSignedInUserCard(),
                         const SizedBox(height: 24),
-                        const Icon(
-                          Icons.wifi_off_rounded,
-                          size: 48,
-                        ),
+                        const Icon(Icons.wifi_off_rounded, size: 48),
                         const SizedBox(height: 12),
                         Text(
                           'Unable to load invitations.',
@@ -351,22 +325,14 @@ class _FamilyShareScreenState extends State<FamilyShareScreen> {
                 return RefreshIndicator(
                   onRefresh: _loadState,
                   child: ListView(
-                    physics:
-                        const AlwaysScrollableScrollPhysics(),
-                    padding: const EdgeInsets.only(
-                      bottom: 24,
-                    ),
+                    physics: const AlwaysScrollableScrollPhysics(),
+                    padding: const EdgeInsets.only(bottom: 24),
                     children: [
                       _buildSignedInUserCard(),
 
                       if (invitations.isNotEmpty)
                         Padding(
-                          padding: const EdgeInsets.fromLTRB(
-                            20,
-                            16,
-                            20,
-                            0,
-                          ),
+                          padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
                           child: InvitationBanner(
                             invitations: invitations,
                             onAccept: _acceptInvitation,
@@ -386,9 +352,7 @@ class _FamilyShareScreenState extends State<FamilyShareScreen> {
                             return;
                           }
 
-                          final created =
-                              await CreateFamilyScreen
-                                  .navigateTo(
+                          final created = await CreateFamilyScreen.navigateTo(
                             context,
                             _currentUser!,
                           );
@@ -406,8 +370,7 @@ class _FamilyShareScreenState extends State<FamilyShareScreen> {
                             return;
                           }
 
-                          final joined =
-                              await JoinFamilyScreen.navigateTo(
+                          final joined = await JoinFamilyScreen.navigateTo(
                             context,
                             _currentUser!,
                           );
@@ -435,10 +398,7 @@ class _FamilyShareScreenState extends State<FamilyShareScreen> {
 
     return Container(
       margin: const EdgeInsets.fromLTRB(20, 12, 20, 0),
-      padding: const EdgeInsets.symmetric(
-        horizontal: 14,
-        vertical: 8,
-      ),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
       decoration: BoxDecoration(
         color: AppColors.primaryPurple.withAlpha(12),
         borderRadius: BorderRadius.circular(12),
@@ -483,17 +443,10 @@ class _FamilyShareScreenState extends State<FamilyShareScreen> {
     final top = MediaQuery.of(context).padding.top;
 
     return Container(
-      padding: EdgeInsets.fromLTRB(
-        20,
-        top + 16,
-        12,
-        20,
-      ),
+      padding: EdgeInsets.fromLTRB(20, top + 16, 12, 20),
       decoration: const BoxDecoration(
         color: AppColors.heroDarkBg,
-        borderRadius: BorderRadius.vertical(
-          bottom: Radius.circular(24),
-        ),
+        borderRadius: BorderRadius.vertical(bottom: Radius.circular(24)),
       ),
       child: Row(
         children: [
@@ -508,12 +461,8 @@ class _FamilyShareScreenState extends State<FamilyShareScreen> {
             ),
           ),
           IconButton(
-            icon: const Icon(
-              Icons.logout_rounded,
-              color: Colors.white,
-            ),
-            tooltip:
-                'Log Out (${_currentUser?.email ?? ''})',
+            icon: const Icon(Icons.logout_rounded, color: Colors.white),
+            tooltip: 'Log Out (${_currentUser?.email ?? ''})',
             onPressed: _handleLogout,
           ),
         ],

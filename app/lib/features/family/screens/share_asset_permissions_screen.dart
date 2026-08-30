@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
@@ -50,10 +51,12 @@ class ShareAssetPermissionsScreen extends StatefulWidget {
   }
 
   @override
-  State<ShareAssetPermissionsScreen> createState() => _ShareAssetPermissionsScreenState();
+  State<ShareAssetPermissionsScreen> createState() =>
+      _ShareAssetPermissionsScreenState();
 }
 
-class _ShareAssetPermissionsScreenState extends State<ShareAssetPermissionsScreen> {
+class _ShareAssetPermissionsScreenState
+    extends State<ShareAssetPermissionsScreen> {
   final _familyRepository = serviceLocator.familyRepository;
 
   late bool _viewDetails;
@@ -108,6 +111,15 @@ class _ShareAssetPermissionsScreenState extends State<ShareAssetPermissionsScree
 
       if (!mounted) return;
       Navigator.pop(context, true);
+    } on FirebaseException catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(_formatShareError(e)),
+          backgroundColor: AppColors.error,
+          duration: const Duration(seconds: 5),
+        ),
+      );
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -121,12 +133,31 @@ class _ShareAssetPermissionsScreenState extends State<ShareAssetPermissionsScree
     }
   }
 
+  String _formatShareError(FirebaseException error) {
+    if (error.code == 'permission-denied') {
+      return 'Family sharing was denied by Firebase. Confirm you are a family member, then deploy the Firestore and Storage rules.';
+    }
+    if (error.code == 'unauthorized') {
+      return 'Image upload was denied by Firebase Storage. Deploy storage.rules and try again.';
+    }
+    if (error.code == 'object-not-found') {
+      return 'The selected image could not be found on this device. Try choosing the asset again.';
+    }
+    return ErrorFormatter.format(error);
+  }
+
   @override
   Widget build(BuildContext context) {
-    final assetName = _isEditing ? widget.sharedAsset!.name : widget.asset!.name;
+    final assetName = _isEditing
+        ? widget.sharedAsset!.name
+        : widget.asset!.name;
     final emoji = _isEditing ? widget.sharedAsset!.emoji : widget.asset!.emoji;
-    final imagePath = _isEditing ? widget.sharedAsset!.imagePath : widget.asset!.imagePath;
-    final category = _isEditing ? widget.sharedAsset!.categoryName : widget.categoryName;
+    final imagePath = _isEditing
+        ? widget.sharedAsset!.displayImageUrl
+        : widget.asset!.imagePath;
+    final category = _isEditing
+        ? widget.sharedAsset!.categoryName
+        : widget.categoryName;
 
     return Scaffold(
       backgroundColor: AppColors.scaffoldBg,
@@ -159,18 +190,26 @@ class _ShareAssetPermissionsScreenState extends State<ShareAssetPermissionsScree
             style: ElevatedButton.styleFrom(
               backgroundColor: AppColors.primaryPurple,
               foregroundColor: Colors.white,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16),
+              ),
               elevation: 0,
             ),
             child: _isSaving
                 ? const SizedBox(
                     width: 20,
                     height: 20,
-                    child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: Colors.white,
+                    ),
                   )
                 : Text(
                     _isEditing ? 'Save Permissions' : 'Share with Family',
-                    style: GoogleFonts.outfit(fontSize: 16, fontWeight: FontWeight.w600),
+                    style: GoogleFonts.outfit(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w600,
+                    ),
                   ),
           ),
         ),
@@ -202,9 +241,17 @@ class _ShareAssetPermissionsScreenState extends State<ShareAssetPermissionsScree
                             borderRadius: BorderRadius.circular(14),
                             child: imagePath.startsWith('http')
                                 ? Image.network(imagePath, fit: BoxFit.cover)
-                                : Image.file(File(imagePath), fit: BoxFit.cover),
+                                : Image.file(
+                                    File(imagePath),
+                                    fit: BoxFit.cover,
+                                  ),
                           )
-                        : Center(child: Text(emoji ?? '📦', style: const TextStyle(fontSize: 26))),
+                        : Center(
+                            child: Text(
+                              emoji ?? '📦',
+                              style: const TextStyle(fontSize: 26),
+                            ),
+                          ),
                   ),
                   const SizedBox(width: 14),
                   Expanded(
@@ -248,14 +295,28 @@ class _ShareAssetPermissionsScreenState extends State<ShareAssetPermissionsScree
             const SizedBox(height: 6),
             Text(
               'Personal assets stay private. Toggle only the data you want to share.',
-              style: GoogleFonts.outfit(fontSize: 12, color: AppColors.textSecondary),
+              style: GoogleFonts.outfit(
+                fontSize: 12,
+                color: AppColors.textSecondary,
+              ),
             ),
+            if (_isEditing) ...[
+              const SizedBox(height: 6),
+              Text(
+                'Turning off a detail removes it from the shared copy. Your personal asset is never changed.',
+                style: GoogleFonts.outfit(
+                  fontSize: 12,
+                  color: AppColors.textMuted,
+                ),
+              ),
+            ],
             const SizedBox(height: 16),
 
             // Permission Switches
             _PermissionSwitchTile(
               title: 'View Details',
-              subtitle: 'Basic asset information, title, category, and description',
+              subtitle:
+                  'Basic asset information, title, category, and description',
               icon: Icons.info_outline_rounded,
               value: _viewDetails,
               onChanged: (val) => setState(() => _viewDetails = val),
@@ -264,7 +325,8 @@ class _ShareAssetPermissionsScreenState extends State<ShareAssetPermissionsScree
 
             _PermissionSwitchTile(
               title: 'View Location',
-              subtitle: 'Physical storage location (e.g. Living Room, Garage, Safe)',
+              subtitle:
+                  'Physical storage location (e.g. Living Room, Garage, Safe)',
               icon: Icons.location_on_outlined,
               value: _viewLocation,
               onChanged: (val) => setState(() => _viewLocation = val),
@@ -273,7 +335,8 @@ class _ShareAssetPermissionsScreenState extends State<ShareAssetPermissionsScree
 
             _PermissionSwitchTile(
               title: 'View Documents',
-              subtitle: 'Receipts, warranties, user manuals, and attached files',
+              subtitle:
+                  'Receipts, warranties, user manuals, and attached files',
               icon: Icons.description_outlined,
               value: _viewDocuments,
               onChanged: (val) => setState(() => _viewDocuments = val),

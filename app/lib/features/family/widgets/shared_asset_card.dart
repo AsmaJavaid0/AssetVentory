@@ -23,7 +23,8 @@ class SharedAssetCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final hasImage = asset.imagePath != null && asset.imagePath!.isNotEmpty;
+    final imageUrl = asset.displayImageUrl;
+    final hasImage = imageUrl != null && imageUrl.isNotEmpty;
 
     return Container(
       margin: const EdgeInsets.only(bottom: 14),
@@ -68,7 +69,7 @@ class SharedAssetCard extends StatelessWidget {
                       child: hasImage
                           ? ClipRRect(
                               borderRadius: BorderRadius.circular(15),
-                              child: _buildThumbnailImage(asset.imagePath!),
+                              child: _buildThumbnailImage(imageUrl),
                             )
                           : Center(
                               child: Text(
@@ -120,9 +121,18 @@ class SharedAssetCard extends StatelessWidget {
                                       value: 'permissions',
                                       child: Row(
                                         children: [
-                                          const Icon(Icons.security_rounded, size: 18, color: AppColors.primaryPurple),
+                                          const Icon(
+                                            Icons.security_rounded,
+                                            size: 18,
+                                            color: AppColors.primaryPurple,
+                                          ),
                                           const SizedBox(width: 10),
-                                          Text('Edit Permissions', style: GoogleFonts.outfit(fontSize: 14)),
+                                          Text(
+                                            'Edit Permissions',
+                                            style: GoogleFonts.outfit(
+                                              fontSize: 14,
+                                            ),
+                                          ),
                                         ],
                                       ),
                                     ),
@@ -130,9 +140,19 @@ class SharedAssetCard extends StatelessWidget {
                                       value: 'unshare',
                                       child: Row(
                                         children: [
-                                          const Icon(Icons.link_off_rounded, size: 18, color: AppColors.error),
+                                          const Icon(
+                                            Icons.link_off_rounded,
+                                            size: 18,
+                                            color: AppColors.error,
+                                          ),
                                           const SizedBox(width: 10),
-                                          Text('Stop Sharing', style: GoogleFonts.outfit(fontSize: 14, color: AppColors.error)),
+                                          Text(
+                                            'Stop Sharing',
+                                            style: GoogleFonts.outfit(
+                                              fontSize: 14,
+                                              color: AppColors.error,
+                                            ),
+                                          ),
                                         ],
                                       ),
                                     ),
@@ -144,9 +164,13 @@ class SharedAssetCard extends StatelessWidget {
                           // Category & Owner Chip
                           Row(
                             children: [
-                              if (asset.categoryName != null && asset.categoryName!.isNotEmpty) ...[
+                              if (asset.categoryName != null &&
+                                  asset.categoryName!.isNotEmpty) ...[
                                 Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 8,
+                                    vertical: 3,
+                                  ),
                                   decoration: BoxDecoration(
                                     color: AppColors.lightLavender,
                                     borderRadius: BorderRadius.circular(8),
@@ -163,7 +187,10 @@ class SharedAssetCard extends StatelessWidget {
                                 const SizedBox(width: 6),
                               ],
                               Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 8,
+                                  vertical: 3,
+                                ),
                                 decoration: BoxDecoration(
                                   color: isOwner
                                       ? AppColors.primaryPurple.withAlpha(20)
@@ -171,7 +198,9 @@ class SharedAssetCard extends StatelessWidget {
                                   borderRadius: BorderRadius.circular(8),
                                 ),
                                 child: Text(
-                                  isOwner ? 'Shared by you' : 'Owned by ${asset.ownerName}',
+                                  isOwner
+                                      ? 'Shared by you'
+                                      : 'Owned by ${asset.ownerName}',
                                   style: GoogleFonts.outfit(
                                     fontSize: 11,
                                     fontWeight: FontWeight.w500,
@@ -189,16 +218,25 @@ class SharedAssetCard extends StatelessWidget {
                   ],
                 ),
                 // Location or Description if permitted
-                if (asset.permissions.viewLocation && asset.location != null && asset.location!.isNotEmpty) ...[
+                if (asset.permissions.viewLocation &&
+                    asset.location != null &&
+                    asset.location!.isNotEmpty) ...[
                   const SizedBox(height: 12),
                   Row(
                     children: [
-                      const Icon(Icons.location_on_outlined, size: 15, color: AppColors.primaryPurple),
+                      const Icon(
+                        Icons.location_on_outlined,
+                        size: 15,
+                        color: AppColors.primaryPurple,
+                      ),
                       const SizedBox(width: 6),
                       Expanded(
                         child: Text(
                           asset.location!,
-                          style: GoogleFonts.outfit(fontSize: 12, color: AppColors.textSecondary),
+                          style: GoogleFonts.outfit(
+                            fontSize: 12,
+                            color: AppColors.textSecondary,
+                          ),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                         ),
@@ -206,11 +244,16 @@ class SharedAssetCard extends StatelessWidget {
                     ],
                   ),
                 ],
-                if (asset.permissions.viewDetails && asset.description != null && asset.description!.isNotEmpty) ...[
+                if (asset.permissions.viewDetails &&
+                    asset.description != null &&
+                    asset.description!.isNotEmpty) ...[
                   const SizedBox(height: 8),
                   Text(
                     asset.description!,
-                    style: GoogleFonts.outfit(fontSize: 12, color: AppColors.textMuted),
+                    style: GoogleFonts.outfit(
+                      fontSize: 12,
+                      color: AppColors.textMuted,
+                    ),
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                   ),
@@ -259,7 +302,10 @@ class SharedAssetCard extends StatelessWidget {
         path,
         fit: BoxFit.cover,
         errorBuilder: (context, error, stackTrace) => Center(
-          child: Text(asset.emoji ?? '📦', style: const TextStyle(fontSize: 28)),
+          child: Text(
+            asset.emoji ?? '📦',
+            style: const TextStyle(fontSize: 28),
+          ),
         ),
       );
     }
@@ -298,7 +344,9 @@ class _PermissionPill extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         children: [
           Icon(
-            active ? Icons.check_circle_outline_rounded : Icons.lock_outline_rounded,
+            active
+                ? Icons.check_circle_outline_rounded
+                : Icons.lock_outline_rounded,
             size: 11,
             color: active ? const Color(0xFF10B981) : AppColors.textMuted,
           ),

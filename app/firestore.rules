@@ -16,10 +16,34 @@ service cloud.firestore {
         exists(/databases/$(database)/documents/family_members/$(familyId + '_' + request.auth.uid));
     }
 
+    function isFamilyOwner(familyId) {
+      return isFamilyMember(familyId) &&
+        get(/databases/$(database)/documents/family_members/$(familyId + '_' + request.auth.uid)).data.role == 'owner';
+    }
+
+    function isJoiningFamily(familyId) {
+      return isAuthenticated() &&
+        request.resource.data.ownerId == resource.data.ownerId &&
+        request.resource.data.memberCount == resource.data.memberCount + 1 &&
+        getAfter(/databases/$(database)/documents/family_members/$(familyId + '_' + request.auth.uid)).data.userId == request.auth.uid;
+    }
+
+    function isLeavingFamily(familyId) {
+      return isAuthenticated() &&
+        request.resource.data.ownerId == resource.data.ownerId &&
+        request.resource.data.memberCount == resource.data.memberCount - 1 &&
+        !existsAfter(/databases/$(database)/documents/family_members/$(familyId + '_' + request.auth.uid));
+    }
+
     // Users collection
     match /users/{userId} {
       allow read: if isAuthenticated();
-      allow write: if isOwner(userId);
+      allow create: if isOwner(userId);
+      allow update: if isOwner(userId) ||
+        (isFamilyOwner(resource.data.familyId) &&
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['familyId', 'updatedAt']) &&
+          !request.resource.data.keys().hasAny(['familyId']));
+      allow delete: if isOwner(userId);
 
       match /devices/{tokenId} {
         allow read, write: if isOwner(userId);
@@ -57,20 +81,31 @@ service cloud.firestore {
     // Families collection
     match /families/{familyId} {
       allow read: if isAuthenticated();
-      allow create: if isAuthenticated();
-      allow update, delete: if isFamilyMember(familyId);
+      allow create: if isAuthenticated() && request.resource.data.ownerId == request.auth.uid;
+      allow update: if isFamilyOwner(familyId) || isJoiningFamily(familyId) || isLeavingFamily(familyId);
+      allow delete: if isFamilyOwner(familyId);
     }
 
     // Family Members collection
     match /family_members/{memberId} {
-      allow read: if isAuthenticated();
-      allow write: if isAuthenticated();
+      allow read: if isAuthenticated() && isFamilyMember(resource.data.familyId);
+      // A user may create their own membership only; subsequent role changes
+      // and removals are reserved for the family owner.
+      allow create: if isAuthenticated() && request.resource.data.userId == request.auth.uid;
+      allow update: if isFamilyOwner(resource.data.familyId);
+      allow delete: if isFamilyOwner(resource.data.familyId) ||
+        (isAuthenticated() && resource.data.userId == request.auth.uid);
     }
 
     // Family Invitations
     match /family_invitations/{inviteId} {
-      allow read: if isAuthenticated();
-      allow write: if isAuthenticated();
+      allow read: if isAuthenticated() &&
+        (resource.data.receiverEmail == request.auth.token.email || isFamilyMember(resource.data.familyId));
+      allow create: if isFamilyMember(request.resource.data.familyId);
+      allow update: if isFamilyMember(resource.data.familyId) ||
+        resource.data.receiverEmail == request.auth.token.email;
+      allow delete: if isFamilyOwner(resource.data.familyId) ||
+        resource.data.receiverEmail == request.auth.token.email;
     }
 
     // Shared Assets
@@ -79,7 +114,7 @@ service cloud.firestore {
       allow create: if isAuthenticated() && isFamilyMember(request.resource.data.familyId);
       allow update, delete: if isAuthenticated() && (
         resource.data.ownerId == request.auth.uid ||
-        isFamilyMember(resource.data.familyId)
+        isFamilyOwner(resource.data.familyId)
       );
     }
   }
