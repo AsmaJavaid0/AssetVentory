@@ -2,7 +2,6 @@ import 'dart:async';
 import 'dart:io';
 import 'dart:math';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_storage/firebase_storage.dart';
 
 import '../models/family_model.dart';
 import '../models/family_member_model.dart';
@@ -11,15 +10,18 @@ import '../models/shared_asset_model.dart';
 import '../models/sharing_permissions_model.dart';
 import '../../auth/models/user_model.dart';
 import '../../assets/models/local_asset.dart';
+import '../services/family_file_service.dart';
 import 'interfaces/i_family_repository.dart';
 
 class FamilyRepository implements IFamilyRepository {
   final FirebaseFirestore _firestore;
-  final FirebaseStorage _storage;
+  final FamilyFileService _familyFileService;
 
-  FamilyRepository({FirebaseFirestore? firestore, FirebaseStorage? storage})
-    : _firestore = firestore ?? FirebaseFirestore.instance,
-      _storage = storage ?? FirebaseStorage.instance;
+  FamilyRepository({
+    FirebaseFirestore? firestore,
+    FamilyFileService? familyFileService,
+  }) : _firestore = firestore ?? FirebaseFirestore.instance,
+       _familyFileService = familyFileService ?? FamilyFileService();
 
   CollectionReference<Map<String, dynamic>> get _families =>
       _firestore.collection('families');
@@ -49,7 +51,6 @@ class FamilyRepository implements IFamilyRepository {
   @override
   Future<FamilyModel?> getUserFamily(String userId) async {
     try {
-      // 1. Check user document
       final userDoc = await _users
           .doc(userId)
           .get()
@@ -67,7 +68,6 @@ class FamilyRepository implements IFamilyRepository {
         }
       }
 
-      // 2. Fallback: Check family_members collection
       final membership = await _members
           .where('userId', isEqualTo: userId)
           .limit(1)
@@ -81,7 +81,6 @@ class FamilyRepository implements IFamilyRepository {
             .get()
             .timeout(const Duration(seconds: 6));
         if (familyDoc.exists) {
-          // Sync back to user doc non-blocking
           _users.doc(userId).set({
             'familyId': familyId,
           }, SetOptions(merge: true));
@@ -234,7 +233,6 @@ class FamilyRepository implements IFamilyRepository {
     final now = DateTime.now();
     final inviteId = _invitations.doc().id;
 
-    // Fetch family's invite code safely
     String inviteCode = _generateInviteCode();
     try {
       final familyDoc = await _families
@@ -393,7 +391,7 @@ class FamilyRepository implements IFamilyRepository {
   }) async {
     final now = DateTime.now();
     final docId = '${familyId}_${asset.id}';
-    final imageUrl = await _uploadSharedImage(
+    final storagePath = await _uploadSharedImage(
       familyId: familyId,
       assetId: asset.id,
       localPath: asset.imagePath,
@@ -410,9 +408,9 @@ class FamilyRepository implements IFamilyRepository {
       name: asset.name,
       categoryName: categoryName,
       emoji: asset.emoji,
-      // Never expose a device-specific local path in the family document.
       imagePath: null,
-      imageUrl: imageUrl,
+      imageUrl: null,
+      imageStoragePath: storagePath,
       location: asset.location,
       description: asset.description,
       permissions: permissions,
@@ -437,9 +435,6 @@ class FamilyRepository implements IFamilyRepository {
     required String sharedAssetId,
     required SharingPermissionsModel permissions,
   }) async {
-    // Firestore rules grant family members read access to the whole snapshot,
-    // so revoking a permission must also remove that field from the remote
-    // copy. Hiding it only in the UI would leave it readable in the document.
     await _sharedAssets
         .doc(sharedAssetId)
         .update({
@@ -459,13 +454,18 @@ class FamilyRepository implements IFamilyRepository {
         .doc(sharedAssetId)
         .delete()
         .timeout(const Duration(seconds: 8));
+
     final familyId = data?['familyId'] as String?;
-    final assetId = data?['assetId'] as String?;
-    if (familyId != null && assetId != null) {
+    final storagePath = data?['imageStoragePath'] as String?;
+    if (familyId != null && storagePath != null && storagePath.isNotEmpty) {
       try {
-        await _storage.ref('family_assets/$familyId/$assetId').delete();
-      } on FirebaseException catch (error) {
-        if (error.code != 'object-not-found') rethrow;
+        await _familyFileService.deleteFile(
+          familyId: familyId,
+          path: storagePath,
+        );
+      } catch (_) {
+        // Firestore unshare has already completed. The storage cleanup can be
+        // retried separately without blocking the local/remote share removal.
       }
     }
   }
@@ -523,13 +523,48 @@ class FamilyRepository implements IFamilyRepository {
     if (localPath == null ||
         localPath.isEmpty ||
         localPath.startsWith('http')) {
-      return localPath?.startsWith('http') == true ? localPath : null;
+      return null;
     }
     final file = File(localPath);
     if (!await file.exists()) return null;
-    final ref = _storage.ref('family_assets/$familyId/$assetId');
-    await ref.putFile(file).timeout(const Duration(seconds: 30));
-    return ref.getDownloadURL();
+
+    final fileName = localPath.split(RegExp(r'[\\/]')).last;
+    final extension = fileName.contains('.')
+        ? fileName.split('.').last.toLowerCase()
+        : 'bin';
+    final contentType = _contentTypeForExtension(extension);
+
+    return _familyFileService.uploadFile(
+      familyId: familyId,
+      assetId: assetId,
+      filePath: localPath,
+      fileName: fileName,
+      contentType: contentType,
+    );
+  }
+
+  String _contentTypeForExtension(String extension) {
+    switch (extension) {
+      case 'jpg':
+      case 'jpeg':
+        return 'image/jpeg';
+      case 'png':
+        return 'image/png';
+      case 'webp':
+        return 'image/webp';
+      case 'gif':
+        return 'image/gif';
+      case 'pdf':
+        return 'application/pdf';
+      case 'txt':
+        return 'text/plain';
+      case 'doc':
+        return 'application/msword';
+      case 'docx':
+        return 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+      default:
+        return 'application/octet-stream';
+    }
   }
 
   @override
@@ -540,8 +575,6 @@ class FamilyRepository implements IFamilyRepository {
     final memberId = '${familyId}_$userId';
 
     try {
-      // Remove remote copies first, while the user is still authorized as a
-      // family member to delete their Firebase Storage files.
       final userShared = await _sharedAssets
           .where('familyId', isEqualTo: familyId)
           .where('ownerId', isEqualTo: userId)
@@ -605,13 +638,6 @@ class FamilyRepository implements IFamilyRepository {
   @override
   Future<void> deleteFamily(String familyId) async {
     try {
-      await _families
-          .doc(familyId)
-          .delete()
-          .timeout(const Duration(seconds: 8));
-
-      // Delete the remote asset copies before removing the owner's membership;
-      // Firebase Storage access is intentionally limited to family members.
       final shared = await _sharedAssets
           .where('familyId', isEqualTo: familyId)
           .get()
@@ -620,6 +646,11 @@ class FamilyRepository implements IFamilyRepository {
       for (final doc in shared.docs) {
         await unshareAsset(doc.id);
       }
+
+      await _families
+          .doc(familyId)
+          .delete()
+          .timeout(const Duration(seconds: 8));
 
       final members = await _members
           .where('familyId', isEqualTo: familyId)
