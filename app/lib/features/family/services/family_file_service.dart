@@ -48,7 +48,9 @@ class FamilyFileService {
     required String contentType,
   }) async {
     final file = File(filePath);
-    if (!await file.exists()) throw Exception('The selected file no longer exists.');
+    if (!await file.exists()) {
+      throw Exception('The selected file no longer exists.');
+    }
 
     final result = await _invoke({
       'action': 'create-upload-url',
@@ -85,7 +87,9 @@ class FamilyFileService {
     });
 
     final url = result['url'] as String?;
-    if (url == null || url.isEmpty) throw Exception('Could not create a secure download URL.');
+    if (url == null || url.isEmpty) {
+      throw Exception('Could not create a secure download URL.');
+    }
     return url;
   }
 
