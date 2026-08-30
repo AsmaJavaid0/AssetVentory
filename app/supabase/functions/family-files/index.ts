@@ -34,10 +34,7 @@ function safePart(value: string, label: string): string {
   return value;
 }
 
-async function authenticate(request: Request): Promise<string> {
-  const header = request.headers.get("Authorization") ?? "";
-  if (!header.startsWith("Bearer ")) throw new Error("Missing Firebase ID token.");
-  const token = header.substring("Bearer ".length).trim();
+async function authenticate(token: string): Promise<string> {
   if (!token) throw new Error("Missing Firebase ID token.");
 
   const { payload } = await jwtVerify(token, FIREBASE_JWKS, {
@@ -51,24 +48,17 @@ async function authenticate(request: Request): Promise<string> {
   return payload.sub;
 }
 
-async function assertFamilyMember(userId: string, familyId: string) {
+async function assertFamilyMember(userId: string, familyId: string, firebaseToken: string) {
   const path = `${familyId}_${userId}`;
   const url = `https://firestore.googleapis.com/v1/projects/${FIREBASE_PROJECT_ID}/databases/(default)/documents/family_members/${encodeURIComponent(path)}`;
 
   const response = await fetch(url, {
-    headers: { Authorization: `Bearer ${await getFirebaseTokenFromContext()}` },
+    headers: { Authorization: `Bearer ${firebaseToken}` },
   });
 
   if (!response.ok) {
-    throw new Error("Family membership could not be verified.");
+    throw new Error("You are not a member of this family.");
   }
-}
-
-// The request token is passed through this async-local request context.
-// It is set immediately before membership verification.
-let requestFirebaseToken = "";
-async function getFirebaseTokenFromContext(): Promise<string> {
-  return requestFirebaseToken;
 }
 
 async function createUploadUrl(familyId: string, assetId: string, fileName: string, contentType: string) {
@@ -115,16 +105,16 @@ Deno.serve(async (request) => {
 
   try {
     const authHeader = request.headers.get("Authorization") ?? "";
-    requestFirebaseToken = authHeader.startsWith("Bearer ")
+    const firebaseToken = authHeader.startsWith("Bearer ")
       ? authHeader.substring("Bearer ".length).trim()
       : "";
 
-    const userId = await authenticate(request);
+    const userId = await authenticate(firebaseToken);
     const body = await request.json();
     const action = body?.action as string?;
     const familyId = safePart(body?.familyId as string, "family id");
 
-    await assertFamilyMember(userId, familyId);
+    await assertFamilyMember(userId, familyId, firebaseToken);
 
     if (action === "create-upload-url") {
       const assetId = safePart(body?.assetId as string, "asset id");
@@ -145,7 +135,5 @@ Deno.serve(async (request) => {
   } catch (error) {
     console.error("family-files error", error);
     return json({ error: error instanceof Error ? error.message : "Request failed." }, 403);
-  } finally {
-    requestFirebaseToken = "";
   }
 });
