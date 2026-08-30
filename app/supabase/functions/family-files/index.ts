@@ -61,7 +61,7 @@ async function assertFamilyMember(userId: string, familyId: string, firebaseToke
   }
 }
 
-async function createUploadUrl(familyId: string, assetId: string, fileName: string, contentType: string) {
+async function createUploadUrl(familyId: string, assetId: string, fileName: string) {
   const safeFamily = safePart(familyId, "family id");
   const safeAsset = safePart(assetId, "asset id");
   const extension = fileName.includes(".") ? fileName.split(".").pop()!.toLowerCase() : "bin";
@@ -74,12 +74,12 @@ async function createUploadUrl(familyId: string, assetId: string, fileName: stri
     .createSignedUploadUrl(path, { upsert: false });
 
   if (error || !data) throw new Error(error?.message ?? "Could not create upload URL.");
-  return { path, token: data.token, contentType: contentType || "application/octet-stream" };
+  return { path, token: data.token };
 }
 
 async function createDownloadUrl(familyId: string, path: string) {
-  safePart(familyId, "family id");
-  if (!path.startsWith(`${familyId}/`)) throw new Error("File does not belong to this family.");
+  const family = safePart(familyId, "family id");
+  if (!path.startsWith(`${family}/`)) throw new Error("File does not belong to this family.");
   if (path.includes("..") || path.includes("\\")) throw new Error("Invalid file path.");
 
   const { data, error } = await supabaseAdmin.storage
@@ -90,8 +90,8 @@ async function createDownloadUrl(familyId: string, path: string) {
 }
 
 async function deleteFile(familyId: string, path: string) {
-  safePart(familyId, "family id");
-  if (!path.startsWith(`${familyId}/`) || path.includes("..") || path.includes("\\")) {
+  const family = safePart(familyId, "family id");
+  if (!path.startsWith(`${family}/`) || path.includes("..") || path.includes("\\")) {
     throw new Error("Invalid file path.");
   }
   const { error } = await supabaseAdmin.storage.from(BUCKET).remove([path]);
@@ -111,7 +111,7 @@ Deno.serve(async (request) => {
 
     const userId = await authenticate(firebaseToken);
     const body = await request.json();
-    const action = body?.action as string?;
+    const action = body?.action as string | undefined;
     const familyId = safePart(body?.familyId as string, "family id");
 
     await assertFamilyMember(userId, familyId, firebaseToken);
@@ -119,8 +119,7 @@ Deno.serve(async (request) => {
     if (action === "create-upload-url") {
       const assetId = safePart(body?.assetId as string, "asset id");
       const fileName = String(body?.fileName ?? "file.bin");
-      const contentType = String(body?.contentType ?? "application/octet-stream");
-      return json(await createUploadUrl(familyId, assetId, fileName, contentType));
+      return json(await createUploadUrl(familyId, assetId, fileName));
     }
 
     if (action === "create-download-url") {
