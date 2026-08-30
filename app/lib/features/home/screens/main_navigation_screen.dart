@@ -16,7 +16,7 @@ class MainNavigationScreen extends StatefulWidget {
 }
 
 class _MainNavigationScreenState extends State<MainNavigationScreen> {
-  int _currentIndex = 2;
+  int _currentIndex = 0;
 
   Widget _buildCurrentPage() {
     switch (_currentIndex) {

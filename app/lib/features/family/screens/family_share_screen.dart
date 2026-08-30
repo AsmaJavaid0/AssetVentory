@@ -268,8 +268,18 @@ class _FamilyShareScreenState extends State<FamilyShareScreen> {
     }
 
     if (_currentUser == null) {
-      return const Scaffold(
-        body: FamilyAuthPrompt(),
+      return Scaffold(
+        backgroundColor: AppColors.scaffoldBg,
+        body: SafeArea(
+          child: Center(
+            child: SingleChildScrollView(
+              child: FamilyAuthPrompt(
+                isModal: false,
+                onSignedIn: _loadState,
+              ),
+            ),
+          ),
+        ),
       );
     }
 
