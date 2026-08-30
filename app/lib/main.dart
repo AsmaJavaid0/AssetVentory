@@ -16,7 +16,7 @@ void main() async {
 
   await Supabase.initialize(
     url: 'https://jlfnffzyljswzskwhpmp.supabase.co',
-    anonKey: 'sb_publishable_I7q_h1Co1eyJ9Bp-StMgiw_YrwN9_NP',
+    publishableKey: 'sb_publishable_I7q_h1Co1eyJ9Bp-StMgiw_YrwN9_NP',
   );
 
   FirebaseFirestore.instance.settings = const Settings(
@@ -24,12 +24,9 @@ void main() async {
     cacheSizeBytes: Settings.CACHE_SIZE_UNLIMITED,
   );
 
-  // Initialize the service locator
   await setupServiceLocator();
   await serviceLocator.preferences.init();
 
-  // Initialize local notifications & FCM asynchronously (non-blocking)
-  // This runs in the background so the UI renders immediately.
   _initNotifications();
 
   runApp(const AssetVentoryApp());
