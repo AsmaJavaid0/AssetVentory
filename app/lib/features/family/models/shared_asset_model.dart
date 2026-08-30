@@ -4,7 +4,7 @@ import 'sharing_permissions_model.dart';
 class SharedAssetModel {
   final String id;
   final String familyId;
-  final String assetId; // Original local asset id
+  final String assetId;
   final String ownerId;
   final String ownerName;
   final String name;
@@ -12,9 +12,11 @@ class SharedAssetModel {
   final String? emoji;
   final String? imagePath;
 
-  /// A Firebase Storage URL for the family copy of the image.  Unlike
-  /// [imagePath], this is available to every member of the family.
+  /// Legacy/public URL field retained for backwards compatibility.
   final String? imageUrl;
+
+  /// Private Supabase Storage path. It is never exposed as a public URL.
+  final String? imageStoragePath;
   final String? location;
   final String? description;
   final SharingPermissionsModel permissions;
@@ -32,6 +34,7 @@ class SharedAssetModel {
     this.emoji,
     this.imagePath,
     this.imageUrl,
+    this.imageStoragePath,
     this.location,
     this.description,
     this.permissions = const SharingPermissionsModel(),
@@ -52,11 +55,9 @@ class SharedAssetModel {
       name: data['name'] as String? ?? '',
       categoryName: data['categoryName'] as String?,
       emoji: data['emoji'] as String?,
-      // `imagePath` was used by older builds and may be an absolute path on
-      // the owner's device. Keep reading it for backwards compatibility, but
-      // prefer the remote URL for all new shared assets.
       imagePath: data['imagePath'] as String?,
       imageUrl: data['imageUrl'] as String?,
+      imageStoragePath: data['imageStoragePath'] as String?,
       location: data['location'] as String?,
       description: data['description'] as String?,
       permissions: SharingPermissionsModel.fromMap(
@@ -78,6 +79,7 @@ class SharedAssetModel {
       'emoji': emoji,
       'imagePath': imagePath,
       'imageUrl': imageUrl,
+      'imageStoragePath': imageStoragePath,
       'location': permissions.viewLocation ? location : null,
       'description': permissions.viewDetails ? description : null,
       'permissions': permissions.toMap(),
@@ -97,6 +99,7 @@ class SharedAssetModel {
     String? emoji,
     String? imagePath,
     String? imageUrl,
+    String? imageStoragePath,
     String? location,
     String? description,
     SharingPermissionsModel? permissions,
@@ -114,6 +117,7 @@ class SharedAssetModel {
       emoji: emoji ?? this.emoji,
       imagePath: imagePath ?? this.imagePath,
       imageUrl: imageUrl ?? this.imageUrl,
+      imageStoragePath: imageStoragePath ?? this.imageStoragePath,
       location: location ?? this.location,
       description: description ?? this.description,
       permissions: permissions ?? this.permissions,
@@ -122,7 +126,6 @@ class SharedAssetModel {
     );
   }
 
-  /// The image that can safely be rendered in the family space.
   String? get displayImageUrl =>
       imageUrl ?? ((imagePath?.startsWith('http') ?? false) ? imagePath : null);
 }
