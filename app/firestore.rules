@@ -12,8 +12,6 @@ service cloud.firestore {
     }
 
     // The user's familyId is the authorization source for family access.
-    // This avoids recursively checking family_members from rules that are
-    // themselves evaluating family_members documents.
     function isFamilyMember(familyId) {
       return isAuthenticated() &&
         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.familyId == familyId;
@@ -52,16 +50,18 @@ service cloud.firestore {
     }
 
     match /tasks/{taskId} {
+      // A task is visible to its assignee. A family-task creator can also
+      // see the task they created, so the creator can track its status.
       allow read: if isAuthenticated() && (
         resource.data.assignedTo == request.auth.uid ||
-        (resource.data.familyId == null && resource.data.createdBy == request.auth.uid)
+        resource.data.createdBy == request.auth.uid
       );
       allow create: if isAuthenticated() &&
         request.resource.data.createdBy == request.auth.uid &&
         (request.resource.data.familyId == null || isFamilyMember(request.resource.data.familyId));
       allow update: if isAuthenticated() && (
         resource.data.assignedTo == request.auth.uid ||
-        (resource.data.familyId == null && resource.data.createdBy == request.auth.uid)
+        resource.data.createdBy == request.auth.uid
       );
       allow delete: if isAuthenticated() && (
         resource.data.createdBy == request.auth.uid ||
@@ -77,8 +77,6 @@ service cloud.firestore {
     }
 
     match /family_members/{memberId} {
-      // A user can read their own membership. Other members can read
-      // membership records for their family using users/{uid}.familyId.
       allow read: if isAuthenticated() && (
         resource.data.userId == request.auth.uid ||
         isFamilyMember(resource.data.familyId)
