@@ -11,156 +11,70 @@ import '../../tasks/models/reminder_model.dart';
 class FirestoreService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
-  CollectionReference<Map<String, dynamic>> get _usersCollection =>
-      _firestore.collection('users');
+  CollectionReference<Map<String, dynamic>> get _usersCollection => _firestore.collection('users');
+  CollectionReference<Map<String, dynamic>> get _assetsCollection => _firestore.collection('assets');
+  CollectionReference<Map<String, dynamic>> get _categoriesCollection => _firestore.collection('categories');
+  CollectionReference<Map<String, dynamic>> get _documentsCollection => _firestore.collection('documents');
+  CollectionReference<Map<String, dynamic>> get _remindersCollection => _firestore.collection('reminders');
+  CollectionReference<Map<String, dynamic>> get _tasksCollection => _firestore.collection('tasks');
 
-  CollectionReference<Map<String, dynamic>> get _assetsCollection =>
-      _firestore.collection('assets');
-
-  CollectionReference<Map<String, dynamic>> get _categoriesCollection =>
-      _firestore.collection('categories');
-
-  CollectionReference<Map<String, dynamic>> get _documentsCollection =>
-      _firestore.collection('documents');
-
-  CollectionReference<Map<String, dynamic>> get _remindersCollection =>
-      _firestore.collection('reminders');
-
-  CollectionReference<Map<String, dynamic>> get _tasksCollection =>
-      _firestore.collection('tasks');
-
-  /// Creates or updates a user document in users/{userId}
-  Future<void> createOrUpdateUser({
-    required String uid,
-    required String name,
-    required String email,
-    String? photoUrl,
-    String? familyId,
-  }) async {
+  Future<void> createOrUpdateUser({required String uid, required String name, required String email, String? photoUrl, String? familyId}) async {
     try {
       final userDocRef = _usersCollection.doc(uid);
       final now = DateTime.now();
-
       final updateData = <String, dynamic>{
         'name': name.isNotEmpty ? name : email.split('@').first,
         'email': email,
         'updatedAt': Timestamp.fromDate(now),
       };
-
-      if (photoUrl != null && photoUrl.isNotEmpty) {
-        updateData['photoUrl'] = photoUrl;
-      }
-      if (familyId != null) {
-        updateData['familyId'] = familyId;
-      }
-
-      // set with merge doesn't require a blocking get() call
+      if (photoUrl != null && photoUrl.isNotEmpty) updateData['photoUrl'] = photoUrl;
+      if (familyId != null) updateData['familyId'] = familyId;
       await userDocRef.set(updateData, SetOptions(merge: true));
     } catch (e) {
-      // Non-fatal: offline client will sync when connection is established
+      // Non-fatal for profile synchronization.
     }
   }
 
-  /// Fetches the user profile by UID
   Future<Result<UserModel>> getUser(String uid) async {
     try {
       final doc = await _usersCollection.doc(uid).get();
-      if (doc.exists) {
-        return Result.success(UserModel.fromFirestore(doc));
-      }
+      if (doc.exists) return Result.success(UserModel.fromFirestore(doc));
       return Result.failure(StorageException('User not found'));
     } catch (e) {
       return Result.failure(StorageException(e.toString()));
     }
   }
 
-  /// Stream of user profile updates
-  Stream<UserModel?> streamUser(String uid) {
-    return _usersCollection.doc(uid).snapshots().map((doc) {
-      if (doc.exists) {
-        return UserModel.fromFirestore(doc);
-      }
-      return null;
+  Stream<UserModel?> streamUser(String uid) => _usersCollection.doc(uid).snapshots().map((doc) => doc.exists ? UserModel.fromFirestore(doc) : null);
+
+  Stream<List<AssetModel>> streamUserAssets(String ownerId) => _assetsCollection.where('ownerId', isEqualTo: ownerId).orderBy('createdAt', descending: true).snapshots().map((snapshot) => snapshot.docs.map((doc) => AssetModel.fromFirestore(doc)).toList());
+
+  Stream<List<AssetModel>> streamRecentAssets(String ownerId, {int limit = 5}) => _assetsCollection.where('ownerId', isEqualTo: ownerId).orderBy('createdAt', descending: true).limit(limit).snapshots().map((snapshot) => snapshot.docs.map((doc) => AssetModel.fromFirestore(doc)).toList());
+
+  Stream<List<ReminderModel>> streamUpcomingReminders(String ownerId, {int limit = 5}) {
+    return _remindersCollection.where('ownerId', isEqualTo: ownerId).snapshots().map((snapshot) {
+      final list = snapshot.docs.map((doc) => ReminderModel.fromFirestore(doc)).where((r) => r.status == 'active').toList();
+      list.sort((a, b) => a.reminderDate.compareTo(b.reminderDate));
+      return list.take(limit).toList();
     });
   }
 
-  /// Stream all assets owned by user
-  Stream<List<AssetModel>> streamUserAssets(String ownerId) {
-    return _assetsCollection
-        .where('ownerId', isEqualTo: ownerId)
-        .orderBy('createdAt', descending: true)
-        .snapshots()
-        .map((snapshot) {
-          return snapshot.docs
-              .map((doc) => AssetModel.fromFirestore(doc))
-              .toList();
-        });
-  }
-
-  /// Stream top N recent assets
-  Stream<List<AssetModel>> streamRecentAssets(String ownerId, {int limit = 5}) {
-    return _assetsCollection
-        .where('ownerId', isEqualTo: ownerId)
-        .orderBy('createdAt', descending: true)
-        .limit(limit)
-        .snapshots()
-        .map((snapshot) {
-          return snapshot.docs
-              .map((doc) => AssetModel.fromFirestore(doc))
-              .toList();
-        });
-  }
-
-  /// Stream active upcoming reminders for user
-  Stream<List<ReminderModel>> streamUpcomingReminders(
-    String ownerId, {
-    int limit = 5,
-  }) {
-    return _remindersCollection
-        .where('ownerId', isEqualTo: ownerId)
-        .snapshots()
-        .map((snapshot) {
-          final list = snapshot.docs
-              .map((doc) => ReminderModel.fromFirestore(doc))
-              .where((r) => r.status == 'active')
-              .toList();
-          list.sort((a, b) => a.reminderDate.compareTo(b.reminderDate));
-          return list.take(limit).toList();
-        });
-  }
-
-  /// Stream pending remote tasks assigned to this user. Family assignments
-  /// are deliberately private to their assignee, not broadcast to the family.
   Stream<List<TaskModel>> streamPendingTasks(String uid, {String? familyId}) {
-    return _tasksCollection.where('assignedTo', isEqualTo: uid).snapshots().map(
-      (snapshot) {
-        final list = snapshot.docs
-            .map((doc) => TaskModel.fromFirestore(doc))
-            .where((task) => task.status == TaskStatus.pending)
-            .toList();
-        list.sort((a, b) => a.dueDate.compareTo(b.dueDate));
-        return list;
-      },
-    );
+    return _tasksCollection.where('assignedTo', isEqualTo: uid).snapshots().map((snapshot) {
+      final list = snapshot.docs.map((doc) => TaskModel.fromFirestore(doc)).where((task) => task.status == TaskStatus.pending).toList();
+      list.sort((a, b) => a.dueDate.compareTo(b.dueDate));
+      return list;
+    });
   }
 
-  /// Stream remote tasks assigned to the current user. Personal tasks are
-  /// read from the local store; a family assignment must never be shown to
-  /// another family member merely because they share the same family ID.
   Stream<List<TaskModel>> streamVisibleTasks(String uid, {String? familyId}) {
-    return _tasksCollection.where('assignedTo', isEqualTo: uid).snapshots().map(
-      (snapshot) {
-        final tasks = snapshot.docs
-            .map((doc) => TaskModel.fromFirestore(doc))
-            .where((task) => task.assignedTo == uid)
-            .toList();
-        tasks.sort((a, b) => a.dueDate.compareTo(b.dueDate));
-        return tasks;
-      },
-    );
+    return _tasksCollection.where('assignedTo', isEqualTo: uid).snapshots().map((snapshot) {
+      final tasks = snapshot.docs.map((doc) => TaskModel.fromFirestore(doc)).where((task) => task.assignedTo == uid).toList();
+      tasks.sort((a, b) => a.dueDate.compareTo(b.dueDate));
+      return tasks;
+    });
   }
 
-  /// Get single task by ID
   Future<TaskModel?> getTask(String taskId) async {
     try {
       final doc = await _tasksCollection.doc(taskId).get();
@@ -171,190 +85,44 @@ class FirestoreService {
     }
   }
 
-  /// Add a new task document
-  Future<String> addTask(TaskModel task) async {
-    final docRef = await _tasksCollection.add(task.toFirestore());
-    return docRef.id;
-  }
+  Future<String> addTask(TaskModel task) async => (await _tasksCollection.add(task.toFirestore())).id;
 
-  /// Set task with explicit document ID or generated ID
+  /// Creates a task and only returns after Firestore has accepted the write.
+  /// Callers that need strict online semantics must perform their own server
+  /// connectivity check before calling this method.
   Future<String> createTask(TaskModel task) async {
-    final docRef = task.id.isNotEmpty
-        ? _tasksCollection.doc(task.id)
-        : _tasksCollection.doc();
-
+    final docRef = task.id.isNotEmpty ? _tasksCollection.doc(task.id) : _tasksCollection.doc();
     final taskData = task.copyWith(id: docRef.id).toFirestore();
-    try {
-      await docRef
-          .set(taskData, SetOptions(merge: true))
-          .timeout(const Duration(seconds: 6));
-    } on TimeoutException {
-      // Queued in Firestore offline cache
-    }
+    await docRef.set(taskData, SetOptions(merge: true));
     return docRef.id;
   }
 
-  /// Update an existing task
   Future<void> updateTask(TaskModel task) async {
-    try {
-      await _tasksCollection
-          .doc(task.id)
-          .update({
-            ...task.toFirestore(),
-            'updatedAt': FieldValue.serverTimestamp(),
-          })
-          .timeout(const Duration(seconds: 6));
-    } on TimeoutException {
-      // Queued in Firestore offline cache
-    }
+    await _tasksCollection.doc(task.id).update({
+      ...task.toFirestore(),
+      'updatedAt': FieldValue.serverTimestamp(),
+    });
   }
 
-  /// Complete a task
-  Future<void> completeTask(
-    String taskId, {
-    required String completedBy,
-    String? completedByName,
-  }) async {
+  Future<void> completeTask(String taskId, {required String completedBy, String? completedByName}) async {
     final now = DateTime.now();
-    final data = <String, dynamic>{
+    await _tasksCollection.doc(taskId).update({
       'status': TaskStatus.completed.toFirestore(),
-      'completedAt': Timestamp.fromDate(now),
       'completedBy': completedBy,
-      'updatedAt': Timestamp.fromDate(now),
-    };
-    if (completedByName != null) {
-      data['completedByName'] = completedByName;
-    }
-    try {
-      await _tasksCollection
-          .doc(taskId)
-          .update(data)
-          .timeout(const Duration(seconds: 6));
-    } on TimeoutException {
-      // Queued in Firestore offline cache
-    }
+      'completedByName': completedByName,
+      'completedAt': Timestamp.fromDate(now),
+      'updatedAt': FieldValue.serverTimestamp(),
+    });
   }
 
-  /// Snooze a task
   Future<void> snoozeTask(String taskId, DateTime snoozeUntil) async {
-    final now = DateTime.now();
-    try {
-      await _tasksCollection
-          .doc(taskId)
-          .update({
-            'snoozedUntil': Timestamp.fromDate(snoozeUntil),
-            'updatedAt': Timestamp.fromDate(now),
-          })
-          .timeout(const Duration(seconds: 6));
-    } on TimeoutException {
-      // Queued in Firestore offline cache
-    }
+    await _tasksCollection.doc(taskId).update({
+      'snoozedUntil': Timestamp.fromDate(snoozeUntil),
+      'updatedAt': FieldValue.serverTimestamp(),
+    });
   }
 
-  /// Delete a task
   Future<void> deleteTask(String taskId) async {
-    try {
-      await _tasksCollection
-          .doc(taskId)
-          .delete()
-          .timeout(const Duration(seconds: 6));
-    } on TimeoutException {
-      // Queued in Firestore offline cache
-    }
-  }
-
-  /// Delete an asset
-  Future<void> deleteAsset(String assetId) async {
-    await _assetsCollection.doc(assetId).delete();
-  }
-
-  /// Stream categories for a specific user
-  Stream<List<CategoryModel>> streamUserCategories(String ownerId) {
-    return _categoriesCollection
-        .where('ownerId', isEqualTo: ownerId)
-        .snapshots()
-        .map((snapshot) {
-          final list = snapshot.docs
-              .map((doc) => CategoryModel.fromFirestore(doc))
-              .toList();
-          list.sort((a, b) => a.name.compareTo(b.name));
-          return list;
-        });
-  }
-
-  /// Add a new category, reusing an existing one with the same name
-  /// (case-insensitive, trimmed) if the user already has one.
-  ///
-  /// Previously this always inserted a new document, so tapping "Create"
-  /// for a name that already existed (e.g. from both the Assets screen and
-  /// the Add Asset screen) silently produced duplicate categories. That's
-  /// why you can end up with two "Electronics" folders that both show 0
-  /// items: assets are filtered by the *exact* category document id, and
-  /// only one of the duplicates (if either) actually matches.
-  Future<String> addCategory(CategoryModel category) async {
-    final normalizedName = category.name.trim().toLowerCase();
-    final existing = await _categoriesCollection
-        .where('ownerId', isEqualTo: category.ownerId)
-        .get();
-    for (final doc in existing.docs) {
-      final data = doc.data();
-      final existingName = (data['name'] as String? ?? '').trim().toLowerCase();
-      if (existingName == normalizedName) {
-        return doc.id; // Reuse the existing category instead of duplicating.
-      }
-    }
-    final docRef = await _categoriesCollection.add(category.toFirestore());
-    return docRef.id;
-  }
-
-  /// Update an existing category. The id is deliberately kept out of the
-  /// Firestore payload; it is the document reference, not a stored field.
-  Future<void> updateCategory(CategoryModel category) async {
-    await _categoriesCollection.doc(category.id).update(category.toFirestore());
-  }
-
-  /// Delete a category AND unlink it from any assets that reference it.
-  ///
-  /// Previously deleting a category left `assets.categoryId` pointing at a
-  /// document that no longer existed, which silently orphans those assets:
-  /// they disappear from every category filter (including a
-  /// newly-recreated category with the same name) while still counting
-  /// toward "All Assets". This clears the reference so the assets fall
-  /// back to "Uncategorized" instead of vanishing from every filter.
-  Future<void> deleteCategory(String categoryId) async {
-    final batch = _firestore.batch();
-    final affectedAssets = await _assetsCollection
-        .where('categoryId', isEqualTo: categoryId)
-        .get();
-    for (final doc in affectedAssets.docs) {
-      batch.update(doc.reference, {'categoryId': null});
-    }
-    batch.delete(_categoriesCollection.doc(categoryId));
-    await batch.commit();
-  }
-
-  /// Stream documents associated with an asset
-  Stream<List<DocumentModel>> streamAssetDocuments(String assetId) {
-    return _documentsCollection
-        .where('assetId', isEqualTo: assetId)
-        .snapshots()
-        .map((snapshot) {
-          final list = snapshot.docs
-              .map((doc) => DocumentModel.fromFirestore(doc))
-              .toList();
-          list.sort((a, b) => b.createdAt.compareTo(a.createdAt));
-          return list;
-        });
-  }
-
-  /// Add a new document metadata record
-  Future<String> addDocument(DocumentModel document) async {
-    final docRef = await _documentsCollection.add(document.toFirestore());
-    return docRef.id;
-  }
-
-  /// Delete a document metadata record
-  Future<void> deleteDocument(String documentId) async {
-    await _documentsCollection.doc(documentId).delete();
+    await _tasksCollection.doc(taskId).delete();
   }
 }
