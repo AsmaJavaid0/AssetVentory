@@ -70,7 +70,7 @@ class _TasksScreenState extends State<TasksScreen> {
         result = result
             .where(
               (t) =>
-                  t.isUpcoming &&
+                  _isUpcomingForDisplay(t) &&
                   !t.isOverdue &&
                   t.status != TaskStatus.completed,
             )
@@ -152,7 +152,7 @@ class _TasksScreenState extends State<TasksScreen> {
                     .where((t) => t.isDueToday && !t.isOverdue)
                     .toList();
                 final upcoming = displayTasks
-                    .where((t) => t.isUpcoming && !t.isOverdue)
+                    .where((t) => _isUpcomingForDisplay(t) && !t.isOverdue)
                     .toList();
                 final other = displayTasks
                     .where(
@@ -201,6 +201,18 @@ class _TasksScreenState extends State<TasksScreen> {
         ],
       ),
     );
+  }
+
+  bool _isUpcomingForDisplay(TaskModel task) {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final scheduled = task.effectiveDueDateTime;
+    final scheduledDay = DateTime(
+      scheduled.year,
+      scheduled.month,
+      scheduled.day,
+    );
+    return scheduledDay.isAfter(today);
   }
 
   Widget _buildTaskActions(BuildContext context) =>
@@ -282,7 +294,7 @@ class _TasksScreenState extends State<TasksScreen> {
         child: Row(
           children: [
             Text(
-              title,
+              title.endsWith('Today') ? 'Today' : title,
               style: GoogleFonts.outfit(
                 fontSize: 16,
                 fontWeight: FontWeight.w700,
@@ -376,8 +388,6 @@ class _TasksScreenState extends State<TasksScreen> {
               ? 'No tasks match your search criteria.'
               : 'Create a reminder or task to keep your assets organized.',
           icon: Icons.task_alt_rounded,
-          onAction: () => CreateTaskScreen.navigateTo(context),
-          actionLabel: 'Create Task',
         );
     }
   }

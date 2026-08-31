@@ -109,9 +109,18 @@ class SharedAssetCard extends StatelessWidget {
                                       value: 'permissions',
                                       child: Row(
                                         children: [
-                                          const Icon(Icons.security_rounded, size: 18, color: AppColors.primaryPurple),
+                                          const Icon(
+                                            Icons.security_rounded,
+                                            size: 18,
+                                            color: AppColors.primaryPurple,
+                                          ),
                                           const SizedBox(width: 10),
-                                          Text('Edit Permissions', style: GoogleFonts.outfit(fontSize: 14)),
+                                          Text(
+                                            'Edit Permissions',
+                                            style: GoogleFonts.outfit(
+                                              fontSize: 14,
+                                            ),
+                                          ),
                                         ],
                                       ),
                                     ),
@@ -119,9 +128,19 @@ class SharedAssetCard extends StatelessWidget {
                                       value: 'unshare',
                                       child: Row(
                                         children: [
-                                          const Icon(Icons.link_off_rounded, size: 18, color: AppColors.error),
+                                          const Icon(
+                                            Icons.link_off_rounded,
+                                            size: 18,
+                                            color: AppColors.error,
+                                          ),
                                           const SizedBox(width: 10),
-                                          Text('Stop Sharing', style: GoogleFonts.outfit(fontSize: 14, color: AppColors.error)),
+                                          Text(
+                                            'Stop Sharing',
+                                            style: GoogleFonts.outfit(
+                                              fontSize: 14,
+                                              color: AppColors.error,
+                                            ),
+                                          ),
                                         ],
                                       ),
                                     ),
@@ -130,34 +149,52 @@ class SharedAssetCard extends StatelessWidget {
                             ],
                           ),
                           const SizedBox(height: 4),
-                          Row(
+                          Wrap(
+                            spacing: 6,
+                            runSpacing: 4,
                             children: [
-                              if (asset.categoryName != null && asset.categoryName!.isNotEmpty) ...[
+                              if (asset.categoryName != null &&
+                                  asset.categoryName!.isNotEmpty) ...[
                                 Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 8,
+                                    vertical: 3,
+                                  ),
                                   decoration: BoxDecoration(
                                     color: AppColors.lightLavender,
                                     borderRadius: BorderRadius.circular(8),
                                   ),
                                   child: Text(
                                     asset.categoryName!,
-                                    style: GoogleFonts.outfit(fontSize: 11, fontWeight: FontWeight.w600, color: AppColors.primaryPurple),
+                                    style: GoogleFonts.outfit(
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.w600,
+                                      color: AppColors.primaryPurple,
+                                    ),
                                   ),
                                 ),
-                                const SizedBox(width: 6),
                               ],
                               Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 8,
+                                  vertical: 3,
+                                ),
                                 decoration: BoxDecoration(
-                                  color: isOwner ? AppColors.primaryPurple.withAlpha(20) : const Color(0xFFF3F4F6),
+                                  color: isOwner
+                                      ? AppColors.primaryPurple.withAlpha(20)
+                                      : const Color(0xFFF3F4F6),
                                   borderRadius: BorderRadius.circular(8),
                                 ),
                                 child: Text(
-                                  isOwner ? 'Shared by you' : 'Owned by ${asset.ownerName}',
+                                  isOwner
+                                      ? 'Shared by you'
+                                      : 'Owned by ${asset.ownerName}',
                                   style: GoogleFonts.outfit(
                                     fontSize: 11,
                                     fontWeight: FontWeight.w500,
-                                    color: isOwner ? AppColors.primaryPurple : AppColors.textSecondary,
+                                    color: isOwner
+                                        ? AppColors.primaryPurple
+                                        : AppColors.textSecondary,
                                   ),
                                 ),
                               ),
@@ -168,21 +205,45 @@ class SharedAssetCard extends StatelessWidget {
                     ),
                   ],
                 ),
-                if (asset.permissions.viewLocation && asset.location != null && asset.location!.isNotEmpty) ...[
+                if (asset.permissions.viewLocation &&
+                    asset.location != null &&
+                    asset.location!.isNotEmpty) ...[
                   const SizedBox(height: 12),
                   Row(
                     children: [
-                      const Icon(Icons.location_on_outlined, size: 15, color: AppColors.primaryPurple),
+                      const Icon(
+                        Icons.location_on_outlined,
+                        size: 15,
+                        color: AppColors.primaryPurple,
+                      ),
                       const SizedBox(width: 6),
                       Expanded(
-                        child: Text(asset.location!, style: GoogleFonts.outfit(fontSize: 12, color: AppColors.textSecondary), maxLines: 1, overflow: TextOverflow.ellipsis),
+                        child: Text(
+                          asset.location!,
+                          style: GoogleFonts.outfit(
+                            fontSize: 12,
+                            color: AppColors.textSecondary,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
                       ),
                     ],
                   ),
                 ],
-                if (asset.permissions.viewDetails && asset.description != null && asset.description!.isNotEmpty) ...[
+                if (asset.permissions.viewDetails &&
+                    asset.description != null &&
+                    asset.description!.isNotEmpty) ...[
                   const SizedBox(height: 8),
-                  Text(asset.description!, style: GoogleFonts.outfit(fontSize: 12, color: AppColors.textMuted), maxLines: 2, overflow: TextOverflow.ellipsis),
+                  Text(
+                    asset.description!,
+                    style: GoogleFonts.outfit(
+                      fontSize: 12,
+                      color: AppColors.textMuted,
+                    ),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
                 ],
                 const SizedBox(height: 12),
                 const Divider(height: 1, color: AppColors.lightLavenderBorder),
@@ -191,10 +252,26 @@ class SharedAssetCard extends StatelessWidget {
                   spacing: 6,
                   runSpacing: 4,
                   children: [
-                    _PermissionPill(label: 'Details', active: asset.permissions.viewDetails, icon: Icons.info_outline_rounded),
-                    _PermissionPill(label: 'Location', active: asset.permissions.viewLocation, icon: Icons.place_outlined),
-                    _PermissionPill(label: 'Documents', active: asset.permissions.viewDocuments, icon: Icons.description_outlined),
-                    _PermissionPill(label: 'Maintenance', active: asset.permissions.viewMaintenance, icon: Icons.build_outlined),
+                    _PermissionPill(
+                      label: 'Details',
+                      active: asset.permissions.viewDetails,
+                      icon: Icons.info_outline_rounded,
+                    ),
+                    _PermissionPill(
+                      label: 'Location',
+                      active: asset.permissions.viewLocation,
+                      icon: Icons.place_outlined,
+                    ),
+                    _PermissionPill(
+                      label: 'Documents',
+                      active: asset.permissions.viewDocuments,
+                      icon: Icons.description_outlined,
+                    ),
+                    _PermissionPill(
+                      label: 'Maintenance',
+                      active: asset.permissions.viewMaintenance,
+                      icon: Icons.build_outlined,
+                    ),
                   ],
                 ),
               ],
@@ -225,7 +302,13 @@ class SharedAssetCard extends StatelessWidget {
             );
           }
           if (snapshot.hasError) return _fallbackIcon();
-          return const Center(child: SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2)));
+          return const Center(
+            child: SizedBox(
+              width: 18,
+              height: 18,
+              child: CircularProgressIndicator(strokeWidth: 2),
+            ),
+          );
         },
       );
     }
@@ -240,18 +323,26 @@ class SharedAssetCard extends StatelessWidget {
     if (path.startsWith('http')) {
       return ClipRRect(
         borderRadius: BorderRadius.circular(15),
-        child: Image.network(path, fit: BoxFit.cover, errorBuilder: (_, __, ___) => _fallbackIcon()),
+        child: Image.network(
+          path,
+          fit: BoxFit.cover,
+          errorBuilder: (_, __, ___) => _fallbackIcon(),
+        ),
       );
     }
     return ClipRRect(
       borderRadius: BorderRadius.circular(15),
-      child: Image.file(File(path), fit: BoxFit.cover, errorBuilder: (_, __, ___) => _fallbackIcon()),
+      child: Image.file(
+        File(path),
+        fit: BoxFit.cover,
+        errorBuilder: (_, __, ___) => _fallbackIcon(),
+      ),
     );
   }
 
   Widget _fallbackIcon() => Center(
-        child: Text(asset.emoji ?? '📦', style: const TextStyle(fontSize: 28)),
-      );
+    child: Text(asset.emoji ?? '📦', style: const TextStyle(fontSize: 28)),
+  );
 }
 
 class _PermissionPill extends StatelessWidget {
@@ -259,22 +350,41 @@ class _PermissionPill extends StatelessWidget {
   final bool active;
   final IconData icon;
 
-  const _PermissionPill({required this.label, required this.active, required this.icon});
+  const _PermissionPill({
+    required this.label,
+    required this.active,
+    required this.icon,
+  });
 
   @override
   Widget build(BuildContext context) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
       decoration: BoxDecoration(
-        color: active ? const Color(0xFF10B981).withAlpha(15) : Colors.grey.withAlpha(20),
+        color: active
+            ? const Color(0xFF10B981).withAlpha(15)
+            : Colors.grey.withAlpha(20),
         borderRadius: BorderRadius.circular(6),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(active ? Icons.check_circle_outline_rounded : Icons.lock_outline_rounded, size: 11, color: active ? const Color(0xFF10B981) : AppColors.textMuted),
+          Icon(
+            active
+                ? Icons.check_circle_outline_rounded
+                : Icons.lock_outline_rounded,
+            size: 11,
+            color: active ? const Color(0xFF10B981) : AppColors.textMuted,
+          ),
           const SizedBox(width: 4),
-          Text(label, style: GoogleFonts.outfit(fontSize: 10, fontWeight: FontWeight.w600, color: active ? const Color(0xFF047857) : AppColors.textMuted)),
+          Text(
+            label,
+            style: GoogleFonts.outfit(
+              fontSize: 10,
+              fontWeight: FontWeight.w600,
+              color: active ? const Color(0xFF047857) : AppColors.textMuted,
+            ),
+          ),
         ],
       ),
     );
