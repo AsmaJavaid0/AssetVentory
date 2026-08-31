@@ -13,6 +13,7 @@ import 'family_members_screen.dart';
 import 'share_asset_screen.dart';
 import 'share_asset_permissions_screen.dart';
 import 'family_settings_screen.dart';
+import 'shared_asset_details_screen.dart';
 
 class FamilyDashboardScreen extends StatefulWidget {
   final FamilyModel family;
@@ -89,6 +90,10 @@ class _FamilyDashboardScreenState extends State<FamilyDashboardScreen> {
     }
   }
 
+  void _openSharedAsset(SharedAssetModel asset) {
+    SharedAssetDetailsScreen.navigateTo(context, asset);
+  }
+
   Future<void> _confirmUnshare(SharedAssetModel asset) async {
     final confirm = await showDialog<bool>(
       context: context,
@@ -163,7 +168,9 @@ class _FamilyDashboardScreenState extends State<FamilyDashboardScreen> {
             ],
             flexibleSpace: FlexibleSpaceBar(
               background: Container(
-                decoration: const BoxDecoration(gradient: AppColors.heroGradient),
+                decoration: const BoxDecoration(
+                  gradient: AppColors.heroGradient,
+                ),
                 padding: const EdgeInsets.fromLTRB(20, 50, 20, 20),
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.end,
@@ -202,9 +209,13 @@ class _FamilyDashboardScreenState extends State<FamilyDashboardScreen> {
                                 overflow: TextOverflow.ellipsis,
                               ),
                               StreamBuilder<List<FamilyMemberModel>>(
-                                stream: _familyRepository.streamFamilyMembers(widget.family.id),
+                                stream: _familyRepository.streamFamilyMembers(
+                                  widget.family.id,
+                                ),
                                 builder: (context, snapshot) {
-                                  final count = snapshot.data?.length ?? widget.family.memberCount;
+                                  final count =
+                                      snapshot.data?.length ??
+                                      widget.family.memberCount;
                                   return Text(
                                     '$count ${count == 1 ? 'member' : 'members'} • Code: ${widget.family.inviteCode}',
                                     style: GoogleFonts.outfit(
@@ -231,7 +242,9 @@ class _FamilyDashboardScreenState extends State<FamilyDashboardScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   StreamBuilder<List<FamilyMemberModel>>(
-                    stream: _familyRepository.streamFamilyMembers(widget.family.id),
+                    stream: _familyRepository.streamFamilyMembers(
+                      widget.family.id,
+                    ),
                     builder: (context, snapshot) {
                       final members = snapshot.data ?? [];
                       return Container(
@@ -239,7 +252,9 @@ class _FamilyDashboardScreenState extends State<FamilyDashboardScreen> {
                         decoration: BoxDecoration(
                           color: AppColors.surfaceWhite,
                           borderRadius: BorderRadius.circular(20),
-                          border: Border.all(color: AppColors.lightLavenderBorder),
+                          border: Border.all(
+                            color: AppColors.lightLavenderBorder,
+                          ),
                         ),
                         child: Row(
                           children: [
@@ -312,7 +327,9 @@ class _FamilyDashboardScreenState extends State<FamilyDashboardScreen> {
                   ),
                   const SizedBox(height: 16),
                   StreamBuilder<List<SharedAssetModel>>(
-                    stream: _familyRepository.streamSharedAssets(widget.family.id),
+                    stream: _familyRepository.streamSharedAssets(
+                      widget.family.id,
+                    ),
                     builder: (context, snapshot) {
                       if (snapshot.connectionState == ConnectionState.waiting) {
                         return const Center(
@@ -333,7 +350,9 @@ class _FamilyDashboardScreenState extends State<FamilyDashboardScreen> {
                           decoration: BoxDecoration(
                             color: AppColors.surfaceWhite,
                             borderRadius: BorderRadius.circular(20),
-                            border: Border.all(color: AppColors.lightLavenderBorder),
+                            border: Border.all(
+                              color: AppColors.lightLavenderBorder,
+                            ),
                           ),
                           child: Column(
                             children: [
@@ -372,7 +391,9 @@ class _FamilyDashboardScreenState extends State<FamilyDashboardScreen> {
                           return SharedAssetCard(
                             asset: asset,
                             isOwner: asset.ownerId == widget.currentUser.id,
-                            onManagePermissions: () => _managePermissions(asset),
+                            onTap: () => _openSharedAsset(asset),
+                            onManagePermissions: () =>
+                                _managePermissions(asset),
                             onUnshare: () => _confirmUnshare(asset),
                           );
                         },

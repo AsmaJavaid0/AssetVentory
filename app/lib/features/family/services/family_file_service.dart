@@ -8,17 +8,20 @@ class FamilyFileService {
 
   SupabaseClient get _supabase => Supabase.instance.client;
 
-  Future<Map<String, dynamic>> _invoke(
-    Map<String, dynamic> body,
-  ) async {
+  Future<Map<String, dynamic>> _invoke(Map<String, dynamic> body) async {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) {
       throw StateError('You must be signed in to access family files.');
     }
 
-    final token = await user.getIdToken();
+    // The edge function verifies this token against Firestore. Refresh it at
+    // the point of use so a recently signed-in or newly joined member is not
+    // rejected because the client supplied a cached credential.
+    final token = await user.getIdToken(true);
     if (token == null || token.isEmpty) {
-      throw StateError('Your Firebase session has expired. Please sign in again.');
+      throw StateError(
+        'Your Firebase session has expired. Please sign in again.',
+      );
     }
 
     final response = await _supabase.functions.invoke(
@@ -66,12 +69,14 @@ class FamilyFileService {
       throw Exception('The secure upload URL was not returned.');
     }
 
-    await _supabase.storage.from(bucket).uploadToSignedUrl(
-      path,
-      token,
-      file,
-      FileOptions(contentType: contentType, upsert: false),
-    );
+    await _supabase.storage
+        .from(bucket)
+        .uploadToSignedUrl(
+          path,
+          token,
+          file,
+          FileOptions(contentType: contentType, upsert: false),
+        );
 
     return path;
   }
@@ -97,10 +102,6 @@ class FamilyFileService {
     required String familyId,
     required String path,
   }) async {
-    await _invoke({
-      'action': 'delete',
-      'familyId': familyId,
-      'path': path,
-    });
+    await _invoke({'action': 'delete', 'familyId': familyId, 'path': path});
   }
 }

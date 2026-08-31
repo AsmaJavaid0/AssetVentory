@@ -56,7 +56,81 @@ async function assertFamilyMember(userId: string, familyId: string, firebaseToke
     headers: { Authorization: `Bearer ${firebaseToken}` },
   });
 
-  if (!response.ok) {
+  // New memberships use `${familyId}_${userId}` as their document ID, so this
+  // is the inexpensive normal path. Do not use role here: owners, admins, and
+  // ordinary members all have the same file-sharing access.
+  if (response.ok) {
+    const document = await response.json();
+    const fields = document?.fields;
+    if (
+      fields?.familyId?.stringValue === familyId &&
+      fields?.userId?.stringValue === userId
+    ) {
+      return;
+    }
+  } else if (response.status !== 404) {
+    const details = await response.text();
+    throw new Error(
+      `Could not verify family membership (${response.status}): ${details || "Firestore request failed."}`,
+    );
+  }
+
+  // Some existing families have membership documents created before the
+  // canonical document-ID convention. Look them up by their authoritative
+  // fields as well, so a valid non-owner is never rejected solely because of
+  // that historical ID difference.
+  const queryUrl = `https://firestore.googleapis.com/v1/projects/${FIREBASE_PROJECT_ID}/databases/(default)/documents:runQuery`;
+  const queryResponse = await fetch(queryUrl, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${firebaseToken}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      structuredQuery: {
+        from: [{ collectionId: "family_members" }],
+        where: {
+          compositeFilter: {
+            op: "AND",
+            filters: [
+              {
+                fieldFilter: {
+                  field: { fieldPath: "familyId" },
+                  op: "EQUAL",
+                  value: { stringValue: familyId },
+                },
+              },
+              {
+                fieldFilter: {
+                  field: { fieldPath: "userId" },
+                  op: "EQUAL",
+                  value: { stringValue: userId },
+                },
+              },
+            ],
+          },
+        },
+        limit: 1,
+      },
+    }),
+  });
+
+  if (!queryResponse.ok) {
+    const details = await queryResponse.text();
+    throw new Error(
+      `Could not verify family membership (${queryResponse.status}): ${details || "Firestore query failed."}`,
+    );
+  }
+
+  const results = await queryResponse.json();
+  const member = Array.isArray(results)
+    ? results.find((result) => result?.document)?.document
+    : null;
+  const fields = member?.fields;
+  if (
+    fields?.familyId?.stringValue !== familyId ||
+    fields?.userId?.stringValue !== userId
+  ) {
     throw new Error("You are not a member of this family.");
   }
 }

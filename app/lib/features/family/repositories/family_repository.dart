@@ -371,14 +371,15 @@ class FamilyRepository implements IFamilyRepository {
 
   @override
   Stream<List<SharedAssetModel>> streamSharedAssets(String familyId) {
-    return _sharedAssets
-        .where('familyId', isEqualTo: familyId)
-        .orderBy('sharedAt', descending: true)
-        .snapshots()
-        .map(
-          (snapshot) =>
-              snapshot.docs.map(SharedAssetModel.fromFirestore).toList(),
-        );
+    return _sharedAssets.where('familyId', isEqualTo: familyId).snapshots().map(
+      (snapshot) {
+        final assets = snapshot.docs
+            .map(SharedAssetModel.fromFirestore)
+            .toList();
+        assets.sort((a, b) => b.sharedAt.compareTo(a.sharedAt));
+        return assets;
+      },
+    );
   }
 
   @override
@@ -601,9 +602,12 @@ class FamilyRepository implements IFamilyRepository {
               'memberCount': FieldValue.increment(-1),
               'updatedAt': Timestamp.fromDate(DateTime.now()),
             });
-            transaction.update(_users.doc(userId), {
+            // A user document may not exist yet for accounts created before
+            // profile syncing was introduced. `update` makes leaving fail for
+            // those users even though their membership was removed correctly.
+            transaction.set(_users.doc(userId), {
               'familyId': FieldValue.delete(),
-            });
+            }, SetOptions(merge: true));
           })
           .timeout(const Duration(seconds: 12));
     } on TimeoutException {
@@ -620,14 +624,41 @@ class FamilyRepository implements IFamilyRepository {
     required String newOwnerId,
   }) async {
     try {
-      await Future.wait([
-        _families.doc(familyId).update({
-          'ownerId': newOwnerId,
-          'updatedAt': Timestamp.fromDate(DateTime.now()),
-        }),
-        _members.doc('${familyId}_$currentOwnerId').update({'role': 'admin'}),
-        _members.doc('${familyId}_$newOwnerId').update({'role': 'owner'}),
-      ]).timeout(const Duration(seconds: 8));
+      final familyRef = _families.doc(familyId);
+      final currentOwnerRef = _members.doc('${familyId}_$currentOwnerId');
+      final newOwnerRef = _members.doc('${familyId}_$newOwnerId');
+
+      await _firestore
+          .runTransaction((transaction) async {
+            final snapshots = await Future.wait([
+              transaction.get(familyRef),
+              transaction.get(currentOwnerRef),
+              transaction.get(newOwnerRef),
+            ]);
+            final family = snapshots[0];
+            final currentOwner = snapshots[1];
+            final newOwner = snapshots[2];
+
+            if (!family.exists || !currentOwner.exists || !newOwner.exists) {
+              throw StateError(
+                'Both family members must still belong to this family.',
+              );
+            }
+            if (family.data()?['ownerId'] != currentOwnerId ||
+                currentOwner.data()?['role'] != 'owner') {
+              throw StateError(
+                'Only the current family owner can transfer ownership.',
+              );
+            }
+
+            transaction.update(familyRef, {
+              'ownerId': newOwnerId,
+              'updatedAt': Timestamp.fromDate(DateTime.now()),
+            });
+            transaction.update(currentOwnerRef, {'role': 'admin'});
+            transaction.update(newOwnerRef, {'role': 'owner'});
+          })
+          .timeout(const Duration(seconds: 12));
     } on TimeoutException {
       // Queued
     } catch (e) {
@@ -638,40 +669,51 @@ class FamilyRepository implements IFamilyRepository {
   @override
   Future<void> deleteFamily(String familyId) async {
     try {
-      final shared = await _sharedAssets
-          .where('familyId', isEqualTo: familyId)
-          .get()
-          .timeout(const Duration(seconds: 6));
+      final results = await Future.wait([
+        _sharedAssets.where('familyId', isEqualTo: familyId).get(),
+        _members.where('familyId', isEqualTo: familyId).get(),
+        _invitations.where('familyId', isEqualTo: familyId).get(),
+      ]).timeout(const Duration(seconds: 8));
+      final shared = results[0];
+      final members = results[1];
+      final invitations = results[2];
 
+      // Deleting the family first made the remaining cleanup separate writes.
+      // If any of them failed, people could remain linked to a family that no
+      // longer existed. Commit all Firestore changes together instead.
+      final batch = _firestore.batch();
       for (final doc in shared.docs) {
-        await unshareAsset(doc.id);
+        batch.delete(doc.reference);
       }
-
-      await _families
-          .doc(familyId)
-          .delete()
-          .timeout(const Duration(seconds: 8));
-
-      final members = await _members
-          .where('familyId', isEqualTo: familyId)
-          .get()
-          .timeout(const Duration(seconds: 6));
-
       for (final doc in members.docs) {
         final userId = doc.data()['userId'] as String?;
         if (userId != null && userId.isNotEmpty) {
-          await _users.doc(userId).update({'familyId': FieldValue.delete()});
+          batch.set(_users.doc(userId), {
+            'familyId': FieldValue.delete(),
+          }, SetOptions(merge: true));
         }
-        await doc.reference.delete();
+        batch.delete(doc.reference);
       }
+      for (final doc in invitations.docs) {
+        batch.delete(doc.reference);
+      }
+      batch.delete(_families.doc(familyId));
+      await batch.commit().timeout(const Duration(seconds: 12));
 
-      final invites = await _invitations
-          .where('familyId', isEqualTo: familyId)
-          .get()
-          .timeout(const Duration(seconds: 6));
-
-      for (final doc in invites.docs) {
-        await doc.reference.delete();
+      // Storage cleanup is intentionally after the database commit: a failed
+      // file deletion must not prevent the family from being removed.
+      for (final doc in shared.docs) {
+        final storagePath = doc.data()['imageStoragePath'] as String?;
+        if (storagePath == null || storagePath.isEmpty) continue;
+        try {
+          await _familyFileService.deleteFile(
+            familyId: familyId,
+            path: storagePath,
+          );
+        } catch (_) {
+          // The shared record is gone; a stale remote file can be cleaned up
+          // separately without restoring the deleted family.
+        }
       }
     } on TimeoutException {
       // Queued

@@ -129,68 +129,35 @@ class FirestoreService {
         });
   }
 
-  /// Stream pending tasks for user.
-  ///
-  /// IMPORTANT: this used to be `_tasksCollection.snapshots()` with no
-  /// `.where()` at all, meaning it downloaded and listened to every task
-  /// belonging to every user of the app, then filtered client-side. That is
-  /// the main source of the app-wide lag: it re-downloads the whole
-  /// collection every time this stream is (re)subscribed to. This version
-  /// filters on the server using `Filter.or`, so only the documents the
-  /// user is actually allowed to see are ever transferred.
+  /// Stream pending remote tasks assigned to this user. Family assignments
+  /// are deliberately private to their assignee, not broadcast to the family.
   Stream<List<TaskModel>> streamPendingTasks(String uid, {String? familyId}) {
-    final hasFamily = familyId != null && familyId.isNotEmpty;
-
-    final filter = hasFamily
-        ? Filter.or(
-            Filter('createdBy', isEqualTo: uid),
-            Filter('assignedTo', isEqualTo: uid),
-            Filter('familyId', isEqualTo: familyId),
-          )
-        : Filter.or(
-            Filter('createdBy', isEqualTo: uid),
-            Filter('assignedTo', isEqualTo: uid),
-          );
-
-    return _tasksCollection.where(filter).snapshots().map((snapshot) {
-      final list = snapshot.docs
-          .map((doc) => TaskModel.fromFirestore(doc))
-          .where((task) => task.status == TaskStatus.pending)
-          .toList();
-      list.sort((a, b) => a.dueDate.compareTo(b.dueDate));
-      return list;
-    });
+    return _tasksCollection.where('assignedTo', isEqualTo: uid).snapshots().map(
+      (snapshot) {
+        final list = snapshot.docs
+            .map((doc) => TaskModel.fromFirestore(doc))
+            .where((task) => task.status == TaskStatus.pending)
+            .toList();
+        list.sort((a, b) => a.dueDate.compareTo(b.dueDate));
+        return list;
+      },
+    );
   }
 
-  /// Stream all tasks visible to user (created by user, assigned to user, or family tasks).
+  /// Stream remote tasks assigned to the current user. Personal tasks are
+  /// read from the local store; a family assignment must never be shown to
+  /// another family member merely because they share the same family ID.
   Stream<List<TaskModel>> streamVisibleTasks(String uid, {String? familyId}) {
-    final hasFamily = familyId != null && familyId.isNotEmpty;
-    final filter = hasFamily
-        ? Filter.or(
-            Filter('createdBy', isEqualTo: uid),
-            Filter('assignedTo', isEqualTo: uid),
-            Filter('familyId', isEqualTo: familyId),
-          )
-        : Filter.or(
-            Filter('createdBy', isEqualTo: uid),
-            Filter('assignedTo', isEqualTo: uid),
-          );
-
-    return _tasksCollection.where(filter).snapshots().map((snapshot) {
-      final tasks = snapshot.docs
-          .map((doc) => TaskModel.fromFirestore(doc))
-          .where(
-            (task) =>
-                task.createdBy == uid ||
-                task.assignedTo == uid ||
-                (hasFamily &&
-                    task.visibility == 'family' &&
-                    task.familyId == familyId),
-          )
-          .toList();
-      tasks.sort((a, b) => a.dueDate.compareTo(b.dueDate));
-      return tasks;
-    });
+    return _tasksCollection.where('assignedTo', isEqualTo: uid).snapshots().map(
+      (snapshot) {
+        final tasks = snapshot.docs
+            .map((doc) => TaskModel.fromFirestore(doc))
+            .where((task) => task.assignedTo == uid)
+            .toList();
+        tasks.sort((a, b) => a.dueDate.compareTo(b.dueDate));
+        return tasks;
+      },
+    );
   }
 
   /// Get single task by ID
@@ -215,7 +182,7 @@ class FirestoreService {
     final docRef = task.id.isNotEmpty
         ? _tasksCollection.doc(task.id)
         : _tasksCollection.doc();
-    
+
     final taskData = task.copyWith(id: docRef.id).toFirestore();
     try {
       await docRef

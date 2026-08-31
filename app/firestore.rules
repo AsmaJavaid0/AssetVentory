@@ -50,21 +50,19 @@ service cloud.firestore {
 
     match /tasks/{taskId} {
       allow read: if isAuthenticated() && (
-        resource.data.createdBy == request.auth.uid ||
         resource.data.assignedTo == request.auth.uid ||
-        (resource.data.familyId != null && isFamilyMember(resource.data.familyId))
+        (resource.data.familyId == null && resource.data.createdBy == request.auth.uid)
       );
       allow create: if isAuthenticated() &&
         request.resource.data.createdBy == request.auth.uid &&
         (request.resource.data.familyId == null || isFamilyMember(request.resource.data.familyId));
       allow update: if isAuthenticated() && (
-        resource.data.createdBy == request.auth.uid ||
         resource.data.assignedTo == request.auth.uid ||
-        (resource.data.familyId != null && isFamilyMember(resource.data.familyId))
+        (resource.data.familyId == null && resource.data.createdBy == request.auth.uid)
       );
       allow delete: if isAuthenticated() && (
         resource.data.createdBy == request.auth.uid ||
-        (resource.data.familyId != null && isFamilyMember(resource.data.familyId))
+        resource.data.assignedTo == request.auth.uid
       );
     }
 
