@@ -74,12 +74,15 @@ service cloud.firestore {
     }
 
     match /family_members/{memberId} {
-      // A member can read their own membership document. This is important for
-      // the secure family-files Edge Function, which verifies membership using
-      // the Firebase user's ID token. Other members can read family members.
+      // Avoid calling isFamilyMember() from this rule because that helper
+      // performs another read in family_members and can cause recursive
+      // security-rule evaluation for this collection.
       allow read: if isAuthenticated() && (
         resource.data.userId == request.auth.uid ||
-        isFamilyMember(resource.data.familyId)
+        (
+          resource.data.familyId != null &&
+          exists(/databases/$(database)/documents/family_members/$(resource.data.familyId + '_' + request.auth.uid))
+        )
       );
       allow create: if isAuthenticated() && request.resource.data.userId == request.auth.uid;
       allow update: if isFamilyOwner(resource.data.familyId);
