@@ -1,0 +1,212 @@
+import { jwtVerify, createRemoteJWKSet } from "npm:jose@5.10.0";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.4";
+
+const FIREBASE_PROJECT_ID = "assetventory-3c93d";
+const BUCKET = "family-files";
+const FIREBASE_ISSUER = `https://securetoken.google.com/${FIREBASE_PROJECT_ID}`;
+const FIREBASE_JWKS = createRemoteJWKSet(
+  new URL("https://www.googleapis.com/service_accounts/v1/jwk/securetoken@system.gserviceaccount.com"),
+);
+
+const corsHeaders = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Methods": "POST, OPTIONS",
+};
+
+const supabaseAdmin = createClient(
+  Deno.env.get("SUPABASE_URL")!,
+  Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+  { auth: { autoRefreshToken: false, persistSession: false } },
+);
+
+function json(data: unknown, status = 200) {
+  return new Response(JSON.stringify(data), {
+    status,
+    headers: { ...corsHeaders, "Content-Type": "application/json" },
+  });
+}
+
+function safePart(value: string, label: string): string {
+  if (!value || !/^[A-Za-z0-9_-]{1,120}$/.test(value)) {
+    throw new Error(`Invalid ${label}.`);
+  }
+  return value;
+}
+
+async function authenticate(token: string): Promise<string> {
+  if (!token) throw new Error("Missing Firebase ID token.");
+
+  const { payload } = await jwtVerify(token, FIREBASE_JWKS, {
+    issuer: FIREBASE_ISSUER,
+    audience: FIREBASE_PROJECT_ID,
+  });
+
+  if (payload.sub == null || typeof payload.sub !== "string") {
+    throw new Error("Invalid Firebase user token.");
+  }
+  return payload.sub;
+}
+
+async function assertFamilyMember(userId: string, familyId: string, firebaseToken: string) {
+  const path = `${familyId}_${userId}`;
+  const url = `https://firestore.googleapis.com/v1/projects/${FIREBASE_PROJECT_ID}/databases/(default)/documents/family_members/${encodeURIComponent(path)}`;
+
+  const response = await fetch(url, {
+    headers: { Authorization: `Bearer ${firebaseToken}` },
+  });
+
+  // New memberships use `${familyId}_${userId}` as their document ID, so this
+  // is the inexpensive normal path. Do not use role here: owners, admins, and
+  // ordinary members all have the same file-sharing access.
+  if (response.ok) {
+    const document = await response.json();
+    const fields = document?.fields;
+    if (
+      fields?.familyId?.stringValue === familyId &&
+      fields?.userId?.stringValue === userId
+    ) {
+      return;
+    }
+  } else if (response.status !== 404) {
+    const details = await response.text();
+    throw new Error(
+      `Could not verify family membership (${response.status}): ${details || "Firestore request failed."}`,
+    );
+  }
+
+  // Some existing families have membership documents created before the
+  // canonical document-ID convention. Look them up by their authoritative
+  // fields as well, so a valid non-owner is never rejected solely because of
+  // that historical ID difference.
+  const queryUrl = `https://firestore.googleapis.com/v1/projects/${FIREBASE_PROJECT_ID}/databases/(default)/documents:runQuery`;
+  const queryResponse = await fetch(queryUrl, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${firebaseToken}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      structuredQuery: {
+        from: [{ collectionId: "family_members" }],
+        where: {
+          compositeFilter: {
+            op: "AND",
+            filters: [
+              {
+                fieldFilter: {
+                  field: { fieldPath: "familyId" },
+                  op: "EQUAL",
+                  value: { stringValue: familyId },
+                },
+              },
+              {
+                fieldFilter: {
+                  field: { fieldPath: "userId" },
+                  op: "EQUAL",
+                  value: { stringValue: userId },
+                },
+              },
+            ],
+          },
+        },
+        limit: 1,
+      },
+    }),
+  });
+
+  if (!queryResponse.ok) {
+    const details = await queryResponse.text();
+    throw new Error(
+      `Could not verify family membership (${queryResponse.status}): ${details || "Firestore query failed."}`,
+    );
+  }
+
+  const results = await queryResponse.json();
+  const member = Array.isArray(results)
+    ? results.find((result) => result?.document)?.document
+    : null;
+  const fields = member?.fields;
+  if (
+    fields?.familyId?.stringValue !== familyId ||
+    fields?.userId?.stringValue !== userId
+  ) {
+    throw new Error("You are not a member of this family.");
+  }
+}
+
+async function createUploadUrl(familyId: string, assetId: string, fileName: string) {
+  const safeFamily = safePart(familyId, "family id");
+  const safeAsset = safePart(assetId, "asset id");
+  const extension = fileName.includes(".") ? fileName.split(".").pop()!.toLowerCase() : "bin";
+  if (!/^[a-z0-9]{1,12}$/.test(extension)) throw new Error("Invalid file extension.");
+
+  const fileId = crypto.randomUUID();
+  const path = `${safeFamily}/${safeAsset}/${fileId}.${extension}`;
+  const { data, error } = await supabaseAdmin.storage
+    .from(BUCKET)
+    .createSignedUploadUrl(path, { upsert: false });
+
+  if (error || !data) throw new Error(error?.message ?? "Could not create upload URL.");
+  return { path, token: data.token };
+}
+
+async function createDownloadUrl(familyId: string, path: string) {
+  const family = safePart(familyId, "family id");
+  if (!path.startsWith(`${family}/`)) throw new Error("File does not belong to this family.");
+  if (path.includes("..") || path.includes("\\")) throw new Error("Invalid file path.");
+
+  const { data, error } = await supabaseAdmin.storage
+    .from(BUCKET)
+    .createSignedUrl(path, 300);
+  if (error || !data) throw new Error(error?.message ?? "Could not create download URL.");
+  return { url: data.signedUrl, expiresIn: 300 };
+}
+
+async function deleteFile(familyId: string, path: string) {
+  const family = safePart(familyId, "family id");
+  if (!path.startsWith(`${family}/`) || path.includes("..") || path.includes("\\")) {
+    throw new Error("Invalid file path.");
+  }
+  const { error } = await supabaseAdmin.storage.from(BUCKET).remove([path]);
+  if (error) throw new Error(error.message);
+  return { deleted: true };
+}
+
+Deno.serve(async (request) => {
+  if (request.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
+  if (request.method !== "POST") return json({ error: "Method not allowed." }, 405);
+
+  try {
+    const authHeader = request.headers.get("Authorization") ?? "";
+    const firebaseToken = authHeader.startsWith("Bearer ")
+      ? authHeader.substring("Bearer ".length).trim()
+      : "";
+
+    const userId = await authenticate(firebaseToken);
+    const body = await request.json();
+    const action = body?.action as string | undefined;
+    const familyId = safePart(body?.familyId as string, "family id");
+
+    await assertFamilyMember(userId, familyId, firebaseToken);
+
+    if (action === "create-upload-url") {
+      const assetId = safePart(body?.assetId as string, "asset id");
+      const fileName = String(body?.fileName ?? "file.bin");
+      return json(await createUploadUrl(familyId, assetId, fileName));
+    }
+
+    if (action === "create-download-url") {
+      return json(await createDownloadUrl(familyId, String(body?.path ?? "")));
+    }
+
+    if (action === "delete") {
+      return json(await deleteFile(familyId, String(body?.path ?? "")));
+    }
+
+    return json({ error: "Unknown action." }, 400);
+  } catch (error) {
+    console.error("family-files error", error);
+    return json({ error: error instanceof Error ? error.message : "Request failed." }, 403);
+  }
+});

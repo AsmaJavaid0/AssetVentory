@@ -3,8 +3,9 @@ import 'package:uuid/uuid.dart';
 
 import '../../../core/database/app_database.dart';
 import '../models/local_category.dart';
+import 'interfaces/i_category_repository.dart';
 
-class CategoryRepository {
+class CategoryRepository implements ICategoryRepository {
   final AppDatabase _database;
 
   static const Uuid _uuid = Uuid();
@@ -12,6 +13,7 @@ class CategoryRepository {
   CategoryRepository({
   required this._database,
 });
+  @override
   Future<void> createCategory(LocalCategory category) async {
     await _database.into(_database.categories).insert(
           CategoriesCompanion.insert(
@@ -25,6 +27,7 @@ class CategoryRepository {
         );
   }
 
+  @override
   Future<List<LocalCategory>> getCategories(String ownerId) async {
     final query = _database.select(_database.categories)
       ..where((category) => category.ownerId.equals(ownerId))
@@ -37,6 +40,7 @@ class CategoryRepository {
     return rows.map(_toLocalCategory).toList();
   }
 
+  @override
   Future<LocalCategory?> getCategory(String categoryId) async {
     final query = _database.select(_database.categories)
       ..where((category) => category.id.equals(categoryId));
@@ -50,38 +54,45 @@ class CategoryRepository {
     return _toLocalCategory(row);
   }
 
+  @override
   Future<String> createCategoryIfNotExists({
     required String ownerId,
     required String name,
     String? emoji,
   }) async {
-    final normalizedName = name.trim().toLowerCase();
-
-    final existing = await getCategories(ownerId);
-
-    for (final category in existing) {
-      if (category.name.trim().toLowerCase() == normalizedName) {
-        return category.id;
-      }
-    }
-
+    final normalizedName = name.trim();
     final id = _uuid.v4();
     final now = DateTime.now();
 
-    await createCategory(
-      LocalCategory(
-        id: id,
-        ownerId: ownerId,
-        name: name.trim(),
-        emoji: emoji,
-        createdAt: now,
-        updatedAt: now,
-      ),
-    );
+    try {
+      await _database.into(_database.categories).insert(
+            CategoriesCompanion.insert(
+              id: id,
+              ownerId: ownerId,
+              name: normalizedName,
+              emoji: Value(emoji),
+              createdAt: now,
+              updatedAt: now,
+            ),
+            mode: InsertMode.insertOrIgnore,
+          );
 
-    return id;
+      // If insertOrIgnore didn't insert (because of unique constraint), find the existing one
+      final existing = await (_database.select(_database.categories)
+            ..where((c) => c.ownerId.equals(ownerId) & c.name.equals(normalizedName)))
+          .getSingleOrNull();
+
+      return existing?.id ?? id;
+    } catch (e) {
+      // Fallback for any other database errors
+      final existing = await (_database.select(_database.categories)
+            ..where((c) => c.ownerId.equals(ownerId) & c.name.equals(normalizedName)))
+          .getSingleOrNull();
+      return existing?.id ?? id;
+    }
   }
 
+  @override
   Future<void> updateCategory(LocalCategory category) async {
     await (_database.update(_database.categories)
           ..where((row) => row.id.equals(category.id)))
@@ -96,6 +107,7 @@ class CategoryRepository {
     );
   }
 
+  @override
   Future<void> deleteCategory(String categoryId) async {
     await (_database.delete(_database.categories)
           ..where((category) => category.id.equals(categoryId)))

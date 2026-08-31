@@ -1,0 +1,15 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    match /family_assets/{familyId}/{assetId} {
+      function isMember() {
+        return request.auth != null &&
+          firestore.exists(/databases/(default)/documents/family_members/$(familyId + '_' + request.auth.uid));
+      }
+
+      allow read: if isMember();
+      allow write: if isMember() && request.resource.size < 10 * 1024 * 1024 &&
+        request.resource.contentType.matches('image/.*');
+    }
+  }
+}

@@ -60,6 +60,20 @@ class StorageService {
     };
   }
 
+  /// Uploads a user profile photo and returns its download URL
+  Future<String> uploadProfilePhoto({
+    required String userId,
+    required String filePath,
+  }) async {
+    final file = File(filePath);
+    final ext = filePath.split('.').last.toLowerCase();
+    final fileName = 'avatar_${DateTime.now().millisecondsSinceEpoch}.$ext';
+    final storagePath = 'users/$userId/profile/$fileName';
+    final ref = _storage.ref().child(storagePath);
+    final uploadTask = await ref.putFile(file);
+    return await uploadTask.ref.getDownloadURL();
+  }
+
   /// Deletes a file from Firebase Storage
   Future<void> deleteFile(String storagePath) async {
     if (storagePath.isEmpty) return;

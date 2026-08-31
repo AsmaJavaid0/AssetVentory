@@ -1,9 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'firebase_options.dart';
 import 'core/theme/app_theme.dart';
 import 'features/auth/screens/auth_wrapper.dart';
 import 'core/di/service_locator.dart';
+
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   
@@ -11,11 +14,37 @@ void main() async {
     options: DefaultFirebaseOptions.currentPlatform,
   );
 
-  // Initialize the service locator
+  await Supabase.initialize(
+    url: 'https://jlfnffzyljswzskwhpmp.supabase.co',
+    publishableKey: 'sb_publishable_I7q_h1Co1eyJ9Bp-StMgiw_YrwN9_NP',
+  );
 
-  serviceLocator.initialize();
- 
+  FirebaseFirestore.instance.settings = const Settings(
+    persistenceEnabled: true,
+    cacheSizeBytes: Settings.CACHE_SIZE_UNLIMITED,
+  );
+
+  await setupServiceLocator();
+  await serviceLocator.preferences.init();
+
+  _initNotifications();
+
   runApp(const AssetVentoryApp());
+}
+
+Future<void> _initNotifications() async {
+  try {
+    await serviceLocator.taskNotificationService.initialize();
+    await serviceLocator.taskNotificationService.requestPermissions();
+  } catch (e) {
+    debugPrint('Local notification init warning: $e');
+  }
+  try {
+    await serviceLocator.fcmService.initialize()
+        .timeout(const Duration(seconds: 8));
+  } catch (e) {
+    debugPrint('FCM initialization warning: $e');
+  }
 }
 
 class AssetVentoryApp extends StatelessWidget {
@@ -23,11 +52,18 @@ class AssetVentoryApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'AssetVentory',
-      debugShowCheckedModeBanner: false,
-      theme: AppTheme.lightTheme,
-      home: const AuthWrapper(),
+    return ValueListenableBuilder<ThemeMode>(
+      valueListenable: serviceLocator.preferences.themeModeNotifier,
+      builder: (context, themeMode, _) {
+        return MaterialApp(
+          title: 'AssetVentory',
+          debugShowCheckedModeBanner: false,
+          theme: AppTheme.lightTheme,
+          darkTheme: AppTheme.darkTheme,
+          themeMode: themeMode,
+          home: const AuthWrapper(),
+        );
+      },
     );
   }
 }

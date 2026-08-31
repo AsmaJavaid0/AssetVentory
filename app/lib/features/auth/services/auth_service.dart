@@ -1,5 +1,6 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:google_sign_in/google_sign_in.dart';
+import '../../../core/utils/result.dart';
 import 'firestore_service.dart';
 
 class AuthService {
@@ -14,58 +15,73 @@ class AuthService {
   User? get currentUser => _auth.currentUser;
 
   /// Sign Up with Email and Password
-  Future<UserCredential> signUpWithEmailAndPassword({
+  Future<Result<UserCredential>> signUpWithEmailAndPassword({
     required String email,
     required String password,
     required String name,
   }) async {
-    final credential = await _auth.createUserWithEmailAndPassword(
-      email: email.trim(),
-      password: password,
-    );
-
-    if (credential.user != null) {
-      await credential.user!.updateDisplayName(name.trim());
-      await _firestoreService.createOrUpdateUser(
-        uid: credential.user!.uid,
-        name: name.trim(),
+    try {
+      final credential = await _auth.createUserWithEmailAndPassword(
         email: email.trim(),
-        photoUrl: credential.user!.photoURL,
+        password: password,
       );
-    }
 
-    return credential;
+      if (credential.user != null) {
+        try {
+          await credential.user!.updateDisplayName(name.trim());
+          await _firestoreService.createOrUpdateUser(
+            uid: credential.user!.uid,
+            name: name.trim(),
+            email: email.trim(),
+            photoUrl: credential.user!.photoURL,
+          ).timeout(const Duration(seconds: 5));
+        } catch (_) {}
+      }
+
+      return Result.success(credential);
+    } on FirebaseAuthException catch (e) {
+      return Result.failure(AuthException(e.message ?? 'Authentication failed', e.code));
+    } catch (e) {
+      return Result.failure(Exception(e.toString()));
+    }
   }
 
   /// Sign In with Email and Password
-  Future<UserCredential> signInWithEmailAndPassword({
+  Future<Result<UserCredential>> signInWithEmailAndPassword({
     required String email,
     required String password,
   }) async {
-    final credential = await _auth.signInWithEmailAndPassword(
-      email: email.trim(),
-      password: password,
-    );
-
-    if (credential.user != null) {
-      await _firestoreService.createOrUpdateUser(
-        uid: credential.user!.uid,
-        name: credential.user!.displayName ?? '',
-        email: credential.user!.email ?? email.trim(),
-        photoUrl: credential.user!.photoURL,
+    try {
+      final credential = await _auth.signInWithEmailAndPassword(
+        email: email.trim(),
+        password: password,
       );
-    }
 
-    return credential;
+      if (credential.user != null) {
+        try {
+          await _firestoreService.createOrUpdateUser(
+            uid: credential.user!.uid,
+            name: credential.user!.displayName ?? '',
+            email: credential.user!.email ?? email.trim(),
+            photoUrl: credential.user!.photoURL,
+          ).timeout(const Duration(seconds: 5));
+        } catch (_) {}
+      }
+
+      return Result.success(credential);
+    } on FirebaseAuthException catch (e) {
+      return Result.failure(AuthException(e.message ?? 'Authentication failed', e.code));
+    } catch (e) {
+      return Result.failure(Exception(e.toString()));
+    }
   }
 
   /// Sign In with Google
-  Future<UserCredential?> signInWithGoogle() async {
+  Future<Result<UserCredential>> signInWithGoogle() async {
     try {
       final GoogleSignInAccount? googleUser = await _googleSignIn.signIn();
       if (googleUser == null) {
-        // User cancelled the sign-in flow
-        return null;
+        return Result.failure(AuthException('User cancelled the sign-in flow'));
       }
 
       final GoogleSignInAuthentication googleAuth =
@@ -79,23 +95,34 @@ class AuthService {
       final userCredential = await _auth.signInWithCredential(credential);
 
       if (userCredential.user != null) {
-        await _firestoreService.createOrUpdateUser(
-          uid: userCredential.user!.uid,
-          name: userCredential.user!.displayName ?? googleUser.displayName ?? '',
-          email: userCredential.user!.email ?? googleUser.email,
-          photoUrl: userCredential.user!.photoURL ?? googleUser.photoUrl,
-        );
+        try {
+          await _firestoreService.createOrUpdateUser(
+            uid: userCredential.user!.uid,
+            name: userCredential.user!.displayName ?? googleUser.displayName ?? '',
+            email: userCredential.user!.email ?? googleUser.email,
+            photoUrl: userCredential.user!.photoURL ?? googleUser.photoUrl,
+          ).timeout(const Duration(seconds: 5));
+        } catch (_) {}
       }
 
-      return userCredential;
+      return Result.success(userCredential);
+    } on FirebaseAuthException catch (e) {
+      return Result.failure(AuthException(e.message ?? 'Authentication failed', e.code));
     } catch (e) {
-      rethrow;
+      return Result.failure(Exception(e.toString()));
     }
   }
 
   /// Send password reset email
-  Future<void> sendPasswordResetEmail(String email) async {
-    await _auth.sendPasswordResetEmail(email: email.trim());
+  Future<Result<void>> sendPasswordResetEmail(String email) async {
+    try {
+      await _auth.sendPasswordResetEmail(email: email.trim());
+      return Result.success(null);
+    } on FirebaseAuthException catch (e) {
+      return Result.failure(AuthException(e.message ?? 'Password reset failed', e.code));
+    } catch (e) {
+      return Result.failure(Exception(e.toString()));
+    }
   }
 
   /// Sign out

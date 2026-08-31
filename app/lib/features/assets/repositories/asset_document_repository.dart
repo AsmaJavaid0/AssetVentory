@@ -6,8 +6,9 @@ import 'package:uuid/uuid.dart';
 import '../../../core/database/app_database.dart';
 import '../../../core/storage/local_file_storage.dart';
 import '../models/local_asset_document.dart';
+import 'interfaces/i_asset_document_repository.dart';
 
-class AssetDocumentRepository {
+class AssetDocumentRepository implements IAssetDocumentRepository {
   final AppDatabase _database;
   final LocalFileStorage _fileStorage;
 
@@ -18,6 +19,7 @@ class AssetDocumentRepository {
     required this._fileStorage,
   });
 
+  @override
   Future<List<LocalAssetDocument>> getDocuments(String assetId) async {
     final query = _database.select(_database.assetDocuments)
       ..where((document) => document.assetId.equals(assetId))
@@ -29,6 +31,7 @@ class AssetDocumentRepository {
     return rows.map(_toModel).toList();
   }
 
+  @override
   Future<LocalAssetDocument> addDocument({
     required String assetId,
     required File sourceFile,
@@ -77,6 +80,7 @@ class AssetDocumentRepository {
     return document;
   }
 
+  @override
   Future<void> deleteDocument(LocalAssetDocument document) async {
     await (_database.delete(_database.assetDocuments)
           ..where((row) => row.id.equals(document.id)))
@@ -85,6 +89,7 @@ class AssetDocumentRepository {
     await _fileStorage.deleteFile(document.filePath);
   }
 
+  @override
   Future<void> deleteDocumentsForAsset(String assetId) async {
     final documents = await getDocuments(assetId);
 

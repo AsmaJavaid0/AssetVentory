@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:open_filex/open_filex.dart';
 
 import '../../../core/constants/app_colors.dart';
 import '../../../core/di/service_locator.dart';
@@ -15,7 +16,9 @@ class AssetDetailsScreen extends StatefulWidget {
   const AssetDetailsScreen({super.key, required this.asset});
 
   static Future<void> navigateTo(BuildContext context, LocalAsset asset) {
-    return Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => AssetDetailsScreen(asset: asset)));
+    return Navigator.of(context).push(
+      MaterialPageRoute<void>(builder: (_) => AssetDetailsScreen(asset: asset)),
+    );
   }
 
   @override
@@ -35,7 +38,8 @@ class _AssetDetailsScreenState extends State<AssetDetailsScreen> {
     _categoriesFuture = serviceLocator.categoryRepository.getCategories('local_user');
   }
 
-  Future<List<LocalAssetDocument>> _loadDocuments() => serviceLocator.assetDocumentRepository.getDocuments(_asset.id);
+  Future<List<LocalAssetDocument>> _loadDocuments() =>
+      serviceLocator.assetDocumentRepository.getDocuments(_asset.id);
 
   String _categoryName(List<LocalCategory> categories) {
     if (_asset.categoryId == null) return 'Uncategorized';
@@ -46,7 +50,9 @@ class _AssetDetailsScreenState extends State<AssetDetailsScreen> {
   }
 
   Future<void> _edit() async {
-    await Navigator.of(context).push<void>(MaterialPageRoute<void>(builder: (_) => EditAssetScreen(asset: _asset)));
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute<void>(builder: (_) => EditAssetScreen(asset: _asset)),
+    );
     if (!mounted) return;
     final updated = await serviceLocator.assetRepository.getAsset(_asset.id);
     if (!mounted) return;
@@ -57,6 +63,7 @@ class _AssetDetailsScreenState extends State<AssetDetailsScreen> {
     setState(() {
       _asset = updated;
       _documentsFuture = _loadDocuments();
+      _categoriesFuture = serviceLocator.categoryRepository.getCategories('local_user');
     });
   }
 
@@ -82,8 +89,22 @@ class _AssetDetailsScreenState extends State<AssetDetailsScreen> {
         backgroundColor: Colors.white,
         surfaceTintColor: Colors.white,
         elevation: 0,
-        title: Text('Asset Details', maxLines: 1, overflow: TextOverflow.ellipsis, style: GoogleFonts.outfit(fontWeight: FontWeight.w700, color: AppColors.textPrimary)),
-        actions: [IconButton(tooltip: 'Edit asset', onPressed: _edit, icon: const Icon(Icons.edit_outlined))],
+        title: Text(
+          'Asset Details',
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: GoogleFonts.outfit(
+            fontWeight: FontWeight.w700,
+            color: AppColors.textPrimary,
+          ),
+        ),
+        actions: [
+          IconButton(
+            tooltip: 'Edit asset',
+            onPressed: _edit,
+            icon: const Icon(Icons.edit_outlined),
+          ),
+        ],
       ),
       body: RefreshIndicator(
         color: AppColors.primaryPurple,
@@ -94,9 +115,23 @@ class _AssetDetailsScreenState extends State<AssetDetailsScreen> {
           children: [
             _buildPhoto(),
             const SizedBox(height: 18),
-            Text(_asset.name, maxLines: 3, overflow: TextOverflow.ellipsis, style: GoogleFonts.outfit(fontSize: 26, height: 1.15, fontWeight: FontWeight.w800, color: AppColors.textPrimary)),
+            Text(
+              _asset.name,
+              maxLines: 3,
+              overflow: TextOverflow.ellipsis,
+              style: GoogleFonts.outfit(
+                fontSize: 26,
+                height: 1.15,
+                fontWeight: FontWeight.w800,
+                color: AppColors.textPrimary,
+              ),
+            ),
             const SizedBox(height: 16),
-            FutureBuilder<List<LocalCategory>>(future: _categoriesFuture, builder: (context, snapshot) => _buildInfoCard(snapshot.data ?? const <LocalCategory>[])),
+            FutureBuilder<List<LocalCategory>>(
+              future: _categoriesFuture,
+              builder: (context, snapshot) =>
+                  _buildInfoCard(snapshot.data ?? const <LocalCategory>[]),
+            ),
             const SizedBox(height: 18),
             _buildDocumentsCard(),
           ],
@@ -114,43 +149,116 @@ class _AssetDetailsScreenState extends State<AssetDetailsScreen> {
         constraints: const BoxConstraints(minHeight: 180, maxHeight: 360),
         color: AppColors.primaryPurple.withValues(alpha: 0.06),
         child: path != null && path.isNotEmpty
-            ? Image.file(File(path), fit: BoxFit.contain, errorBuilder: (_, _, _) => _emojiPlaceholder())
+            ? Image.file(
+                File(path),
+                fit: BoxFit.contain,
+                errorBuilder: (_, _, _) => _emojiPlaceholder(),
+              )
             : _emojiPlaceholder(),
       ),
     );
   }
 
-  Widget _emojiPlaceholder() => Container(color: AppColors.primaryPurple.withValues(alpha: 0.08), alignment: Alignment.center, child: Text(_asset.emoji ?? '📦', style: const TextStyle(fontSize: 64)));
+  Widget _emojiPlaceholder() => Container(
+        color: AppColors.primaryPurple.withValues(alpha: 0.08),
+        alignment: Alignment.center,
+        child: Text(
+          _asset.emoji ?? '📦',
+          style: const TextStyle(fontSize: 64),
+        ),
+      );
 
   Widget _buildInfoCard(List<LocalCategory> categories) {
     final category = _categoryName(categories);
     return Container(
-      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(20), border: Border.all(color: const Color(0xFFEFEBF6))),
-      child: Column(children: [
-        _infoRow('Category', category), _divider(),
-        _infoRow('Location', _asset.location?.isNotEmpty == true ? _asset.location! : 'Not specified'), _divider(),
-        _infoRow('Description', _asset.description?.isNotEmpty == true ? _asset.description! : 'No description'), _divider(),
-        _infoRow('QR Code', _asset.qrEnabled ? 'Enabled' : 'Disabled'),
-        if (_asset.customFields.isNotEmpty) ...[
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: const Color(0xFFEFEBF6)),
+      ),
+      child: Column(
+        children: [
+          _infoRow('Category', category),
           _divider(),
-          ..._asset.customFields.entries.map((entry) => Padding(padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12), child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Expanded(child: Text(entry.key, maxLines: 3, overflow: TextOverflow.ellipsis, style: GoogleFonts.outfit(fontWeight: FontWeight.w600))),
-            const SizedBox(width: 12),
-            Expanded(child: Text(entry.value, textAlign: TextAlign.right, style: GoogleFonts.outfit(color: AppColors.textSecondary))),
-          ]))),
+          _infoRow(
+            'Location',
+            _asset.location?.isNotEmpty == true
+                ? _asset.location!
+                : 'Not specified',
+          ),
+          _divider(),
+          _infoRow(
+            'Description',
+            _asset.description?.isNotEmpty == true
+                ? _asset.description!
+                : 'No description',
+          ),
+          _divider(),
+          _infoRow('QR Code', _asset.qrEnabled ? 'Enabled' : 'Disabled'),
+          if (_asset.customFields.isNotEmpty) ...[
+            _divider(),
+            ..._asset.customFields.entries.map(
+              (entry) => Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(
+                      child: Text(
+                        entry.key,
+                        maxLines: 3,
+                        overflow: TextOverflow.ellipsis,
+                        style: GoogleFonts.outfit(fontWeight: FontWeight.w600),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Text(
+                        entry.value,
+                        textAlign: TextAlign.right,
+                        style: GoogleFonts.outfit(color: AppColors.textSecondary),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
         ],
-      ]),
+      ),
     );
   }
 
   Widget _infoRow(String label, String value) => Padding(
-    padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 15),
-    child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      SizedBox(width: 96, child: Text(label, maxLines: 2, overflow: TextOverflow.ellipsis, style: GoogleFonts.outfit(fontWeight: FontWeight.w600, color: AppColors.textSecondary))),
-      const SizedBox(width: 10),
-      Expanded(child: Text(value, style: GoogleFonts.outfit(fontWeight: FontWeight.w600, color: AppColors.textPrimary))),
-    ]),
-  );
+        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 15),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            SizedBox(
+              width: 96,
+              child: Text(
+                label,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: GoogleFonts.outfit(
+                  fontWeight: FontWeight.w600,
+                  color: AppColors.textSecondary,
+                ),
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                value,
+                style: GoogleFonts.outfit(
+                  fontWeight: FontWeight.w600,
+                  color: AppColors.textPrimary,
+                ),
+              ),
+            ),
+          ],
+        ),
+      );
 
   Widget _divider() => const Divider(height: 1, indent: 18, endIndent: 18);
 
@@ -161,30 +269,91 @@ class _AssetDetailsScreenState extends State<AssetDetailsScreen> {
         final documents = snapshot.data ?? const <LocalAssetDocument>[];
         return Container(
           padding: const EdgeInsets.all(18),
-          decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(20), border: Border.all(color: const Color(0xFFEFEBF6))),
-          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text('Documents', style: GoogleFonts.outfit(fontSize: 18, fontWeight: FontWeight.w700)),
-            const SizedBox(height: 12),
-            if (snapshot.connectionState == ConnectionState.waiting)
-              const Center(child: Padding(padding: EdgeInsets.all(12), child: CircularProgressIndicator()))
-            else if (documents.isEmpty)
-              Text('No documents attached.', style: GoogleFonts.outfit(color: AppColors.textSecondary))
-            else
-              ...documents.map(_documentTile),
-          ]),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(color: const Color(0xFFEFEBF6)),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Documents',
+                style: GoogleFonts.outfit(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              const SizedBox(height: 12),
+              if (snapshot.connectionState == ConnectionState.waiting)
+                const Center(
+                  child: Padding(
+                    padding: EdgeInsets.all(12),
+                    child: CircularProgressIndicator(),
+                  ),
+                )
+              else if (documents.isEmpty)
+                Text(
+                  'No documents attached.',
+                  style: GoogleFonts.outfit(color: AppColors.textSecondary),
+                )
+              else
+                ...documents.map(_documentTile),
+            ],
+          ),
         );
       },
     );
   }
 
-  Widget _documentTile(LocalAssetDocument document) => Container(
-    margin: const EdgeInsets.only(bottom: 8),
-    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
-    decoration: BoxDecoration(color: AppColors.scaffoldBg, borderRadius: BorderRadius.circular(12)),
-    child: Row(children: [
-      const Icon(Icons.description_outlined, color: AppColors.primaryPurple), const SizedBox(width: 10),
-      Expanded(child: Text(document.name, maxLines: 2, overflow: TextOverflow.ellipsis, style: GoogleFonts.outfit(fontWeight: FontWeight.w600))),
-      if (document.fileType != null) Padding(padding: const EdgeInsets.only(left: 8), child: Text(document.fileType!.toUpperCase(), maxLines: 1, overflow: TextOverflow.ellipsis, style: GoogleFonts.outfit(fontSize: 10, color: AppColors.textMuted))),
-    ]),
-  );
+  Widget _documentTile(LocalAssetDocument document) => Padding(
+        padding: const EdgeInsets.only(bottom: 8),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(12),
+          onTap: () async {
+            if (document.filePath.isNotEmpty) {
+              final result = await OpenFilex.open(document.filePath);
+              if (result.type != ResultType.done && mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text('Could not open file: ${result.message}')),
+                );
+              }
+            }
+          },
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
+            decoration: BoxDecoration(
+              color: AppColors.scaffoldBg,
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Row(
+              children: [
+                const Icon(Icons.description_outlined, color: AppColors.primaryPurple),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    document.name,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: GoogleFonts.outfit(fontWeight: FontWeight.w600),
+                  ),
+                ),
+                if (document.fileType != null)
+                  Padding(
+                    padding: const EdgeInsets.only(left: 8),
+                    child: Text(
+                      document.fileType!.toUpperCase(),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: GoogleFonts.outfit(
+                        fontSize: 10,
+                        color: AppColors.textMuted,
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        ),
+      );
 }

@@ -1,0 +1,119 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    // The user's familyId is the authorization source for family access.
+    function isFamilyMember(familyId) {
+      return isAuthenticated() &&
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.familyId == familyId;
+    }
+
+    function isFamilyOwner(familyId) {
+      return isAuthenticated() &&
+        get(/databases/$(database)/documents/families/$(familyId)).data.ownerId == request.auth.uid;
+    }
+
+    function isJoiningFamily(familyId) {
+      return isAuthenticated() &&
+        request.resource.data.ownerId == resource.data.ownerId &&
+        request.resource.data.memberCount == resource.data.memberCount + 1 &&
+        getAfter(/databases/$(database)/documents/family_members/$(familyId + '_' + request.auth.uid)).data.userId == request.auth.uid;
+    }
+
+    function isLeavingFamily(familyId) {
+      return isAuthenticated() &&
+        request.resource.data.ownerId == resource.data.ownerId &&
+        request.resource.data.memberCount == resource.data.memberCount - 1 &&
+        !existsAfter(/databases/$(database)/documents/family_members/$(familyId + '_' + request.auth.uid));
+    }
+
+    match /users/{userId} {
+      allow read: if isAuthenticated();
+      allow create: if isOwner(userId);
+      allow update: if isOwner(userId) ||
+        (isFamilyOwner(resource.data.familyId) &&
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['familyId', 'updatedAt']));
+      allow delete: if isOwner(userId);
+
+      match /devices/{tokenId} {
+        allow read, write: if isOwner(userId);
+      }
+    }
+
+    match /tasks/{taskId} {
+      // A task is visible to its assignee. A family-task creator can also
+      // see the task they created, so the creator can track its status.
+      allow read: if isAuthenticated() && (
+        resource.data.assignedTo == request.auth.uid ||
+        resource.data.createdBy == request.auth.uid
+      );
+      allow create: if isAuthenticated() &&
+        request.resource.data.createdBy == request.auth.uid &&
+        (request.resource.data.familyId == null || isFamilyMember(request.resource.data.familyId));
+      allow update: if isAuthenticated() && (
+        resource.data.assignedTo == request.auth.uid ||
+        resource.data.createdBy == request.auth.uid
+      );
+      allow delete: if isAuthenticated() && (
+        resource.data.createdBy == request.auth.uid ||
+        resource.data.assignedTo == request.auth.uid
+      );
+    }
+
+    match /families/{familyId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated() && request.resource.data.ownerId == request.auth.uid;
+      allow update: if isFamilyOwner(familyId) || isJoiningFamily(familyId) || isLeavingFamily(familyId);
+      allow delete: if isFamilyOwner(familyId);
+    }
+
+    match /family_members/{memberId} {
+      allow read: if isAuthenticated() && (
+        resource.data.userId == request.auth.uid ||
+        isFamilyMember(resource.data.familyId)
+      );
+      allow create: if isAuthenticated() && request.resource.data.userId == request.auth.uid;
+      allow update: if isFamilyOwner(resource.data.familyId);
+      allow delete: if isFamilyOwner(resource.data.familyId) ||
+        (isAuthenticated() && resource.data.userId == request.auth.uid);
+    }
+
+    match /family_invitations/{inviteId} {
+      allow read: if isAuthenticated() && (
+        resource.data.receiverEmail == request.auth.token.email ||
+        isFamilyMember(resource.data.familyId)
+      );
+      allow create: if isAuthenticated() &&
+        request.resource.data.senderId == request.auth.uid &&
+        isFamilyMember(request.resource.data.familyId);
+      allow update: if isAuthenticated() && (
+        isFamilyMember(resource.data.familyId) ||
+        resource.data.receiverEmail == request.auth.token.email
+      );
+      allow delete: if isAuthenticated() && (
+        isFamilyOwner(resource.data.familyId) ||
+        resource.data.receiverEmail == request.auth.token.email
+      );
+    }
+
+    match /shared_assets/{sharedAssetId} {
+      allow read: if isAuthenticated() && isFamilyMember(resource.data.familyId);
+      allow create: if isAuthenticated() &&
+        isFamilyMember(request.resource.data.familyId) &&
+        request.resource.data.ownerId == request.auth.uid;
+      allow update, delete: if isAuthenticated() && (
+        resource.data.ownerId == request.auth.uid ||
+        isFamilyOwner(resource.data.familyId)
+      );
+    }
+  }
+}
