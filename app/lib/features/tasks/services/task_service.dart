@@ -1,5 +1,8 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 
 import '../../auth/services/firestore_service.dart';
 import '../models/task_model.dart';
@@ -7,10 +10,8 @@ import 'local_task_store.dart';
 import 'task_notification_service.dart';
 
 /// Task orchestration layer.
-///
-/// Personal tasks are local-only. Family tasks are the only tasks written to
-/// Firestore. Local notifications are deliberately scheduled independently of
-/// Firebase/network availability.
+/// Personal tasks are local-only. Family tasks are remote-only and require a
+/// live Firestore connection before a write is reported as successful.
 class TaskService {
   final FirestoreService _firestoreService;
   final TaskNotificationService _notificationService;
@@ -27,19 +28,16 @@ class TaskService {
   bool _isFamilyTask(TaskModel task) =>
       task.visibility == 'family' ||
       task.taskType == TaskType.familyTask ||
-      (task.familyId?.isNotEmpty ?? false) &&
+      ((task.familyId?.isNotEmpty ?? false) &&
           (task.assignedTo?.isNotEmpty ?? false) &&
-          task.assignedTo != task.createdBy;
+          task.assignedTo != task.createdBy);
 
   Stream<List<TaskModel>> streamVisibleTasks(String uid, {String? familyId}) async* {
-    // Personal tasks never depend on Firebase.
     final localTasks = await _localStore.load(uid);
     final familyStream = familyId == null || familyId.isEmpty
         ? const Stream<List<TaskModel>>.empty()
         : _firestoreService.streamVisibleTasks(uid, familyId: familyId);
 
-    // Emit local tasks immediately. Family tasks are then added when Firebase
-    // has a result; a Firestore error must not hide the local list.
     yield localTasks;
     try {
       await for (final familyTasks in familyStream) {
@@ -49,7 +47,8 @@ class TaskService {
           for (final task in familyTasks)
             if (_isFamilyTask(task)) task.id: task,
         };
-        yield merged.values.toList()..sort((a, b) => a.dueDate.compareTo(b.dueDate));
+        yield merged.values.toList()
+          ..sort((a, b) => a.dueDate.compareTo(b.dueDate));
       }
     } catch (e) {
       debugPrint('Family task stream unavailable; continuing with local tasks: $e');
@@ -68,13 +67,65 @@ class TaskService {
     }
   }
 
+  Future<void> _requireFamilyConnection() async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) {
+      throw const TaskNetworkException(
+        'Please sign in and connect to the internet to use family tasks.',
+      );
+    }
+
+    try {
+      await FirebaseFirestore.instance
+          .collection('users')
+          .doc(user.uid)
+          .get(const GetOptions(source: Source.server))
+          .timeout(const Duration(seconds: 7));
+    } on TimeoutException {
+      throw const TaskNetworkException(
+        'Connect to the internet to create or update family tasks.',
+      );
+    } on FirebaseException catch (e) {
+      if (e.code == 'unavailable' || e.code == 'deadline-exceeded') {
+        throw const TaskNetworkException(
+          'Connect to the internet to create or update family tasks.',
+        );
+      }
+      rethrow;
+    } catch (_) {
+      throw const TaskNetworkException(
+        'Connect to the internet to create or update family tasks.',
+      );
+    }
+  }
+
   Future<String> createTask(TaskModel task) async {
     if (_isFamilyTask(task)) {
-      // Explicit family assignment is the only path that touches Firestore.
-      final taskId = await _firestoreService.createTask(task);
-      final createdTask = task.copyWith(id: taskId);
-      await _schedule(createdTask);
-      return taskId;
+      await _requireFamilyConnection();
+      try {
+        final taskId = await _firestoreService
+            .createTask(task)
+            .timeout(const Duration(seconds: 10));
+        final createdTask = task.copyWith(id: taskId);
+        await _schedule(createdTask);
+        return taskId;
+      } on TimeoutException {
+        throw const TaskNetworkException(
+          'Connect to the internet to create the family task. Please try again.',
+        );
+      } on FirebaseException catch (e) {
+        if (e.code == 'permission-denied') {
+          throw const TaskPermissionException(
+            'You do not have permission to create this family task. Please check your family membership.',
+          );
+        }
+        if (e.code == 'unavailable' || e.code == 'deadline-exceeded') {
+          throw const TaskNetworkException(
+            'Connect to the internet to create the family task. Please try again.',
+          );
+        }
+        rethrow;
+      }
     }
 
     final localTask = task.copyWith(
@@ -94,7 +145,28 @@ class TaskService {
 
   Future<void> updateTask(TaskModel task) async {
     if (_isFamilyTask(task)) {
-      await _firestoreService.updateTask(task);
+      await _requireFamilyConnection();
+      try {
+        await _firestoreService
+            .updateTask(task)
+            .timeout(const Duration(seconds: 10));
+      } on TimeoutException {
+        throw const TaskNetworkException(
+          'Connect to the internet to update the family task. Please try again.',
+        );
+      } on FirebaseException catch (e) {
+        if (e.code == 'permission-denied') {
+          throw const TaskPermissionException(
+            'You do not have permission to update this family task.',
+          );
+        }
+        if (e.code == 'unavailable' || e.code == 'deadline-exceeded') {
+          throw const TaskNetworkException(
+            'Connect to the internet to update the family task. Please try again.',
+          );
+        }
+        rethrow;
+      }
     } else {
       await _localStore.update(task.copyWith(
         familyId: null,
@@ -127,11 +199,27 @@ class TaskService {
     );
 
     if (_isFamilyTask(task)) {
-      await _firestoreService.completeTask(
-        task.id,
-        completedBy: completedBy,
-        completedByName: completedByName,
-      );
+      await _requireFamilyConnection();
+      try {
+        await _firestoreService
+            .completeTask(
+              task.id,
+              completedBy: completedBy,
+              completedByName: completedByName,
+            )
+            .timeout(const Duration(seconds: 10));
+      } on TimeoutException {
+        throw const TaskNetworkException(
+          'Connect to the internet to complete the family task. Please try again.',
+        );
+      } on FirebaseException catch (e) {
+        if (e.code == 'permission-denied') {
+          throw const TaskPermissionException(
+            'You do not have permission to complete this family task.',
+          );
+        }
+        rethrow;
+      }
     } else {
       await _localStore.update(completed);
     }
@@ -139,9 +227,28 @@ class TaskService {
   }
 
   Future<void> snoozeTask(TaskModel task, DateTime snoozeUntil) async {
-    final snoozed = task.copyWith(snoozedUntil: snoozeUntil, updatedAt: DateTime.now());
+    final snoozed = task.copyWith(
+      snoozedUntil: snoozeUntil,
+      updatedAt: DateTime.now(),
+    );
     if (_isFamilyTask(task)) {
-      await _firestoreService.snoozeTask(task.id, snoozeUntil);
+      await _requireFamilyConnection();
+      try {
+        await _firestoreService
+            .snoozeTask(task.id, snoozeUntil)
+            .timeout(const Duration(seconds: 10));
+      } on TimeoutException {
+        throw const TaskNetworkException(
+          'Connect to the internet to snooze the family task. Please try again.',
+        );
+      } on FirebaseException catch (e) {
+        if (e.code == 'permission-denied') {
+          throw const TaskPermissionException(
+            'You do not have permission to snooze this family task.',
+          );
+        }
+        rethrow;
+      }
     } else {
       await _localStore.update(snoozed);
     }
@@ -151,7 +258,23 @@ class TaskService {
 
   Future<void> deleteTask(TaskModel task) async {
     if (_isFamilyTask(task)) {
-      await _firestoreService.deleteTask(task.id);
+      await _requireFamilyConnection();
+      try {
+        await _firestoreService
+            .deleteTask(task.id)
+            .timeout(const Duration(seconds: 10));
+      } on TimeoutException {
+        throw const TaskNetworkException(
+          'Connect to the internet to delete the family task. Please try again.',
+        );
+      } on FirebaseException catch (e) {
+        if (e.code == 'permission-denied') {
+          throw const TaskPermissionException(
+            'You do not have permission to delete this family task.',
+          );
+        }
+        rethrow;
+      }
     } else {
       await _localStore.delete(task);
     }
@@ -166,4 +289,18 @@ class TaskService {
       debugPrint('Warning: Local notification scheduling failed: $e');
     }
   }
+}
+
+class TaskNetworkException implements Exception {
+  final String message;
+  const TaskNetworkException(this.message);
+  @override
+  String toString() => message;
+}
+
+class TaskPermissionException implements Exception {
+  final String message;
+  const TaskPermissionException(this.message);
+  @override
+  String toString() => message;
 }
