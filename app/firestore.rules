@@ -1,4 +1,5 @@
 rules_version = '2';
+
 service cloud.firestore {
   match /databases/{database}/documents {
 
@@ -10,14 +11,17 @@ service cloud.firestore {
       return isAuthenticated() && request.auth.uid == userId;
     }
 
+    // The user's familyId is the authorization source for family access.
+    // This avoids recursively checking family_members from rules that are
+    // themselves evaluating family_members documents.
     function isFamilyMember(familyId) {
       return isAuthenticated() &&
-        exists(/databases/$(database)/documents/family_members/$(familyId + '_' + request.auth.uid));
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.familyId == familyId;
     }
 
     function isFamilyOwner(familyId) {
-      return isFamilyMember(familyId) &&
-        get(/databases/$(database)/documents/family_members/$(familyId + '_' + request.auth.uid)).data.role == 'owner';
+      return isAuthenticated() &&
+        get(/databases/$(database)/documents/families/$(familyId)).data.ownerId == request.auth.uid;
     }
 
     function isJoiningFamily(familyId) {
@@ -39,8 +43,7 @@ service cloud.firestore {
       allow create: if isOwner(userId);
       allow update: if isOwner(userId) ||
         (isFamilyOwner(resource.data.familyId) &&
-          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['familyId', 'updatedAt']) &&
-          !request.resource.data.keys().hasAny(['familyId']));
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['familyId', 'updatedAt']));
       allow delete: if isOwner(userId);
 
       match /devices/{tokenId} {
@@ -74,15 +77,11 @@ service cloud.firestore {
     }
 
     match /family_members/{memberId} {
-      // Avoid calling isFamilyMember() from this rule because that helper
-      // performs another read in family_members and can cause recursive
-      // security-rule evaluation for this collection.
+      // A user can read their own membership. Other members can read
+      // membership records for their family using users/{uid}.familyId.
       allow read: if isAuthenticated() && (
         resource.data.userId == request.auth.uid ||
-        (
-          resource.data.familyId != null &&
-          exists(/databases/$(database)/documents/family_members/$(resource.data.familyId + '_' + request.auth.uid))
-        )
+        isFamilyMember(resource.data.familyId)
       );
       allow create: if isAuthenticated() && request.resource.data.userId == request.auth.uid;
       allow update: if isFamilyOwner(resource.data.familyId);
@@ -91,13 +90,21 @@ service cloud.firestore {
     }
 
     match /family_invitations/{inviteId} {
-      allow read: if isAuthenticated() &&
-        (resource.data.receiverEmail == request.auth.token.email || isFamilyMember(resource.data.familyId));
-      allow create: if isFamilyMember(request.resource.data.familyId);
-      allow update: if isFamilyMember(resource.data.familyId) ||
-        resource.data.receiverEmail == request.auth.token.email;
-      allow delete: if isFamilyOwner(resource.data.familyId) ||
-        resource.data.receiverEmail == request.auth.token.email;
+      allow read: if isAuthenticated() && (
+        resource.data.receiverEmail == request.auth.token.email ||
+        isFamilyMember(resource.data.familyId)
+      );
+      allow create: if isAuthenticated() &&
+        request.resource.data.senderId == request.auth.uid &&
+        isFamilyMember(request.resource.data.familyId);
+      allow update: if isAuthenticated() && (
+        isFamilyMember(resource.data.familyId) ||
+        resource.data.receiverEmail == request.auth.token.email
+      );
+      allow delete: if isAuthenticated() && (
+        isFamilyOwner(resource.data.familyId) ||
+        resource.data.receiverEmail == request.auth.token.email
+      );
     }
 
     match /shared_assets/{sharedAssetId} {
