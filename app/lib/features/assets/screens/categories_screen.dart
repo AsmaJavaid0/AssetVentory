@@ -52,17 +52,14 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
         );
       },
     );
-    if (created == true && mounted) {
-      await _load();
-      // Navigate to asset selection if we have the new category ID
-      if (createdCategoryId != null && createdCategoryId!.isNotEmpty) {
-        await Navigator.of(context).push(MaterialPageRoute(
-          builder: (_) => AssetSelectionScreen(categoryId: createdCategoryId!),
-        ));
-        // Reload to reflect any asset count changes
-        await _load();
-      }
-    }
+    if (!mounted || created != true) return;
+    await _load();
+    if (!mounted || createdCategoryId == null || createdCategoryId!.isEmpty) return;
+    await Navigator.of(context).push(MaterialPageRoute(
+      builder: (_) => AssetSelectionScreen(categoryId: createdCategoryId!),
+    ));
+    if (!mounted) return;
+    await _load();
   }
 
   @override
@@ -95,7 +92,11 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
                           borderRadius: BorderRadius.circular(18),
                           child: InkWell(
                             borderRadius: BorderRadius.circular(18),
-                            onTap: () async { await CategoryDetailScreen.navigateTo(context, category); if (mounted) await _load(); },
+                            onTap: () async {
+                              await CategoryDetailScreen.navigateTo(context, category);
+                              if (!mounted) return;
+                              await _load();
+                            },
                             child: Padding(
                               padding: const EdgeInsets.all(16),
                               child: Row(children: [
