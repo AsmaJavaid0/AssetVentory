@@ -83,21 +83,6 @@ class _AssetSelectionScreenState extends State<AssetSelectionScreen> {
     }
   }
 
-  IconData _iconForExtension(String? ext) {
-    switch (ext?.toLowerCase()) {
-      case 'jpg':
-      case 'jpeg':
-      case 'png':
-      case 'gif':
-      case 'webp':
-        return Icons.image_outlined;
-      case 'pdf':
-        return Icons.picture_as_pdf_outlined;
-      default:
-        return Icons.inventory_2_outlined;
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -259,7 +244,6 @@ class _AssetSelectionScreenState extends State<AssetSelectionScreen> {
                                 ],
                               ),
                             ),
-                            // Selection indicator
                             Positioned(
                               top: 6,
                               right: 6,
