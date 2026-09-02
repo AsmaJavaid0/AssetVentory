@@ -234,7 +234,7 @@ class _AddAssetScreenState extends State<AddAssetScreen> {
 
   Future<void> _pickDocuments() async {
     try {
-      final result = await FilePicker.pickFiles(
+      final picked = await FilePicker.pickFiles(
         allowMultiple: true,
         type: FileType.custom,
         allowedExtensions: [
@@ -243,17 +243,15 @@ class _AddAssetScreenState extends State<AddAssetScreen> {
         ],
       );
 
-      if (!mounted || result == null || result.files.isEmpty) {
-        return;
-      }
+      if (!mounted || picked.isEmpty) return;
 
-      final picked = result.files
+      final files = picked
           .where((file) => file.path != null)
           .map((file) => File(file.path!))
           .toList();
 
       setState(() {
-        for (final file in picked) {
+        for (final file in files) {
           if (!_documents.any((existing) => existing.path == file.path)) {
             _documents.add(file);
           }
