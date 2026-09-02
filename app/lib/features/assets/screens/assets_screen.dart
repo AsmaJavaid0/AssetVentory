@@ -12,6 +12,7 @@ import 'asset_details_screen.dart';
 import 'category_detail_screen.dart';
 import '../../home/widgets/add_quick_asset_sheet.dart';
 import '../widgets/create_category_sheet.dart';
+import 'asset_selection_screen.dart';
 
 enum _AssetView { all, categories }
 enum _AssetSort { newest, name, location }
@@ -59,17 +60,26 @@ class _AssetsScreenState extends State<AssetsScreen> with SingleTickerProviderSt
   void _toggleSearch() { setState(() => _searchVisible = !_searchVisible); if (_searchVisible) { _searchControllerAnim.forward(); } else { _searchControllerAnim.reverse(); _searchController.clear(); setState(() => _searchQuery = ''); } }
   Future<void> _addAsset() async { await AddQuickAssetSheet.show(context); if (mounted) await _load(); }
   Future<void> _addCategory() async {
+    String? createdCategoryId;
     final created = await CreateCategorySheet.show(
       context,
       onCreateCategory: (name, emoji) async {
-        await _categoryRepository.createCategoryIfNotExists(
+        createdCategoryId = await _categoryRepository.createCategoryIfNotExists(
           ownerId: _ownerId,
           name: name,
           emoji: emoji,
         );
       },
     );
-    if (created == true && mounted) await _load();
+    if (created == true && mounted) {
+      await _load();
+      if (createdCategoryId != null && createdCategoryId!.isNotEmpty) {
+        await Navigator.of(context).push(MaterialPageRoute(
+          builder: (_) => AssetSelectionScreen(categoryId: createdCategoryId!),
+        ));
+        await _load();
+      }
+    }
   }
 
   @override

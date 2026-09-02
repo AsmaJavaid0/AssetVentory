@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../screens/asset_selection_screen.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import '../../../core/constants/app_colors.dart';
@@ -40,17 +41,28 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
   }
 
   Future<void> _createCategory() async {
+    String? createdCategoryId;
     final created = await CreateCategorySheet.show(
       context,
       onCreateCategory: (name, emoji) async {
-        await serviceLocator.categoryRepository.createCategoryIfNotExists(
+        createdCategoryId = await serviceLocator.categoryRepository.createCategoryIfNotExists(
           ownerId: _ownerId,
           name: name,
           emoji: emoji,
         );
       },
     );
-    if (created == true && mounted) await _load();
+    if (created == true && mounted) {
+      await _load();
+      // Navigate to asset selection if we have the new category ID
+      if (createdCategoryId != null && createdCategoryId!.isNotEmpty) {
+        await Navigator.of(context).push(MaterialPageRoute(
+          builder: (_) => AssetSelectionScreen(categoryId: createdCategoryId!),
+        ));
+        // Reload to reflect any asset count changes
+        await _load();
+      }
+    }
   }
 
   @override

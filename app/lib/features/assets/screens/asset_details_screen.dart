@@ -9,6 +9,7 @@ import '../../../core/di/service_locator.dart';
 import '../models/local_asset.dart';
 import '../models/local_asset_document.dart';
 import '../models/local_category.dart';
+import '../widgets/full_screen_image_viewer.dart';
 import 'edit_asset_screen.dart';
 
 class AssetDetailsScreen extends StatefulWidget {
@@ -142,19 +143,41 @@ class _AssetDetailsScreenState extends State<AssetDetailsScreen> {
 
   Widget _buildPhoto() {
     final path = _asset.imagePath;
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(22),
-      child: Container(
-        width: double.infinity,
-        constraints: const BoxConstraints(minHeight: 180, maxHeight: 360),
-        color: AppColors.primaryPurple.withValues(alpha: 0.06),
-        child: path != null && path.isNotEmpty
-            ? Image.file(
-                File(path),
-                fit: BoxFit.contain,
-                errorBuilder: (_, _, _) => _emojiPlaceholder(),
-              )
-            : _emojiPlaceholder(),
+    return GestureDetector(
+      onTap: path != null && path.isNotEmpty
+          ? () => FullScreenImageViewer.show(context, imagePath: path, title: _asset.name)
+          : null,
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(22),
+        child: Container(
+          width: double.infinity,
+          constraints: const BoxConstraints(minHeight: 180, maxHeight: 360),
+          color: AppColors.primaryPurple.withValues(alpha: 0.06),
+          child: path != null && path.isNotEmpty
+              ? Stack(
+                  alignment: Alignment.bottomRight,
+                  children: [
+                    Image.file(
+                      File(path),
+                      fit: BoxFit.contain,
+                      width: double.infinity,
+                      errorBuilder: (_, _, _) => _emojiPlaceholder(),
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.all(10),
+                      child: Container(
+                        padding: const EdgeInsets.all(6),
+                        decoration: BoxDecoration(
+                          color: Colors.black45,
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: const Icon(Icons.zoom_in_rounded, color: Colors.white, size: 20),
+                      ),
+                    ),
+                  ],
+                )
+              : _emojiPlaceholder(),
+        ),
       ),
     );
   }
@@ -306,54 +329,127 @@ class _AssetDetailsScreenState extends State<AssetDetailsScreen> {
     );
   }
 
-  Widget _documentTile(LocalAssetDocument document) => Padding(
-        padding: const EdgeInsets.only(bottom: 8),
-        child: InkWell(
-          borderRadius: BorderRadius.circular(12),
-          onTap: () async {
-            if (document.filePath.isNotEmpty) {
-              final result = await OpenFilex.open(document.filePath);
-              if (result.type != ResultType.done && mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text('Could not open file: ${result.message}')),
-                );
-              }
-            }
-          },
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
-            decoration: BoxDecoration(
-              color: AppColors.scaffoldBg,
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Row(
-              children: [
-                const Icon(Icons.description_outlined, color: AppColors.primaryPurple),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Text(
-                    document.name,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: GoogleFonts.outfit(fontWeight: FontWeight.w600),
-                  ),
-                ),
-                if (document.fileType != null)
-                  Padding(
-                    padding: const EdgeInsets.only(left: 8),
-                    child: Text(
-                      document.fileType!.toUpperCase(),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: GoogleFonts.outfit(
-                        fontSize: 10,
-                        color: AppColors.textMuted,
-                      ),
+  static const _imageExtensions = {'jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp'};
+
+  bool _isImage(LocalAssetDocument doc) {
+    final ext = doc.fileType?.toLowerCase() ?? '';
+    return _imageExtensions.contains(ext);
+  }
+
+  IconData _iconForFileType(String? fileType) {
+    switch (fileType?.toLowerCase()) {
+      case 'pdf':
+        return Icons.picture_as_pdf_outlined;
+      case 'doc':
+      case 'docx':
+      case 'rtf':
+      case 'txt':
+        return Icons.article_outlined;
+      case 'xls':
+      case 'xlsx':
+      case 'csv':
+        return Icons.table_chart_outlined;
+      case 'ppt':
+      case 'pptx':
+        return Icons.slideshow_outlined;
+      case 'zip':
+      case 'rar':
+      case '7z':
+        return Icons.folder_zip_outlined;
+      case 'jpg':
+      case 'jpeg':
+      case 'png':
+      case 'gif':
+      case 'webp':
+      case 'bmp':
+        return Icons.image_outlined;
+      default:
+        return Icons.description_outlined;
+    }
+  }
+
+  void _openDocument(LocalAssetDocument document) async {
+    if (document.filePath.isEmpty) return;
+
+    // If it's an image, open full-screen viewer
+    if (_isImage(document) && File(document.filePath).existsSync()) {
+      FullScreenImageViewer.show(context, imagePath: document.filePath, title: document.name);
+      return;
+    }
+
+    // Otherwise open with system handler
+    final result = await OpenFilex.open(document.filePath);
+    if (result.type != ResultType.done && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Could not open file: ${result.message}')),
+      );
+    }
+  }
+
+  Widget _documentTile(LocalAssetDocument document) {
+    final isImg = _isImage(document);
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(12),
+        onTap: () => _openDocument(document),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
+          decoration: BoxDecoration(
+            color: AppColors.scaffoldBg,
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Row(
+            children: [
+              // Thumbnail for images, icon for documents
+              if (isImg && File(document.filePath).existsSync())
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(8),
+                  child: Image.file(
+                    File(document.filePath),
+                    width: 42,
+                    height: 42,
+                    fit: BoxFit.cover,
+                    errorBuilder: (_, _, _) => Icon(
+                      _iconForFileType(document.fileType),
+                      color: AppColors.primaryPurple,
                     ),
                   ),
-              ],
-            ),
+                )
+              else
+                Icon(_iconForFileType(document.fileType), color: AppColors.primaryPurple),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  document.name,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: GoogleFonts.outfit(fontWeight: FontWeight.w600),
+                ),
+              ),
+              if (document.fileType != null)
+                Container(
+                  margin: const EdgeInsets.only(left: 8),
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: AppColors.primaryPurple.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  child: Text(
+                    document.fileType!.toUpperCase(),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: GoogleFonts.outfit(
+                      fontSize: 10,
+                      fontWeight: FontWeight.w600,
+                      color: AppColors.primaryPurple,
+                    ),
+                  ),
+                ),
+            ],
           ),
         ),
-      );
+      ),
+    );
+  }
 }

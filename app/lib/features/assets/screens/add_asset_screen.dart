@@ -164,15 +164,90 @@ class _AddAssetScreenState extends State<AddAssetScreen> {
     );
   }
 
+  Future<void> _showMediaPicker() async {
+    await showModalBottomSheet<void>(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (sheetContext) {
+        return SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const SizedBox(height: 12),
+              Text(
+                'Add Media',
+                style: GoogleFonts.outfit(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              ListTile(
+                leading: const Icon(Icons.photo_library_rounded),
+                title: const Text('Photos from Gallery'),
+                subtitle: const Text('Pick one or more images'),
+                onTap: () {
+                  Navigator.pop(sheetContext);
+                  _pickFromGallery();
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.insert_drive_file_outlined),
+                title: const Text('Documents & Files'),
+                subtitle: const Text('PDFs, spreadsheets, and more'),
+                onTap: () {
+                  Navigator.pop(sheetContext);
+                  _pickDocuments();
+                },
+              ),
+              const SizedBox(height: 8),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Future<void> _pickFromGallery() async {
+    try {
+      final picked = await _imagePicker.pickMultiImage(
+        imageQuality: 90,
+        maxWidth: 2048,
+        maxHeight: 2048,
+      );
+
+      if (!mounted || picked.isEmpty) return;
+
+      setState(() {
+        for (final xFile in picked) {
+          final file = File(xFile.path);
+          if (!_documents.any((existing) => existing.path == file.path)) {
+            _documents.add(file);
+          }
+        }
+      });
+    } catch (_) {
+      _showSnackBar('Failed to pick images.', isError: true);
+    }
+  }
+
   Future<void> _pickDocuments() async {
     try {
-      final result = await FilePicker.pickFiles();
+      final result = await FilePicker.pickFiles(
+        allowMultiple: true,
+        type: FileType.custom,
+        allowedExtensions: [
+          'pdf', 'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx',
+          'txt', 'csv', 'rtf', 'zip', 'png', 'jpg', 'jpeg', 'gif', 'webp',
+        ],
+      );
 
-      if (!mounted || result.isEmpty) {
+      if (!mounted || result == null || result.files.isEmpty) {
         return;
       }
 
-      final picked = result
+      final picked = result.files
           .where((file) => file.path != null)
           .map((file) => File(file.path!))
           .toList();
@@ -455,9 +530,9 @@ class _AddAssetScreenState extends State<AddAssetScreen> {
                   ),
                   const SizedBox(height: 12),
                   OutlinedButton.icon(
-                    onPressed: _pickDocuments,
+                    onPressed: _showMediaPicker,
                     icon: const Icon(Icons.attach_file_rounded),
-                    label: const Text('Add Files'),
+                    label: const Text('Add Media'),
                   ),
                   if (_documents.isNotEmpty) ...[
                     const SizedBox(height: 8),
