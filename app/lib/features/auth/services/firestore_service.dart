@@ -3,8 +3,6 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../../core/utils/result.dart';
 import '../models/user_model.dart';
 import '../../assets/models/asset_model.dart';
-import '../../assets/models/category_model.dart';
-import '../../assets/models/document_model.dart';
 import '../../tasks/models/task_model.dart';
 import '../../tasks/models/reminder_model.dart';
 
@@ -13,8 +11,6 @@ class FirestoreService {
 
   CollectionReference<Map<String, dynamic>> get _usersCollection => _firestore.collection('users');
   CollectionReference<Map<String, dynamic>> get _assetsCollection => _firestore.collection('assets');
-  CollectionReference<Map<String, dynamic>> get _categoriesCollection => _firestore.collection('categories');
-  CollectionReference<Map<String, dynamic>> get _documentsCollection => _firestore.collection('documents');
   CollectionReference<Map<String, dynamic>> get _remindersCollection => _firestore.collection('reminders');
   CollectionReference<Map<String, dynamic>> get _tasksCollection => _firestore.collection('tasks');
 
@@ -67,18 +63,9 @@ class FirestoreService {
     });
   }
 
-  /// Streams tasks visible to the current user from two independent queries:
-  /// tasks assigned to the user and family tasks created by the user.
-  ///
-  /// Keeping these as separate queries avoids a broad family query and avoids
-  /// relying on a composite OR query/index. Results are merged by document ID.
   Stream<List<TaskModel>> streamVisibleTasks(String uid, {String? familyId}) {
-    final assignedStream = _tasksCollection
-        .where('assignedTo', isEqualTo: uid)
-        .snapshots();
-    final createdStream = _tasksCollection
-        .where('createdBy', isEqualTo: uid)
-        .snapshots();
+    final assignedStream = _tasksCollection.where('assignedTo', isEqualTo: uid).snapshots();
+    final createdStream = _tasksCollection.where('createdBy', isEqualTo: uid).snapshots();
 
     return Stream.multi((controller) {
       var assignedDocs = <QueryDocumentSnapshot<Map<String, dynamic>>>[];
@@ -89,31 +76,21 @@ class FirestoreService {
         for (final doc in [...assignedDocs, ...createdDocs]) {
           final task = TaskModel.fromFirestore(doc);
           if (task.assignedTo == uid || task.createdBy == uid) {
-            // A task with a familyId is family-shared. Personal tasks are also
-            // allowed here because the existing personal-task compatibility
-            // path may mirror them into Firestore.
             byId[task.id] = task;
           }
         }
-        final tasks = byId.values.toList()
-          ..sort((a, b) => a.dueDate.compareTo(b.dueDate));
+        final tasks = byId.values.toList()..sort((a, b) => a.dueDate.compareTo(b.dueDate));
         controller.add(tasks);
       }
 
-      final assignedSub = assignedStream.listen(
-        (snapshot) {
-          assignedDocs = snapshot.docs;
-          emit();
-        },
-        onError: controller.addError,
-      );
-      final createdSub = createdStream.listen(
-        (snapshot) {
-          createdDocs = snapshot.docs;
-          emit();
-        },
-        onError: controller.addError,
-      );
+      final assignedSub = assignedStream.listen((snapshot) {
+        assignedDocs = snapshot.docs;
+        emit();
+      }, onError: controller.addError);
+      final createdSub = createdStream.listen((snapshot) {
+        createdDocs = snapshot.docs;
+        emit();
+      }, onError: controller.addError);
 
       controller.onCancel = () async {
         await assignedSub.cancel();
@@ -134,7 +111,6 @@ class FirestoreService {
 
   Future<String> addTask(TaskModel task) async => (await _tasksCollection.add(task.toFirestore())).id;
 
-  /// Creates a task and only returns after Firestore has accepted the write.
   Future<String> createTask(TaskModel task) async {
     final docRef = task.id.isNotEmpty ? _tasksCollection.doc(task.id) : _tasksCollection.doc();
     final taskData = task.copyWith(id: docRef.id).toFirestore();
