@@ -4,11 +4,9 @@ import 'package:firebase_auth/firebase_auth.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/app_palette.dart';
 import '../../../core/constants/app_strings.dart';
-import '../../../core/utils/wave_clipper.dart';
 import '../../../core/widgets/asset_logo.dart';
 import '../../../core/widgets/custom_button.dart';
 import '../../../core/widgets/custom_text_field.dart';
-import '../../../core/widgets/loading_overlay.dart';
 import '../services/auth_service.dart';
 import 'forgot_password_screen.dart';
 import '../../home/screens/main_navigation_screen.dart';
@@ -25,7 +23,8 @@ class LoginSignupScreen extends StatefulWidget {
   State<LoginSignupScreen> createState() => _LoginSignupScreenState();
 }
 
-class _LoginSignupScreenState extends State<LoginSignupScreen> {
+class _LoginSignupScreenState extends State<LoginSignupScreen>
+    with SingleTickerProviderStateMixin {
   final AuthService _authService = AuthService();
 
   late bool _isSignUp;
@@ -40,10 +39,41 @@ class _LoginSignupScreenState extends State<LoginSignupScreen> {
   final _passwordController = TextEditingController();
   final _confirmPasswordController = TextEditingController();
 
+  late final AnimationController _fadeController;
+  late final AnimationController _slideController;
+  late final Animation<double> _fadeAnimation;
+  late final Animation<double> _slideAnimation;
+
   @override
   void initState() {
     super.initState();
     _isSignUp = widget.initialIsSignUp;
+
+    // Initialize animations for smooth transitions
+    _fadeController = AnimationController(
+      duration: const Duration(milliseconds: 300),
+      vsync: this,
+    );
+    _slideController = AnimationController(
+      duration: const Duration(milliseconds: 300),
+      vsync: this,
+    );
+
+    _fadeAnimation = CurvedAnimation(
+      parent: _fadeController,
+      curve: Curves.easeInOut,
+    );
+
+    _slideAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
+      CurvedAnimation(
+        parent: _slideController,
+        curve: Curves.easeInOut,
+      ),
+    );
+
+    // Start animations
+    _fadeController.forward();
+    _slideController.forward();
   }
 
   @override
@@ -52,6 +82,8 @@ class _LoginSignupScreenState extends State<LoginSignupScreen> {
     _emailController.dispose();
     _passwordController.dispose();
     _confirmPasswordController.dispose();
+    _fadeController.dispose();
+    _slideController.dispose();
     super.dispose();
   }
 
@@ -149,6 +181,7 @@ class _LoginSignupScreenState extends State<LoginSignupScreen> {
         backgroundColor: AppColors.error,
         behavior: SnackBarBehavior.floating,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        margin: const EdgeInsets.all(16),
       ),
     );
   }
@@ -156,246 +189,182 @@ class _LoginSignupScreenState extends State<LoginSignupScreen> {
   @override
   Widget build(BuildContext context) {
     final palette = AppPalette.of(context);
-    return LoadingOverlay(
-      isLoading: _isLoading,
-      child: Scaffold(
-        backgroundColor: palette.isDark ? AppColors.heroDarkBg : AppColors.scaffoldBg,
-        body: SingleChildScrollView(
-          physics: const ClampingScrollPhysics(),
-          child: Column(
-            children: [
-              // Hero Dark Top Area with Wave Clipper
-              _buildDarkHeroHeader(),
+    return Scaffold(
+      backgroundColor: palette.isDark ? AppColors.heroDarkBg : AppColors.scaffoldBg,
+      body: FadeTransition(
+        opacity: _fadeAnimation,
+        child: SlideTransition(
+          position: Tween<Offset>(
+            begin: const Offset(0, 0.1),
+            end: Offset.zero,
+          ).animate(_slideController),
+          child: SingleChildScrollView(
+            physics: const ClampingScrollPhysics(),
+            child: ConstrainedBox(
+              constraints: BoxConstraints(
+                minHeight: MediaQuery.of(context).size.height,
+              ),
+              child: Column(
+                children: [
+                  // Hero Dark Top Area with Wave Clipper
+                  _buildDarkHeroHeader(context, palette),
 
-              // Light Lavender Form Body
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-                child: Form(
-                  key: _formKey,
-                  child: Column(
-                    children: [
-                      // Auth Mode Switcher Tabs (Log In / Sign Up)
-                      _buildAuthTabs(),
-
-                      const SizedBox(height: 24),
-
-                      // Continue with Google Button
-                      GoogleSignInButton(
-                        onPressed: _submitGoogleAuth,
-                      ),
-
-                      const SizedBox(height: 20),
-
-                      // "or" Divider
-                      Row(
+                  // Light Lavender Form Body
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                    child: Form(
+                      key: _formKey,
+                      child: Column(
                         children: [
-                          Expanded(
-                            child: Divider(color: palette.divider, thickness: 1.2),
+                          // Auth Mode Switcher Tabs (Log In / Sign Up)
+                          _buildAuthTabs(context, palette),
+
+                          const SizedBox(height: 24),
+
+                          // Continue with Google Button
+                          GoogleSignInButton(
+                            onPressed: _submitGoogleAuth,
+                            isLoading: _isLoading,
                           ),
-                          Padding(
-                            padding: const EdgeInsets.symmetric(horizontal: 16),
-                            child: Text(
-                              AppStrings.or,
-                              style: GoogleFonts.outfit(
-                                fontSize: 13,
-                                color: palette.iconMuted,
-                                fontWeight: FontWeight.w500,
-                              ),
+
+                          const SizedBox(height: 20),
+
+                          // "or" Divider
+                          _buildOrDivider(context, palette),
+
+                          const SizedBox(height: 20),
+
+                          // Full Name field (if Sign Up)
+                          if (_isSignUp) ...[
+                            CustomTextField(
+                              controller: _nameController,
+                              hintText: AppStrings.fullName,
+                              labelText: AppStrings.fullName,
+                              prefixIcon: Icons.person_outline_rounded,
+                              validator: (val) {
+                                if (val == null || val.trim().isEmpty) {
+                                  return AppStrings.nameRequired;
+                                }
+                                return null;
+                              },
                             ),
-                          ),
-                          Expanded(
-                            child: Divider(color: palette.divider, thickness: 1.2),
-                          ),
-                        ],
-                      ),
+                            const SizedBox(height: 16),
+                          ],
 
-                      const SizedBox(height: 20),
-
-                      // Full Name field (if Sign Up)
-                      if (_isSignUp) ...[
-                        CustomTextField(
-                          controller: _nameController,
-                          hintText: AppStrings.fullName,
-                          prefixIcon: Icons.person_outline_rounded,
-                          validator: (val) {
-                            if (val == null || val.trim().isEmpty) {
-                              return AppStrings.nameRequired;
-                            }
-                            return null;
-                          },
-                        ),
-                        const SizedBox(height: 14),
-                      ],
-
-                      // Email Field
-                      CustomTextField(
-                        controller: _emailController,
-                        hintText: AppStrings.email,
-                        prefixIcon: Icons.mail_outline_rounded,
-                        keyboardType: TextInputType.emailAddress,
-                        validator: (val) {
-                          if (val == null || val.trim().isEmpty) {
-                            return AppStrings.emailRequired;
-                          }
-                          if (!val.contains('@') || !val.contains('.')) {
-                            return AppStrings.validEmailRequired;
-                          }
-                          return null;
-                        },
-                      ),
-
-                      const SizedBox(height: 14),
-
-                      // Password Field
-                      CustomTextField(
-                        controller: _passwordController,
-                        hintText: AppStrings.password,
-                        prefixIcon: Icons.lock_outline_rounded,
-                        obscureText: _obscurePassword,
-                        suffixIcon: IconButton(
-                          icon: Icon(
-                            _obscurePassword
-                                ? Icons.visibility_outlined
-                                : Icons.visibility_off_outlined,
-                            color: palette.iconMuted,
-                            size: 20,
-                          ),
-                          onPressed: () {
-                            setState(() => _obscurePassword = !_obscurePassword);
-                          },
-                        ),
-                        validator: (val) {
-                          if (val == null || val.isEmpty) {
-                            return AppStrings.passwordRequired;
-                          }
-                          if (val.length < 6) {
-                            return AppStrings.passwordMinLength;
-                          }
-                          return null;
-                        },
-                      ),
-
-                      // Confirm Password Field (if Sign Up)
-                      if (_isSignUp) ...[
-                        const SizedBox(height: 14),
-                        CustomTextField(
-                          controller: _confirmPasswordController,
-                          hintText: AppStrings.confirmPassword,
-                          prefixIcon: Icons.lock_outline_rounded,
-                          obscureText: _obscureConfirmPassword,
-                          suffixIcon: IconButton(
-                            icon: Icon(
-                              _obscureConfirmPassword
-                                  ? Icons.visibility_outlined
-                                  : Icons.visibility_off_outlined,
-                              color: palette.iconMuted,
-                              size: 20,
-                            ),
-                            onPressed: () {
-                              setState(() =>
-                                  _obscureConfirmPassword = !_obscureConfirmPassword);
+                          // Email Field
+                          CustomTextField(
+                            controller: _emailController,
+                            hintText: AppStrings.email,
+                            labelText: AppStrings.email,
+                            prefixIcon: Icons.mail_outline_rounded,
+                            keyboardType: TextInputType.emailAddress,
+                            validator: (val) {
+                              if (val == null || val.trim().isEmpty) {
+                                return AppStrings.emailRequired;
+                              }
+                              if (!val.contains('@') || !val.contains('.')) {
+                                return AppStrings.validEmailRequired;
+                              }
+                              return null;
                             },
                           ),
-                          validator: (val) {
-                            if (val == null || val.isEmpty) {
-                              return 'Please confirm your password';
-                            }
-                            if (val != _passwordController.text) {
-                              return AppStrings.passwordMismatch;
-                            }
-                            return null;
-                          },
-                        ),
-                      ],
 
-                      const SizedBox(height: 14),
+                          const SizedBox(height: 16),
 
-                      // Remember me & Forgot password row
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Row(
-                            children: [
-                              SizedBox(
-                                width: 22,
-                                height: 22,
-                                child: Checkbox(
-                                  value: _rememberMe,
-                                  onChanged: (val) {
-                                    setState(() => _rememberMe = val ?? true);
-                                  },
-                                  activeColor: AppColors.primaryPurple,
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(5),
-                                  ),
-                                  side: BorderSide(
-                                    color: palette.controlBorder,
-                                    width: 1.5,
-                                  ),
-                                ),
+                          // Password Field
+                          CustomTextField(
+                            controller: _passwordController,
+                            hintText: AppStrings.password,
+                            labelText: AppStrings.password,
+                            prefixIcon: Icons.lock_outline_rounded,
+                            obscureText: _obscurePassword,
+                            suffixIcon: IconButton(
+                              icon: Icon(
+                                _obscurePassword
+                                    ? Icons.visibility_outlined
+                                    : Icons.visibility_off_outlined,
+                                color: palette.iconMuted,
+                                size: 20,
                               ),
-                              const SizedBox(width: 8),
-                              GestureDetector(
-                                onTap: () {
-                                  setState(() => _rememberMe = !_rememberMe);
-                                },
-                                child: Text(
-                                  AppStrings.rememberMe,
-                                  style: GoogleFonts.outfit(
-                                    fontSize: 13,
-                                    color: palette.onSurfaceMuted,
-                                    fontWeight: FontWeight.w500,
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                          if (!_isSignUp)
-                            GestureDetector(
-                              onTap: () {
-                                Navigator.of(context).push(
-                                  MaterialPageRoute(
-                                    builder: (_) => ForgotPasswordScreen(
-                                      initialEmail: _emailController.text.trim(),
-                                    ),
-                                  ),
-                                );
+                              onPressed: () {
+                                setState(() => _obscurePassword = !_obscurePassword);
                               },
-                              child: Text(
-                                AppStrings.forgotPassword,
-                                style: GoogleFonts.outfit(
-                                  fontSize: 13,
-                                  color: AppColors.primaryPurple,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
                             ),
+                            validator: (val) {
+                              if (val == null || val.isEmpty) {
+                                return AppStrings.passwordRequired;
+                              }
+                              if (val.length < 6) {
+                                return AppStrings.passwordMinLength;
+                              }
+                              return null;
+                            },
+                          ),
+
+                          // Conditional spacing for confirm password
+                          if (_isSignUp) ...[
+                            const SizedBox(height: 16),
+                            CustomTextField(
+                              controller: _confirmPasswordController,
+                              hintText: AppStrings.confirmPassword,
+                              labelText: AppStrings.confirmPassword,
+                              prefixIcon: Icons.lock_outline_rounded,
+                              obscureText: _obscureConfirmPassword,
+                              suffixIcon: IconButton(
+                                icon: Icon(
+                                  _obscureConfirmPassword
+                                      ? Icons.visibility_outlined
+                                      : Icons.visibility_off_outlined,
+                                  color: palette.iconMuted,
+                                  size: 20,
+                                ),
+                                onPressed: () {
+                                  setState(() =>
+                                      _obscureConfirmPassword = !_obscureConfirmPassword);
+                                },
+                              ),
+                              validator: (val) {
+                                if (val == null || val.isEmpty) {
+                                  return 'Please confirm your password';
+                                }
+                                if (val != _passwordController.text) {
+                                  return AppStrings.passwordMismatch;
+                                }
+                                return null;
+                              },
+                            ),
+                          ],
+
+                          const SizedBox(height: 24),
+
+                          // Remember me & Forgot password row
+                          _buildRememberForgotRow(context, palette),
+
+                          const SizedBox(height: 28),
+
+                          // Action Button
+                          GradientButton(
+                            text: _isSignUp ? AppStrings.signUp : AppStrings.logIn,
+                            onPressed: _submitEmailAuth,
+                            isLoading: _isLoading,
+                          ),
+
+                          const SizedBox(height: 32),
                         ],
                       ),
-
-                      const SizedBox(height: 28),
-
-                      // Action Button
-                      GradientButton(
-                        text: _isSignUp ? AppStrings.signUp : AppStrings.logIn,
-                        onPressed: _submitEmailAuth,
-                      ),
-
-                      const SizedBox(height: 32),
-                    ],
+                    ),
                   ),
-                ),
+                ],
               ),
-            ],
+            ),
           ),
         ),
       ),
     );
   }
 
-  Widget _buildDarkHeroHeader() {
+  Widget _buildDarkHeroHeader(BuildContext context, AppPalette palette) {
     return ClipPath(
-      clipper: WaveClipper(),
       child: Container(
         width: double.infinity,
         decoration: const BoxDecoration(
@@ -449,7 +418,7 @@ class _LoginSignupScreenState extends State<LoginSignupScreen> {
               ],
             ),
 
-            const SizedBox(height: 8),
+            const SizedBox(height: 12),
 
             // AssetVentory Logo
             const AssetLogo(
@@ -458,51 +427,57 @@ class _LoginSignupScreenState extends State<LoginSignupScreen> {
               isDarkBackground: true,
             ),
 
-            const SizedBox(height: 20),
+            const SizedBox(height: 24),
 
             // Welcome Back Header
             Text(
               _isSignUp ? 'Create an account' : AppStrings.welcomeBack,
               style: GoogleFonts.outfit(
-                fontSize: 22,
+                fontSize: 24,
                 fontWeight: FontWeight.w700,
                 color: Colors.white,
+                letterSpacing: -0.5,
               ),
             ),
-            const SizedBox(height: 6),
+            const SizedBox(height: 8),
             Text(
               _isSignUp ? AppStrings.signupSubtitle : AppStrings.loginSubtitle,
               textAlign: TextAlign.center,
               style: GoogleFonts.outfit(
-                fontSize: 13,
+                fontSize: 14,
                 color: const Color(0xFFB3A8D2),
+                height: 1.4,
               ),
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: 16),
           ],
         ),
       ),
     );
   }
 
-  Widget _buildAuthTabs() {
+  Widget _buildAuthTabs(BuildContext context, AppPalette palette) {
     return Container(
-      decoration: const BoxDecoration(
-        border: Border(
-          bottom: BorderSide(color: Color(0xFFE5E2F0), width: 1.5),
+      decoration: BoxDecoration(
+        color: palette.isDark ? Colors.white.withAlpha(8) : Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: palette.isDark ? Colors.white.withAlpha(12) : palette.border,
+          width: 1,
         ),
       ),
       child: Row(
         children: [
           Expanded(
             child: InkWell(
+              borderRadius: BorderRadius.circular(12),
               onTap: () {
                 if (_isSignUp) {
                   setState(() => _isSignUp = false);
                 }
               },
               child: Container(
-                padding: const EdgeInsets.symmetric(vertical: 12),
+                padding: const EdgeInsets.symmetric(vertical: 14),
                 decoration: BoxDecoration(
                   border: Border(
                     bottom: BorderSide(
@@ -526,13 +501,14 @@ class _LoginSignupScreenState extends State<LoginSignupScreen> {
           ),
           Expanded(
             child: InkWell(
+              borderRadius: BorderRadius.circular(12),
               onTap: () {
                 if (!_isSignUp) {
                   setState(() => _isSignUp = true);
                 }
               },
               child: Container(
-                padding: const EdgeInsets.symmetric(vertical: 12),
+                padding: const EdgeInsets.symmetric(vertical: 14),
                 decoration: BoxDecoration(
                   border: Border(
                     bottom: BorderSide(
@@ -556,6 +532,100 @@ class _LoginSignupScreenState extends State<LoginSignupScreen> {
           ),
         ],
       ),
+    );
+  }
+
+  Widget _buildOrDivider(BuildContext context, AppPalette palette) {
+    return Row(
+      children: [
+        Expanded(
+          child: Divider(
+            color: palette.divider,
+            thickness: 1,
+          ),
+        ),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12),
+          child: Text(
+            AppStrings.or,
+            style: GoogleFonts.outfit(
+              fontSize: 13,
+              color: palette.iconMuted,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+        ),
+        Expanded(
+          child: Divider(
+            color: palette.divider,
+            thickness: 1,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildRememberForgotRow(BuildContext context, AppPalette palette) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Row(
+          children: [
+            SizedBox(
+              width: 20,
+              height: 20,
+              child: Checkbox(
+                value: _rememberMe,
+                onChanged: (val) {
+                  setState(() => _rememberMe = val ?? true);
+                },
+                activeColor: AppColors.primaryPurple,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(4),
+                ),
+                side: BorderSide(
+                  color: palette.controlBorder,
+                  width: 1.5,
+                ),
+              ),
+            ),
+            const SizedBox(width: 8),
+            GestureDetector(
+              onTap: () {
+                setState(() => _rememberMe = !_rememberMe);
+              },
+              child: Text(
+                AppStrings.rememberMe,
+                style: GoogleFonts.outfit(
+                  fontSize: 13,
+                  color: palette.onSurfaceMuted,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ),
+          ],
+        ),
+        if (!_isSignUp)
+          GestureDetector(
+            onTap: () {
+              Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (_) => ForgotPasswordScreen(
+                    initialEmail: _emailController.text.trim(),
+                  ),
+                ),
+              );
+            },
+            child: Text(
+              AppStrings.forgotPassword,
+              style: GoogleFonts.outfit(
+                fontSize: 13,
+                color: AppColors.primaryPurple,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+      ],
     );
   }
 }
