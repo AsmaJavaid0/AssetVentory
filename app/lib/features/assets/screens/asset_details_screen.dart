@@ -14,6 +14,7 @@ import 'edit_asset_screen.dart';
 
 class AssetDetailsScreen extends StatefulWidget {
   final LocalAsset asset;
+
   const AssetDetailsScreen({super.key, required this.asset});
 
   static Future<void> navigateTo(BuildContext context, LocalAsset asset) {
@@ -30,6 +31,8 @@ class _AssetDetailsScreenState extends State<AssetDetailsScreen> {
   late LocalAsset _asset;
   late Future<List<LocalAssetDocument>> _documentsFuture;
   late Future<List<LocalCategory>> _categoriesFuture;
+
+  static const _imageExtensions = {'jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp', 'heic'};
 
   @override
   void initState() {
@@ -48,6 +51,13 @@ class _AssetDetailsScreenState extends State<AssetDetailsScreen> {
       if (category.id == _asset.categoryId) return category.name;
     }
     return 'Uncategorized';
+  }
+
+  bool _isImage(LocalAssetDocument doc) {
+    final type = doc.fileType?.toLowerCase() ?? '';
+    if (_imageExtensions.contains(type)) return true;
+    final name = doc.name.toLowerCase();
+    return _imageExtensions.any((extension) => name.endsWith('.$extension'));
   }
 
   Future<void> _edit() async {
@@ -145,7 +155,11 @@ class _AssetDetailsScreenState extends State<AssetDetailsScreen> {
     final path = _asset.imagePath;
     return GestureDetector(
       onTap: path != null && path.isNotEmpty
-          ? () => FullScreenImageViewer.show(context, imagePath: path, title: _asset.name)
+          ? () => FullScreenImageViewer.show(
+                context,
+                imagePath: path,
+                title: _asset.name,
+              )
           : null,
       child: ClipRRect(
         borderRadius: BorderRadius.circular(22),
@@ -171,7 +185,11 @@ class _AssetDetailsScreenState extends State<AssetDetailsScreen> {
                           color: Colors.black45,
                           borderRadius: BorderRadius.circular(8),
                         ),
-                        child: const Icon(Icons.zoom_in_rounded, color: Colors.white, size: 20),
+                        child: const Icon(
+                          Icons.zoom_in_rounded,
+                          color: Colors.white,
+                          size: 20,
+                        ),
                       ),
                     ),
                   ],
@@ -185,10 +203,7 @@ class _AssetDetailsScreenState extends State<AssetDetailsScreen> {
   Widget _emojiPlaceholder() => Container(
         color: AppColors.primaryPurple.withValues(alpha: 0.08),
         alignment: Alignment.center,
-        child: Text(
-          _asset.emoji ?? '📦',
-          style: const TextStyle(fontSize: 64),
-        ),
+        child: Text(_asset.emoji ?? '📦', style: const TextStyle(fontSize: 64)),
       );
 
   Widget _buildInfoCard(List<LocalCategory> categories) {
@@ -205,16 +220,12 @@ class _AssetDetailsScreenState extends State<AssetDetailsScreen> {
           _divider(),
           _infoRow(
             'Location',
-            _asset.location?.isNotEmpty == true
-                ? _asset.location!
-                : 'Not specified',
+            _asset.location?.isNotEmpty == true ? _asset.location! : 'Not specified',
           ),
           _divider(),
           _infoRow(
             'Description',
-            _asset.description?.isNotEmpty == true
-                ? _asset.description!
-                : 'No description',
+            _asset.description?.isNotEmpty == true ? _asset.description! : 'No description',
           ),
           _divider(),
           _infoRow('QR Code', _asset.qrEnabled ? 'Enabled' : 'Disabled'),
@@ -290,38 +301,34 @@ class _AssetDetailsScreenState extends State<AssetDetailsScreen> {
       future: _documentsFuture,
       builder: (context, snapshot) {
         final documents = snapshot.data ?? const <LocalAssetDocument>[];
-        return Container(
-          padding: const EdgeInsets.all(18),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(20),
-            border: Border.all(color: const Color(0xFFEFEBF6)),
-          ),
-          child: Column(
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return _documentsCardShell(
+            const Center(
+              child: Padding(
+                padding: EdgeInsets.all(18),
+                child: CircularProgressIndicator(),
+              ),
+            ),
+          );
+        }
+        if (documents.isEmpty) {
+          return _documentsCardShell(
+            Text('No documents attached.',
+                style: GoogleFonts.outfit(color: AppColors.textSecondary)),
+          );
+        }
+
+        final images = documents.where(_isImage).toList(growable: false);
+        final otherDocuments = documents.where((doc) => !_isImage(doc)).toList(growable: false);
+
+        return _documentsCardShell(
+          Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(
-                'Documents',
-                style: GoogleFonts.outfit(
-                  fontSize: 18,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-              const SizedBox(height: 12),
-              if (snapshot.connectionState == ConnectionState.waiting)
-                const Center(
-                  child: Padding(
-                    padding: EdgeInsets.all(12),
-                    child: CircularProgressIndicator(),
-                  ),
-                )
-              else if (documents.isEmpty)
-                Text(
-                  'No documents attached.',
-                  style: GoogleFonts.outfit(color: AppColors.textSecondary),
-                )
-              else
-                ...documents.map(_documentTile),
+              if (images.isNotEmpty) _buildPhotoGallery(images),
+              if (images.isNotEmpty && otherDocuments.isNotEmpty)
+                const SizedBox(height: 18),
+              if (otherDocuments.isNotEmpty) _buildOtherDocuments(otherDocuments),
             ],
           ),
         );
@@ -329,11 +336,102 @@ class _AssetDetailsScreenState extends State<AssetDetailsScreen> {
     );
   }
 
-  static const _imageExtensions = {'jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp'};
+  Widget _documentsCardShell(Widget child) => Container(
+        padding: const EdgeInsets.all(18),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: const Color(0xFFEFEBF6)),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Icon(Icons.folder_open_rounded,
+                    color: AppColors.primaryPurple, size: 20),
+                const SizedBox(width: 9),
+                Text(
+                  'Documents',
+                  style: GoogleFonts.outfit(fontSize: 18, fontWeight: FontWeight.w700),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            child,
+          ],
+        ),
+      );
 
-  bool _isImage(LocalAssetDocument doc) {
-    final ext = doc.fileType?.toLowerCase() ?? '';
-    return _imageExtensions.contains(ext);
+  Widget _buildPhotoGallery(List<LocalAssetDocument> images) {
+    final validImages = images
+        .where((doc) => doc.filePath.isNotEmpty && File(doc.filePath).existsSync())
+        .toList(growable: false);
+
+    if (validImages.isEmpty) {
+      return Text(
+        'Photos could not be loaded right now.',
+        style: GoogleFonts.outfit(color: AppColors.textSecondary),
+      );
+    }
+
+    final paths = validImages.map((doc) => doc.filePath).toList(growable: false);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Text('Photos',
+                style: GoogleFonts.outfit(fontSize: 15, fontWeight: FontWeight.w700)),
+            const SizedBox(width: 7),
+            Text('${validImages.length}',
+                style: GoogleFonts.outfit(fontSize: 13, color: AppColors.textSecondary)),
+            const Spacer(),
+            if (validImages.length > 1)
+              Text('Tap to swipe',
+                  style: GoogleFonts.outfit(fontSize: 11, color: AppColors.textSecondary)),
+          ],
+        ),
+        const SizedBox(height: 10),
+        GridView.builder(
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          itemCount: validImages.length,
+          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: 2,
+            crossAxisSpacing: 10,
+            mainAxisSpacing: 10,
+            childAspectRatio: 1.08,
+          ),
+          itemBuilder: (context, index) {
+            final doc = validImages[index];
+            return _LocalImageTile(
+              document: doc,
+              onTap: () => FullScreenImageViewer.showGallery(
+                context,
+                imagePaths: paths,
+                title: _asset.name,
+                initialIndex: index,
+              ),
+            );
+          },
+        ),
+      ],
+    );
+  }
+
+  Widget _buildOtherDocuments(List<LocalAssetDocument> documents) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        if (documents.isNotEmpty)
+          Text('Other files',
+              style: GoogleFonts.outfit(fontSize: 15, fontWeight: FontWeight.w700)),
+        const SizedBox(height: 8),
+        ...documents.map(_documentTile),
+      ],
+    );
   }
 
   IconData _iconForFileType(String? fileType) {
@@ -356,28 +454,13 @@ class _AssetDetailsScreenState extends State<AssetDetailsScreen> {
       case 'rar':
       case '7z':
         return Icons.folder_zip_outlined;
-      case 'jpg':
-      case 'jpeg':
-      case 'png':
-      case 'gif':
-      case 'webp':
-      case 'bmp':
-        return Icons.image_outlined;
       default:
         return Icons.description_outlined;
     }
   }
 
-  void _openDocument(LocalAssetDocument document) async {
+  Future<void> _openDocument(LocalAssetDocument document) async {
     if (document.filePath.isEmpty) return;
-
-    // If it's an image, open full-screen viewer
-    if (_isImage(document) && File(document.filePath).existsSync()) {
-      FullScreenImageViewer.show(context, imagePath: document.filePath, title: document.name);
-      return;
-    }
-
-    // Otherwise open with system handler
     final result = await OpenFilex.open(document.filePath);
     if (result.type != ResultType.done && mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -387,7 +470,6 @@ class _AssetDetailsScreenState extends State<AssetDetailsScreen> {
   }
 
   Widget _documentTile(LocalAssetDocument document) {
-    final isImg = _isImage(document);
     return Padding(
       padding: const EdgeInsets.only(bottom: 8),
       child: InkWell(
@@ -401,23 +483,7 @@ class _AssetDetailsScreenState extends State<AssetDetailsScreen> {
           ),
           child: Row(
             children: [
-              // Thumbnail for images, icon for documents
-              if (isImg && File(document.filePath).existsSync())
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(8),
-                  child: Image.file(
-                    File(document.filePath),
-                    width: 42,
-                    height: 42,
-                    fit: BoxFit.cover,
-                    errorBuilder: (_, _, _) => Icon(
-                      _iconForFileType(document.fileType),
-                      color: AppColors.primaryPurple,
-                    ),
-                  ),
-                )
-              else
-                Icon(_iconForFileType(document.fileType), color: AppColors.primaryPurple),
+              Icon(_iconForFileType(document.fileType), color: AppColors.primaryPurple),
               const SizedBox(width: 10),
               Expanded(
                 child: Text(
@@ -448,6 +514,78 @@ class _AssetDetailsScreenState extends State<AssetDetailsScreen> {
                 ),
             ],
           ),
+        ),
+      ),
+    );
+  }
+}
+
+class _LocalImageTile extends StatelessWidget {
+  final LocalAssetDocument document;
+  final VoidCallback onTap;
+
+  const _LocalImageTile({required this.document, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.white,
+      borderRadius: BorderRadius.circular(18),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: onTap,
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            Image.file(
+              File(document.filePath),
+              fit: BoxFit.cover,
+              errorBuilder: (_, _, _) => Container(
+                color: AppColors.lightLavender,
+                alignment: Alignment.center,
+                child: const Icon(Icons.broken_image_outlined,
+                    color: AppColors.textSecondary, size: 32),
+              ),
+            ),
+            Positioned(
+              left: 0,
+              right: 0,
+              bottom: 0,
+              child: Container(
+                padding: const EdgeInsets.fromLTRB(10, 18, 10, 9),
+                decoration: const BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: [Colors.transparent, Colors.black54],
+                  ),
+                ),
+                child: Text(
+                  document.name,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: GoogleFonts.outfit(
+                    color: Colors.white,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+            ),
+            Positioned(
+              top: 8,
+              right: 8,
+              child: Container(
+                padding: const EdgeInsets.all(6),
+                decoration: BoxDecoration(
+                  color: Colors.black.withAlpha(130),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(Icons.collections_rounded,
+                    color: Colors.white, size: 15),
+              ),
+            ),
+          ],
         ),
       ),
     );
