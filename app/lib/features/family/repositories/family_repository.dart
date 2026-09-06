@@ -7,11 +7,13 @@ import '../models/family_model.dart';
 import '../models/family_member_model.dart';
 import '../models/family_invitation_model.dart';
 import '../models/shared_asset_model.dart';
+import '../models/shared_document_model.dart';
 import '../models/sharing_permissions_model.dart';
 import '../../auth/models/user_model.dart';
 import '../../assets/models/local_asset.dart';
 import '../services/family_file_service.dart';
 import 'interfaces/i_family_repository.dart';
+import '../../../core/di/service_locator.dart';
 
 class FamilyRepository implements IFamilyRepository {
   final FirebaseFirestore _firestore;
@@ -395,8 +397,37 @@ class FamilyRepository implements IFamilyRepository {
     final storagePath = await _uploadSharedImage(
       familyId: familyId,
       assetId: asset.id,
-      localPath: asset.imagePath,
+      localPath: permissions.viewDetails ? asset.imagePath : null,
     );
+
+    List<SharedDocumentModel> sharedDocs = [];
+    if (permissions.viewDocuments) {
+      try {
+        final localDocs = await serviceLocator.assetDocumentRepository
+            .getDocuments(asset.id);
+        for (final doc in localDocs) {
+          String? docStoragePath;
+          if (File(doc.filePath).existsSync()) {
+            try {
+              docStoragePath = await _uploadSharedImage(
+                familyId: familyId,
+                assetId: asset.id,
+                localPath: doc.filePath,
+              );
+            } catch (_) {}
+          }
+          sharedDocs.add(SharedDocumentModel(
+            id: doc.id,
+            name: doc.name,
+            filePath: doc.filePath,
+            fileType: doc.fileType,
+            fileSize: doc.fileSize,
+            storagePath: docStoragePath,
+            downloadUrl: docStoragePath,
+          ));
+        }
+      } catch (_) {}
+    }
 
     final shared = SharedAssetModel(
       id: docId,
@@ -409,11 +440,12 @@ class FamilyRepository implements IFamilyRepository {
       name: asset.name,
       categoryName: categoryName,
       emoji: asset.emoji,
-      imagePath: null,
-      imageUrl: null,
-      imageStoragePath: storagePath,
-      location: asset.location,
-      description: asset.description,
+      imagePath: permissions.viewDetails ? asset.imagePath : null,
+      imageUrl: permissions.viewDetails ? storagePath : null,
+      imageStoragePath: permissions.viewDetails ? storagePath : null,
+      location: permissions.viewLocation ? asset.location : null,
+      description: permissions.viewDetails ? asset.description : null,
+      documents: permissions.viewDocuments ? sharedDocs : const [],
       permissions: permissions,
       sharedAt: now,
       updatedAt: now,
@@ -442,6 +474,7 @@ class FamilyRepository implements IFamilyRepository {
           'permissions': permissions.toMap(),
           if (!permissions.viewLocation) 'location': FieldValue.delete(),
           if (!permissions.viewDetails) 'description': FieldValue.delete(),
+          if (!permissions.viewDocuments) 'documents': FieldValue.delete(),
           'updatedAt': Timestamp.fromDate(DateTime.now()),
         })
         .timeout(const Duration(seconds: 8));

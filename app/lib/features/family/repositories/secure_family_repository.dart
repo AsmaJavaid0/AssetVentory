@@ -1,8 +1,11 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 
+import '../../../core/di/service_locator.dart';
 import '../models/shared_asset_model.dart';
+import '../models/shared_document_model.dart';
 import '../models/sharing_permissions_model.dart';
 import '../../auth/models/user_model.dart';
 import '../../assets/models/local_asset.dart';
@@ -54,14 +57,67 @@ class SecureFamilyRepository extends FamilyRepository {
     final docId = '${familyId}_${asset.id}';
 
     String? storagePath;
-    if (asset.imagePath != null && asset.imagePath!.isNotEmpty) {
-      storagePath = await _files.uploadFile(
-        familyId: familyId,
-        assetId: asset.id,
-        filePath: asset.imagePath!,
-        fileName: asset.imagePath!.split(RegExp(r'[\\/]')).last,
-        contentType: _contentType(asset.imagePath!),
-      );
+    String? downloadUrl;
+    if (permissions.viewDetails && asset.imagePath != null && asset.imagePath!.isNotEmpty) {
+      try {
+        storagePath = await _files.uploadFile(
+          familyId: familyId,
+          assetId: asset.id,
+          filePath: asset.imagePath!,
+          fileName: asset.imagePath!.split(RegExp(r'[\\/]')).last,
+          contentType: _contentType(asset.imagePath!),
+        );
+        try {
+          downloadUrl = await _files.getDownloadUrl(
+            familyId: familyId,
+            path: storagePath,
+          );
+        } catch (_) {}
+      } catch (e) {
+        // Fallback: media upload might fail on network, but keep asset share working
+      }
+    }
+
+    List<SharedDocumentModel> sharedDocs = [];
+    if (permissions.viewDocuments) {
+      try {
+        final localDocs = await serviceLocator.assetDocumentRepository
+            .getDocuments(asset.id);
+        for (final doc in localDocs) {
+          String? docStoragePath;
+          String? docDownloadUrl;
+          if (File(doc.filePath).existsSync()) {
+            try {
+              docStoragePath = await _files.uploadFile(
+                familyId: familyId,
+                assetId: asset.id,
+                filePath: doc.filePath,
+                fileName: doc.filePath.split(RegExp(r'[\\/]')).last,
+                contentType: _contentType(doc.filePath),
+              );
+              try {
+                docDownloadUrl = await _files.getDownloadUrl(
+                  familyId: familyId,
+                  path: docStoragePath,
+                );
+              } catch (_) {}
+            } catch (e) {
+              // File upload fallback
+            }
+          }
+          sharedDocs.add(SharedDocumentModel(
+            id: doc.id,
+            name: doc.name,
+            filePath: doc.filePath,
+            fileType: doc.fileType,
+            fileSize: doc.fileSize,
+            storagePath: docStoragePath,
+            downloadUrl: docDownloadUrl,
+          ));
+        }
+      } catch (e) {
+        // Continue if document fetch fails
+      }
     }
 
     final shared = SharedAssetModel(
@@ -73,11 +129,12 @@ class SecureFamilyRepository extends FamilyRepository {
       name: asset.name,
       categoryName: categoryName,
       emoji: asset.emoji,
-      imagePath: null,
-      imageUrl: null,
-      imageStoragePath: storagePath,
-      location: asset.location,
-      description: asset.description,
+      imagePath: permissions.viewDetails ? asset.imagePath : null,
+      imageUrl: permissions.viewDetails ? downloadUrl : null,
+      imageStoragePath: permissions.viewDetails ? storagePath : null,
+      location: permissions.viewLocation ? asset.location : null,
+      description: permissions.viewDetails ? asset.description : null,
+      documents: permissions.viewDocuments ? sharedDocs : const [],
       permissions: permissions,
       sharedAt: now,
       updatedAt: now,

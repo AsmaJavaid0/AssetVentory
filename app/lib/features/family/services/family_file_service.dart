@@ -5,19 +5,20 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 class FamilyFileService {
   static const bucket = 'family-files';
+  static final Map<String, ({String url, DateTime expiresAt})> _urlCache = {};
 
   SupabaseClient get _supabase => Supabase.instance.client;
 
-  Future<Map<String, dynamic>> _invoke(Map<String, dynamic> body) async {
+  Future<Map<String, dynamic>> _invoke(
+    Map<String, dynamic> body, {
+    bool forceRefresh = false,
+  }) async {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) {
       throw StateError('You must be signed in to access family files.');
     }
 
-    // The edge function verifies this token against Firestore. Refresh it at
-    // the point of use so a recently signed-in or newly joined member is not
-    // rejected because the client supplied a cached credential.
-    final token = await user.getIdToken(true);
+    final token = await user.getIdToken(forceRefresh);
     if (token == null || token.isEmpty) {
       throw StateError(
         'Your Firebase session has expired. Please sign in again.',
@@ -85,16 +86,41 @@ class FamilyFileService {
     required String familyId,
     required String path,
   }) async {
-    final result = await _invoke({
-      'action': 'create-download-url',
-      'familyId': familyId,
-      'path': path,
-    });
+    if (path.startsWith('http://') || path.startsWith('https://')) {
+      return path;
+    }
+
+    final cached = _urlCache[path];
+    if (cached != null && DateTime.now().isBefore(cached.expiresAt)) {
+      return cached.url;
+    }
+
+    Map<String, dynamic> result;
+    try {
+      result = await _invoke({
+        'action': 'create-download-url',
+        'familyId': familyId,
+        'path': path,
+      });
+    } catch (_) {
+      // Retry once with a forced fresh token if the cached one was rejected
+      result = await _invoke({
+        'action': 'create-download-url',
+        'familyId': familyId,
+        'path': path,
+      }, forceRefresh: true);
+    }
 
     final url = result['url'] as String?;
     if (url == null || url.isEmpty) {
       throw Exception('Could not create a secure download URL.');
     }
+
+    _urlCache[path] = (
+      url: url,
+      expiresAt: DateTime.now().add(const Duration(minutes: 4)),
+    );
+
     return url;
   }
 

@@ -316,7 +316,7 @@ class _ShareAssetPermissionsScreenState
             _PermissionSwitchTile(
               title: 'View Details',
               subtitle:
-                  'Basic asset information, title, category, and description',
+                  'Basic asset information, photo, category, and description',
               icon: Icons.info_outline_rounded,
               value: _viewDetails,
               onChanged: (val) => setState(() => _viewDetails = val),

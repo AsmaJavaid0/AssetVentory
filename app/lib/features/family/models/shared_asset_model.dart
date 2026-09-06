@@ -1,4 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'shared_document_model.dart';
 import 'sharing_permissions_model.dart';
 
 class SharedAssetModel {
@@ -19,6 +20,7 @@ class SharedAssetModel {
   final String? imageStoragePath;
   final String? location;
   final String? description;
+  final List<SharedDocumentModel> documents;
   final SharingPermissionsModel permissions;
   final DateTime sharedAt;
   final DateTime updatedAt;
@@ -37,6 +39,7 @@ class SharedAssetModel {
     this.imageStoragePath,
     this.location,
     this.description,
+    this.documents = const [],
     this.permissions = const SharingPermissionsModel(),
     required this.sharedAt,
     required this.updatedAt,
@@ -60,6 +63,11 @@ class SharedAssetModel {
       imageStoragePath: data['imageStoragePath'] as String?,
       location: data['location'] as String?,
       description: data['description'] as String?,
+      documents: (data['documents'] as List<dynamic>?)
+              ?.map((item) => SharedDocumentModel.fromMap(
+                  Map<String, dynamic>.from(item as Map)))
+              .toList() ??
+          const [],
       permissions: SharingPermissionsModel.fromMap(
         data['permissions'] as Map<String, dynamic>?,
       ),
@@ -82,6 +90,8 @@ class SharedAssetModel {
       'imageStoragePath': imageStoragePath,
       'location': permissions.viewLocation ? location : null,
       'description': permissions.viewDetails ? description : null,
+      if (permissions.viewDocuments && documents.isNotEmpty)
+        'documents': documents.map((d) => d.toMap()).toList(),
       'permissions': permissions.toMap(),
       'sharedAt': Timestamp.fromDate(sharedAt),
       'updatedAt': Timestamp.fromDate(updatedAt),
@@ -102,6 +112,7 @@ class SharedAssetModel {
     String? imageStoragePath,
     String? location,
     String? description,
+    List<SharedDocumentModel>? documents,
     SharingPermissionsModel? permissions,
     DateTime? sharedAt,
     DateTime? updatedAt,
@@ -120,12 +131,17 @@ class SharedAssetModel {
       imageStoragePath: imageStoragePath ?? this.imageStoragePath,
       location: location ?? this.location,
       description: description ?? this.description,
+      documents: documents ?? this.documents,
       permissions: permissions ?? this.permissions,
       sharedAt: sharedAt ?? this.sharedAt,
       updatedAt: updatedAt ?? this.updatedAt,
     );
   }
 
-  String? get displayImageUrl =>
-      imageUrl ?? ((imagePath?.startsWith('http') ?? false) ? imagePath : null);
+  String? get displayImageUrl {
+    if (imageUrl != null && imageUrl!.isNotEmpty) return imageUrl;
+    if (imageStoragePath != null && imageStoragePath!.startsWith('http')) return imageStoragePath;
+    if (imagePath != null && imagePath!.isNotEmpty) return imagePath;
+    return null;
+  }
 }

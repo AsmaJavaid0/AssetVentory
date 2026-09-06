@@ -36,10 +36,22 @@ class SharedAssetCard extends StatelessWidget {
                 Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                   Row(children: [
                     Expanded(child: Text(asset.name, style: GoogleFonts.outfit(fontSize: 16, fontWeight: FontWeight.w700, color: AppColors.textPrimary), maxLines: 1, overflow: TextOverflow.ellipsis)),
-                    if (isOwner) PopupMenuButton<String>(icon: const Icon(Icons.more_vert_rounded, color: AppColors.textSecondary, size: 20), padding: EdgeInsets.zero, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)), onSelected: (value) { if (value == 'permissions') onManagePermissions?.call(); else if (value == 'unshare') onUnshare?.call(); }, itemBuilder: (context) => [
-                      PopupMenuItem(value: 'permissions', child: Row(children: [const Icon(Icons.security_rounded, size: 18, color: AppColors.primaryPurple), const SizedBox(width: 10), Text('Edit Permissions', style: GoogleFonts.outfit(fontSize: 14))])),
-                      PopupMenuItem(value: 'unshare', child: Row(children: [const Icon(Icons.link_off_rounded, size: 18, color: AppColors.error), const SizedBox(width: 10), Text('Stop Sharing', style: GoogleFonts.outfit(fontSize: 14, color: AppColors.error))])),
-                    ]),
+                    if (isOwner) PopupMenuButton<String>(
+                      icon: const Icon(Icons.more_vert_rounded, color: AppColors.textSecondary, size: 20),
+                      padding: EdgeInsets.zero,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                      onSelected: (value) {
+                        if (value == 'permissions') {
+                          onManagePermissions?.call();
+                        } else if (value == 'unshare') {
+                          onUnshare?.call();
+                        }
+                      },
+                      itemBuilder: (context) => [
+                        PopupMenuItem(value: 'permissions', child: Row(children: [const Icon(Icons.security_rounded, size: 18, color: AppColors.primaryPurple), const SizedBox(width: 10), Text('Edit Permissions', style: GoogleFonts.outfit(fontSize: 14))])),
+                        PopupMenuItem(value: 'unshare', child: Row(children: [const Icon(Icons.link_off_rounded, size: 18, color: AppColors.error), const SizedBox(width: 10), Text('Stop Sharing', style: GoogleFonts.outfit(fontSize: 14, color: AppColors.error))])),
+                      ],
+                    ),
                   ]),
                   const SizedBox(height: 4),
                   Wrap(spacing: 6, runSpacing: 4, children: [
@@ -73,28 +85,96 @@ class SharedAssetCard extends StatelessWidget {
   }
 
   Widget _buildThumbnail(String? legacyImageUrl) {
+    // 1. Instant local file check (0ms for owner device)
+    if (asset.imagePath != null && asset.imagePath!.isNotEmpty) {
+      final file = File(asset.imagePath!);
+      if (file.existsSync()) {
+        return ClipRRect(
+          borderRadius: BorderRadius.circular(15),
+          child: Image.file(
+            file,
+            fit: BoxFit.cover,
+            errorBuilder: (context, error, stackTrace) => _fallbackIcon(),
+          ),
+        );
+      }
+    }
+
+    // 2. Direct HTTP URL check (0ms for pre-resolved or Firebase URLs)
+    final directUrl = asset.imageUrl ??
+        (asset.imageStoragePath?.startsWith('http') == true ? asset.imageStoragePath : null) ??
+        (legacyImageUrl?.startsWith('http') == true ? legacyImageUrl : null);
+
+    if (directUrl != null && directUrl.isNotEmpty) {
+      return ClipRRect(
+        borderRadius: BorderRadius.circular(15),
+        child: Image.network(
+          directUrl,
+          fit: BoxFit.cover,
+          errorBuilder: (context, error, stackTrace) => _fallbackIcon(),
+        ),
+      );
+    }
+
+    // 3. Storage path with cache
     final storagePath = asset.imageStoragePath;
     if (storagePath != null && storagePath.isNotEmpty) {
       return FutureBuilder<String>(
-        future: FamilyFileService().getDownloadUrl(familyId: asset.familyId, path: storagePath),
+        future: FamilyFileService().getDownloadUrl(
+          familyId: asset.familyId,
+          path: storagePath,
+        ),
         builder: (context, snapshot) {
           if (snapshot.hasData && snapshot.data!.isNotEmpty) {
-            return ClipRRect(borderRadius: BorderRadius.circular(15), child: Image.network(snapshot.data!, fit: BoxFit.cover, errorBuilder: (context, error, stackTrace) => _fallbackIcon()));
+            return ClipRRect(
+              borderRadius: BorderRadius.circular(15),
+              child: Image.network(
+                snapshot.data!,
+                fit: BoxFit.cover,
+                errorBuilder: (context, error, stackTrace) => _fallbackIcon(),
+              ),
+            );
           }
           if (snapshot.hasError) return _fallbackIcon();
-          return const Center(child: SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2)));
+          return const Center(
+            child: SizedBox(
+              width: 18,
+              height: 18,
+              child: CircularProgressIndicator(
+                strokeWidth: 2,
+                color: AppColors.primaryPurple,
+              ),
+            ),
+          );
         },
       );
     }
-    if (legacyImageUrl != null && legacyImageUrl.isNotEmpty) return _buildLegacyImage(legacyImageUrl);
+
+    if (legacyImageUrl != null && legacyImageUrl.isNotEmpty) {
+      return _buildLegacyImage(legacyImageUrl);
+    }
     return _fallbackIcon();
   }
 
   Widget _buildLegacyImage(String path) {
     if (path.startsWith('http')) {
-      return ClipRRect(borderRadius: BorderRadius.circular(15), child: Image.network(path, fit: BoxFit.cover, errorBuilder: (context, error, stackTrace) => _fallbackIcon()));
+      return ClipRRect(
+        borderRadius: BorderRadius.circular(15),
+        child: Image.network(
+          path,
+          fit: BoxFit.cover,
+          errorBuilder: (context, error, stackTrace) => _fallbackIcon(),
+        ),
+      );
     }
-    return ClipRRect(borderRadius: BorderRadius.circular(15), child: Image.file(File(path), fit: BoxFit.cover, errorBuilder: (context, error, stackTrace) => _fallbackIcon()));
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(15),
+      child: Image.file(
+        File(path),
+        fit: BoxFit.cover,
+        errorBuilder: (context, error, stackTrace) => _fallbackIcon(),
+      ),
+    );
   }
 
   Widget _fallbackIcon() => Center(child: Text(asset.emoji ?? '📦', style: const TextStyle(fontSize: 28)));

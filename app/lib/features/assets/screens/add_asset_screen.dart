@@ -235,7 +235,6 @@ class _AddAssetScreenState extends State<AddAssetScreen> {
   Future<void> _pickDocuments() async {
     try {
       final picked = await FilePicker.pickFiles(
-        allowMultiple: true,
         type: FileType.custom,
         allowedExtensions: [
           'pdf', 'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx',

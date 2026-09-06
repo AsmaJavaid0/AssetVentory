@@ -146,94 +146,101 @@ class _FamilyDashboardScreenState extends State<FamilyDashboardScreen> {
     }
   }
 
+  Widget _buildHeader(BuildContext context) {
+    final top = MediaQuery.of(context).padding.top;
+    return Container(
+      padding: EdgeInsets.fromLTRB(20, top + 14, 16, 20),
+      decoration: const BoxDecoration(
+        gradient: AppColors.heroGradient,
+        borderRadius: BorderRadius.vertical(bottom: Radius.circular(24)),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 48,
+            height: 48,
+            decoration: const BoxDecoration(
+              gradient: AppColors.logoGradient,
+              shape: BoxShape.circle,
+            ),
+            child: const Center(
+              child: Icon(
+                Icons.diversity_3_rounded,
+                color: Colors.white,
+                size: 26,
+              ),
+            ),
+          ),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  widget.family.name,
+                  style: GoogleFonts.outfit(
+                    fontSize: 20,
+                    fontWeight: FontWeight.w700,
+                    color: Colors.white,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                const SizedBox(height: 2),
+                StreamBuilder<List<FamilyMemberModel>>(
+                  stream: _familyRepository.streamFamilyMembers(
+                    widget.family.id,
+                  ),
+                  builder: (context, snapshot) {
+                    final count =
+                        snapshot.data?.length ?? widget.family.memberCount;
+                    return Text(
+                      '$count ${count == 1 ? 'member' : 'members'} • Code: ${widget.family.inviteCode}',
+                      style: GoogleFonts.outfit(
+                        fontSize: 12,
+                        color: AppColors.textWhite70,
+                      ),
+                    );
+                  },
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 8),
+          Material(
+            color: Colors.white.withAlpha(24),
+            shape: const CircleBorder(),
+            child: InkWell(
+              customBorder: const CircleBorder(),
+              onTap: _openSettings,
+              child: const Tooltip(
+                message: 'Family Settings',
+                child: SizedBox(
+                  width: 42,
+                  height: 42,
+                  child: Icon(
+                    Icons.settings_outlined,
+                    color: Colors.white,
+                    size: 22,
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.scaffoldBg,
       body: CustomScrollView(
         slivers: [
-          SliverAppBar(
-            expandedHeight: 180,
-            pinned: true,
-            backgroundColor: AppColors.heroDarkBg,
-            elevation: 0,
-            leading: const SizedBox.shrink(),
-            leadingWidth: 0,
-            actions: [
-              IconButton(
-                icon: const Icon(Icons.settings_outlined, color: Colors.white),
-                tooltip: 'Family Settings',
-                onPressed: _openSettings,
-              ),
-            ],
-            flexibleSpace: FlexibleSpaceBar(
-              background: Container(
-                decoration: const BoxDecoration(
-                  gradient: AppColors.heroGradient,
-                ),
-                padding: const EdgeInsets.fromLTRB(20, 50, 20, 20),
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.end,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        Container(
-                          width: 52,
-                          height: 52,
-                          decoration: const BoxDecoration(
-                            gradient: AppColors.logoGradient,
-                            shape: BoxShape.circle,
-                          ),
-                          child: const Center(
-                            child: Icon(
-                              Icons.diversity_3_rounded,
-                              color: Colors.white,
-                              size: 28,
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 14),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                widget.family.name,
-                                style: GoogleFonts.outfit(
-                                  fontSize: 22,
-                                  fontWeight: FontWeight.w700,
-                                  color: Colors.white,
-                                ),
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                              StreamBuilder<List<FamilyMemberModel>>(
-                                stream: _familyRepository.streamFamilyMembers(
-                                  widget.family.id,
-                                ),
-                                builder: (context, snapshot) {
-                                  final count =
-                                      snapshot.data?.length ??
-                                      widget.family.memberCount;
-                                  return Text(
-                                    '$count ${count == 1 ? 'member' : 'members'} • Code: ${widget.family.inviteCode}',
-                                    style: GoogleFonts.outfit(
-                                      fontSize: 13,
-                                      color: AppColors.textWhite70,
-                                    ),
-                                  );
-                                },
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-            ),
+          SliverToBoxAdapter(
+            child: _buildHeader(context),
           ),
           SliverToBoxAdapter(
             child: Padding(
@@ -307,19 +314,29 @@ class _FamilyDashboardScreenState extends State<FamilyDashboardScreen> {
                           style: GoogleFonts.outfit(
                             fontSize: 18,
                             fontWeight: FontWeight.w700,
+                            color: AppColors.textPrimary,
                           ),
                         ),
                       ),
+                      const SizedBox(width: 12),
                       ElevatedButton.icon(
                         onPressed: _openShareAsset,
-                        icon: const Icon(Icons.share_rounded, size: 18),
+                        icon: const Icon(Icons.share_rounded, size: 16),
                         label: const Text('Share Asset'),
                         style: ElevatedButton.styleFrom(
                           backgroundColor: AppColors.primaryPurple,
                           foregroundColor: Colors.white,
                           elevation: 0,
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 16,
+                            vertical: 10,
+                          ),
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(12),
+                          ),
+                          textStyle: GoogleFonts.outfit(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
                           ),
                         ),
                       ),

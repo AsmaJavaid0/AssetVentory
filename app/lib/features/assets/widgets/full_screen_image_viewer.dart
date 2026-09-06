@@ -41,7 +41,9 @@ class FullScreenImageViewer extends StatelessWidget {
             : null,
       ),
       body: PhotoView(
-        imageProvider: FileImage(File(imagePath)),
+        imageProvider: (imagePath.startsWith('http://') || imagePath.startsWith('https://'))
+            ? NetworkImage(imagePath)
+            : FileImage(File(imagePath)) as ImageProvider,
         backgroundDecoration: const BoxDecoration(color: Colors.black),
         minScale: PhotoViewComputedScale.contained,
         maxScale: PhotoViewComputedScale.covered * 3.0,
