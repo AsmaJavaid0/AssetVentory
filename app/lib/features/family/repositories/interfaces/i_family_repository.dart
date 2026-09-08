@@ -32,6 +32,13 @@ abstract class IFamilyRepository {
   /// Stream members of a family
   Stream<List<FamilyMemberModel>> streamFamilyMembers(String familyId);
 
+  /// Update the family display name shown to other family members.
+  Future<void> updateFamilyMemberDisplayName({
+    required String familyId,
+    required String userId,
+    required String displayName,
+  });
+
   /// Send an invitation to join a family by email
   Future<FamilyInvitationModel> sendInvitation({
     required String familyId,
