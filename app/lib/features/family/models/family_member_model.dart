@@ -5,6 +5,7 @@ class FamilyMemberModel {
   final String familyId;
   final String userId;
   final String name;
+  final String displayName;
   final String email;
   final String photoUrl;
   final String role; // 'owner' | 'admin' | 'member'
@@ -15,22 +16,33 @@ class FamilyMemberModel {
     required this.familyId,
     required this.userId,
     required this.name,
+    String? displayName,
     required this.email,
     this.photoUrl = '',
     this.role = 'member',
     required this.joinedAt,
-  });
+  }) : displayName = displayName ?? name;
 
   bool get isOwner => role == 'owner';
   bool get isAdmin => role == 'admin' || role == 'owner';
 
-  factory FamilyMemberModel.fromFirestore(DocumentSnapshot<Map<String, dynamic>> doc) {
+  String get familyDisplayName =>
+      displayName.trim().isNotEmpty ? displayName.trim() : name;
+
+  factory FamilyMemberModel.fromFirestore(
+    DocumentSnapshot<Map<String, dynamic>> doc,
+  ) {
     final data = doc.data() ?? {};
+    final name = data['name'] as String? ?? '';
+    final storedDisplayName = data['displayName'] as String?;
     return FamilyMemberModel(
       id: doc.id,
       familyId: data['familyId'] as String? ?? '',
       userId: data['userId'] as String? ?? '',
-      name: data['name'] as String? ?? '',
+      name: name,
+      displayName: storedDisplayName?.trim().isNotEmpty == true
+          ? storedDisplayName
+          : name,
       email: data['email'] as String? ?? '',
       photoUrl: data['photoUrl'] as String? ?? '',
       role: data['role'] as String? ?? 'member',
@@ -43,6 +55,7 @@ class FamilyMemberModel {
       'familyId': familyId,
       'userId': userId,
       'name': name,
+      'displayName': familyDisplayName,
       'email': email,
       'photoUrl': photoUrl,
       'role': role,
@@ -55,6 +68,7 @@ class FamilyMemberModel {
     String? familyId,
     String? userId,
     String? name,
+    String? displayName,
     String? email,
     String? photoUrl,
     String? role,
@@ -65,6 +79,7 @@ class FamilyMemberModel {
       familyId: familyId ?? this.familyId,
       userId: userId ?? this.userId,
       name: name ?? this.name,
+      displayName: displayName ?? this.displayName,
       email: email ?? this.email,
       photoUrl: photoUrl ?? this.photoUrl,
       role: role ?? this.role,
