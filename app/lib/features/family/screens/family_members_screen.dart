@@ -198,9 +198,13 @@ class FamilyMembersScreen extends StatelessWidget {
     FamilyMemberModel member,
   ) async {
     final controller = TextEditingController(text: member.familyDisplayName);
-    final repository = serviceLocator.familyRepository;
 
-    await showDialog<void>(
+    // Keep the dialog responsible only for collecting the new name.
+    // The Firestore update happens after the dialog is completely dismissed.
+    // This avoids rebuilding/disposal of inherited Flutter widgets while the
+    // dialog is still performing async work, which can trigger framework
+    // assertions such as "_dependents.isEmpty".
+    final displayName = await showDialog<String>(
       context: context,
       builder: (dialogContext) => AlertDialog(
         title: Text(
@@ -234,43 +238,48 @@ class FamilyMembersScreen extends StatelessWidget {
         ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(dialogContext),
+            onPressed: () => Navigator.of(dialogContext).pop(),
             child: const Text('Cancel'),
           ),
           FilledButton(
             style: FilledButton.styleFrom(
               backgroundColor: AppColors.primaryPurple,
             ),
-            onPressed: () async {
-              final displayName = controller.text.trim();
-              if (displayName.isEmpty) return;
-
-              try {
-                await repository.updateFamilyMemberDisplayName(
-                  familyId: family.id,
-                  userId: member.userId,
-                  displayName: displayName,
-                );
-                if (dialogContext.mounted) Navigator.pop(dialogContext);
-                if (context.mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Family name updated')),
-                  );
-                }
-              } catch (e) {
-                if (dialogContext.mounted) {
-                  ScaffoldMessenger.of(dialogContext).showSnackBar(
-                    SnackBar(content: Text('Could not update name: $e')),
-                  );
-                }
-              }
+            onPressed: () {
+              final value = controller.text.trim();
+              if (value.isEmpty) return;
+              Navigator.of(dialogContext).pop(value);
             },
             child: const Text('Save'),
           ),
         ],
       ),
     );
+
+    // The controller is no longer attached to the dialog after showDialog
+    // completes, so it is safe to dispose it here.
     controller.dispose();
+
+    if (displayName == null || displayName.isEmpty || !context.mounted) return;
+
+    final repository = serviceLocator.familyRepository;
+    try {
+      await repository.updateFamilyMemberDisplayName(
+        familyId: family.id,
+        userId: member.userId,
+        displayName: displayName,
+      );
+
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Family name updated')),
+      );
+    } catch (e) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Could not update name: $e')),
+      );
+    }
   }
 }
 
