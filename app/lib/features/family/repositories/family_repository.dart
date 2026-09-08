@@ -132,6 +132,7 @@ class FamilyRepository implements IFamilyRepository {
       familyId: familyId,
       userId: owner.id,
       name: owner.name.isNotEmpty ? owner.name : owner.email.split('@').first,
+      displayName: owner.name.isNotEmpty ? owner.name : owner.email.split('@').first,
       email: owner.email,
       photoUrl: owner.photoUrl,
       role: 'owner',
@@ -184,6 +185,7 @@ class FamilyRepository implements IFamilyRepository {
       familyId: family.id,
       userId: user.id,
       name: user.name.isNotEmpty ? user.name : user.email.split('@').first,
+      displayName: user.name.isNotEmpty ? user.name : user.email.split('@').first,
       email: user.email,
       photoUrl: user.photoUrl,
       role: 'member',
@@ -222,6 +224,26 @@ class FamilyRepository implements IFamilyRepository {
           (snapshot) =>
               snapshot.docs.map(FamilyMemberModel.fromFirestore).toList(),
         );
+  }
+
+  @override
+  Future<void> updateFamilyMemberDisplayName({
+    required String familyId,
+    required String userId,
+    required String displayName,
+  }) async {
+    final trimmedName = displayName.trim();
+    if (trimmedName.isEmpty) {
+      throw ArgumentError('Family display name cannot be empty.');
+    }
+    if (trimmedName.length > 40) {
+      throw ArgumentError('Family display name must be 40 characters or less.');
+    }
+
+    await _members
+        .doc('${familyId}_$userId')
+        .update({'displayName': trimmedName})
+        .timeout(const Duration(seconds: 8));
   }
 
   @override
@@ -338,6 +360,7 @@ class FamilyRepository implements IFamilyRepository {
       familyId: family.id,
       userId: user.id,
       name: user.name.isNotEmpty ? user.name : user.email.split('@').first,
+      displayName: user.name.isNotEmpty ? user.name : user.email.split('@').first,
       email: user.email,
       photoUrl: user.photoUrl,
       role: 'member',
@@ -635,9 +658,6 @@ class FamilyRepository implements IFamilyRepository {
               'memberCount': FieldValue.increment(-1),
               'updatedAt': Timestamp.fromDate(DateTime.now()),
             });
-            // A user document may not exist yet for accounts created before
-            // profile syncing was introduced. `update` makes leaving fail for
-            // those users even though their membership was removed correctly.
             transaction.set(_users.doc(userId), {
               'familyId': FieldValue.delete(),
             }, SetOptions(merge: true));
@@ -711,9 +731,6 @@ class FamilyRepository implements IFamilyRepository {
       final members = results[1];
       final invitations = results[2];
 
-      // Deleting the family first made the remaining cleanup separate writes.
-      // If any of them failed, people could remain linked to a family that no
-      // longer existed. Commit all Firestore changes together instead.
       final batch = _firestore.batch();
       for (final doc in shared.docs) {
         batch.delete(doc.reference);
@@ -733,8 +750,6 @@ class FamilyRepository implements IFamilyRepository {
       batch.delete(_families.doc(familyId));
       await batch.commit().timeout(const Duration(seconds: 12));
 
-      // Storage cleanup is intentionally after the database commit: a failed
-      // file deletion must not prevent the family from being removed.
       for (final doc in shared.docs) {
         final storagePath = doc.data()['imageStoragePath'] as String?;
         if (storagePath == null || storagePath.isEmpty) continue;
@@ -743,10 +758,7 @@ class FamilyRepository implements IFamilyRepository {
             familyId: familyId,
             path: storagePath,
           );
-        } catch (_) {
-          // The shared record is gone; a stale remote file can be cleaned up
-          // separately without restoring the deleted family.
-        }
+        } catch (_) {}
       }
     } on TimeoutException {
       // Queued
