@@ -1,18 +1,22 @@
 import 'dart:io';
 
+import 'package:emoji_picker_flutter/emoji_picker_flutter.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:image_picker/image_picker.dart';
-import 'package:emoji_picker_flutter/emoji_picker_flutter.dart';
+import 'package:open_filex/open_filex.dart';
 
 import '../../../core/constants/app_colors.dart';
 import '../../../core/di/service_locator.dart';
 import '../../../core/widgets/custom_text_field.dart';
 import '../models/local_asset.dart';
+import '../models/local_asset_document.dart';
 import '../models/local_category.dart';
+import 'asset_details_screen.dart';
 
 class EditAssetScreen extends StatefulWidget {
   final LocalAsset asset;
+
   const EditAssetScreen({super.key, required this.asset});
 
   static Future<void> navigateTo(BuildContext context, LocalAsset asset) =>
@@ -28,6 +32,7 @@ class _EditAssetScreenState extends State<EditAssetScreen> {
   final _formKey = GlobalKey<FormState>();
   final _assetRepository = serviceLocator.assetRepository;
   final _categoryRepository = serviceLocator.categoryRepository;
+  final _documentRepository = serviceLocator.assetDocumentRepository;
   final _imagePicker = ImagePicker();
 
   late final TextEditingController _nameController;
@@ -38,10 +43,21 @@ class _EditAssetScreenState extends State<EditAssetScreen> {
   late bool _qrEnabled;
   late Map<String, String> _customFields;
   List<LocalCategory> _categories = [];
+  late Future<List<LocalAssetDocument>> _documentsFuture;
   File? _newImage;
   bool _loading = true;
   bool _saving = false;
   bool _deleting = false;
+
+  static const _imageExtensions = {
+    'jpg',
+    'jpeg',
+    'png',
+    'gif',
+    'webp',
+    'bmp',
+    'heic',
+  };
 
   @override
   void initState() {
@@ -54,7 +70,17 @@ class _EditAssetScreenState extends State<EditAssetScreen> {
     _categoryId = asset.categoryId;
     _qrEnabled = asset.qrEnabled;
     _customFields = Map<String, String>.from(asset.customFields);
+    _documentsFuture = _loadDocuments();
     _loadCategories();
+  }
+
+  Future<List<LocalAssetDocument>> _loadDocuments() async {
+    try {
+      return await _documentRepository.getDocuments(widget.asset.id);
+    } catch (e) {
+      debugPrint('Document load error: $e');
+      return const <LocalAssetDocument>[];
+    }
   }
 
   Future<void> _loadCategories() async {
@@ -72,8 +98,13 @@ class _EditAssetScreenState extends State<EditAssetScreen> {
   }
 
   Future<void> _pickImage() async {
-    final picked = await _imagePicker.pickImage(source: ImageSource.gallery, imageQuality: 80);
-    if (picked != null && mounted) setState(() => _newImage = File(picked.path));
+    final picked = await _imagePicker.pickImage(
+      source: ImageSource.gallery,
+      imageQuality: 80,
+    );
+    if (picked != null && mounted) {
+      setState(() => _newImage = File(picked.path));
+    }
   }
 
   void _showEmojiPicker() {
@@ -101,19 +132,26 @@ class _EditAssetScreenState extends State<EditAssetScreen> {
     showDialog(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        title: Text('Add Custom Field', style: GoogleFonts.outfit(fontWeight: FontWeight.w700)),
+        title: Text(
+          'Add Custom Field',
+          style: GoogleFonts.outfit(fontWeight: FontWeight.w700),
+        ),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            CustomTextField(controller: keyController, hintText: 'Field name (e.g. Serial No.)'),
+            CustomTextField(
+              controller: keyController,
+              hintText: 'Field name (e.g. Serial No.)',
+            ),
             const SizedBox(height: 12),
             CustomTextField(controller: valueController, hintText: 'Value'),
           ],
         ),
         actions: [
           TextButton(
-              onPressed: () => Navigator.pop(dialogContext),
-              child: const Text('Cancel')),
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('Cancel'),
+          ),
           TextButton(
             onPressed: () {
               final key = keyController.text.trim();
@@ -129,12 +167,13 @@ class _EditAssetScreenState extends State<EditAssetScreen> {
     );
   }
 
-  void _popWithRefresh() => Navigator.of(context).pop(true);
-
   Future<void> _save() async {
     if (!_formKey.currentState!.validate()) return;
     setState(() => _saving = true);
     try {
+      // Documents are deliberately not part of this update. They are stored
+      // separately by AssetDocumentRepository and remain unchanged when the
+      // asset's editable fields are saved.
       final updated = widget.asset.copyWith(
         name: _nameController.text.trim(),
         emoji: _emoji,
@@ -158,7 +197,7 @@ class _EditAssetScreenState extends State<EditAssetScreen> {
           backgroundColor: AppColors.success,
         ),
       );
-      _popWithRefresh();
+      Navigator.of(context).pop(true);
     } catch (e) {
       debugPrint('Update asset error: $e');
       if (!mounted) return;
@@ -177,18 +216,25 @@ class _EditAssetScreenState extends State<EditAssetScreen> {
     final confirm = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        title: Text('Delete Asset', style: GoogleFonts.outfit(fontWeight: FontWeight.w700)),
+        title: Text(
+          'Delete Asset',
+          style: GoogleFonts.outfit(fontWeight: FontWeight.w700),
+        ),
         content: Text(
           'Are you sure you want to delete "${widget.asset.name}"? This action cannot be undone.',
           style: GoogleFonts.outfit(),
         ),
         actions: [
           TextButton(
-              onPressed: () => Navigator.pop(dialogContext, false),
-              child: const Text('Cancel')),
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('Cancel'),
+          ),
           TextButton(
             onPressed: () => Navigator.pop(dialogContext, true),
-            child: const Text('Delete', style: TextStyle(color: AppColors.error)),
+            child: const Text(
+              'Delete',
+              style: TextStyle(color: AppColors.error),
+            ),
           ),
         ],
       ),
@@ -219,12 +265,50 @@ class _EditAssetScreenState extends State<EditAssetScreen> {
     }
   }
 
+  bool _isImage(LocalAssetDocument document) {
+    final type = document.fileType?.toLowerCase() ?? '';
+    if (_imageExtensions.contains(type)) return true;
+    final name = document.name.toLowerCase();
+    return _imageExtensions.any((extension) => name.endsWith('.$extension'));
+  }
+
+  Future<void> _openDocument(LocalAssetDocument document) async {
+    final file = File(document.filePath);
+    if (!await file.exists()) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('This file is no longer available.')),
+      );
+      return;
+    }
+
+    if (_isImage(document)) {
+      await FullScreenImageViewer.show(
+        context,
+        imagePath: document.filePath,
+        title: document.name,
+      );
+      return;
+    }
+
+    final result = await OpenFilex.open(document.filePath);
+    if (!mounted) return;
+    if (result.type != ResultType.done) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Could not open ${document.name}.')),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.scaffoldBg,
       appBar: AppBar(
-        title: Text('Edit Asset', style: GoogleFonts.outfit(fontWeight: FontWeight.w700)),
+        title: Text(
+          'Edit Asset',
+          style: GoogleFonts.outfit(fontWeight: FontWeight.w700),
+        ),
         leading: IconButton(
           icon: const Icon(Icons.close_rounded),
           onPressed: () => Navigator.pop(context, false),
@@ -262,9 +346,10 @@ class _EditAssetScreenState extends State<EditAssetScreen> {
                         hintText: 'Asset name',
                         labelText: 'Name',
                         prefixIcon: Icons.inventory_2_outlined,
-                        validator: (value) => value == null || value.trim().isEmpty
-                            ? 'Please enter a name'
-                            : null,
+                        validator: (value) =>
+                            value == null || value.trim().isEmpty
+                                ? 'Please enter a name'
+                                : null,
                       ),
                       const SizedBox(height: 16),
                       _buildCategoryDropdown(),
@@ -292,6 +377,18 @@ class _EditAssetScreenState extends State<EditAssetScreen> {
                       const SizedBox(height: 16),
                       _buildCustomFields(),
                       const SizedBox(height: 24),
+                      const _SectionHeader(title: 'Documents & Media'),
+                      const SizedBox(height: 8),
+                      Text(
+                        'Stored files are read-only here. Tap a file to view it.',
+                        style: GoogleFonts.outfit(
+                          fontSize: 13,
+                          color: AppColors.textSecondary,
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      _buildDocuments(),
+                      const SizedBox(height: 24),
                       const _SectionHeader(title: 'Advanced'),
                       const SizedBox(height: 16),
                       _buildQrToggle(),
@@ -303,6 +400,171 @@ class _EditAssetScreenState extends State<EditAssetScreen> {
       bottomNavigationBar: _loading ? null : _buildSaveBar(),
     );
   }
+
+  Widget _buildDocuments() {
+    return FutureBuilder<List<LocalAssetDocument>>(
+      future: _documentsFuture,
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return Container(
+            padding: const EdgeInsets.all(22),
+            decoration: _cardDecoration(),
+            child: const Center(
+              child: SizedBox(
+                width: 22,
+                height: 22,
+                child: CircularProgressIndicator(strokeWidth: 2.5),
+              ),
+            ),
+          );
+        }
+
+        final documents = snapshot.data ?? const <LocalAssetDocument>[];
+        if (documents.isEmpty) {
+          return Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 22),
+            decoration: _cardDecoration(),
+            child: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: AppColors.lightLavender,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: const Icon(
+                    Icons.folder_open_outlined,
+                    color: AppColors.primaryPurple,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    'No documents or media have been added to this asset.',
+                    style: GoogleFonts.outfit(
+                      fontSize: 13,
+                      color: AppColors.textSecondary,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          );
+        }
+
+        return Container(
+          decoration: _cardDecoration(),
+          child: Column(
+            children: [
+              for (var index = 0; index < documents.length; index++) ...[
+                _buildDocumentTile(documents[index]),
+                if (index != documents.length - 1)
+                  const Divider(height: 1, indent: 72, endIndent: 16),
+              ],
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildDocumentTile(LocalAssetDocument document) {
+    final image = _isImage(document);
+    return InkWell(
+      onTap: () => _openDocument(document),
+      borderRadius: BorderRadius.circular(18),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        child: Row(
+          children: [
+            _documentPreview(document, image),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    document.name,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: GoogleFonts.outfit(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.textPrimary,
+                    ),
+                  ),
+                  const SizedBox(height: 3),
+                  Text(
+                    image ? 'Image • Tap to view' : 'Document • Tap to open',
+                    style: GoogleFonts.outfit(
+                      fontSize: 12,
+                      color: AppColors.textSecondary,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const Icon(
+              Icons.open_in_new_rounded,
+              size: 20,
+              color: AppColors.textSecondary,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _documentPreview(LocalAssetDocument document, bool image) {
+    if (image && File(document.filePath).existsSync()) {
+      return ClipRRect(
+        borderRadius: BorderRadius.circular(12),
+        child: Image.file(
+          File(document.filePath),
+          width: 48,
+          height: 48,
+          fit: BoxFit.cover,
+          errorBuilder: (_, _, _) => _fileIcon(document),
+        ),
+      );
+    }
+    return _fileIcon(document);
+  }
+
+  Widget _fileIcon(LocalAssetDocument document) {
+    final type = document.fileType?.toLowerCase() ?? '';
+    final icon = type == 'pdf'
+        ? Icons.picture_as_pdf_outlined
+        : type == 'doc' || type == 'docx'
+            ? Icons.description_outlined
+            : type == 'xls' || type == 'xlsx'
+                ? Icons.table_chart_outlined
+                : Icons.insert_drive_file_outlined;
+
+    return Container(
+      width: 48,
+      height: 48,
+      decoration: BoxDecoration(
+        color: AppColors.lightLavender,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Icon(icon, color: AppColors.primaryPurple, size: 25),
+    );
+  }
+
+  BoxDecoration _cardDecoration() => BoxDecoration(
+        color: AppColors.surfaceWhite,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: AppColors.lightLavenderBorder),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withAlpha(5),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      );
 
   Widget _buildImagePicker() {
     final imagePath = _newImage?.path ?? widget.asset.imagePath;
@@ -329,11 +591,21 @@ class _EditAssetScreenState extends State<EditAssetScreen> {
               ),
               child: _newImage != null
                   ? ClipOval(
-                      child: Image.file(_newImage!, fit: BoxFit.cover, width: 110, height: 110))
+                      child: Image.file(
+                        _newImage!,
+                        fit: BoxFit.cover,
+                        width: 110,
+                        height: 110,
+                      ),
+                    )
                   : (imagePath != null && imagePath.isNotEmpty)
                       ? ClipOval(
-                          child: Image.file(File(imagePath), fit: BoxFit.cover,
-                              errorBuilder: (_, _, _) => _emojiFallback()))
+                          child: Image.file(
+                            File(imagePath),
+                            fit: BoxFit.cover,
+                            errorBuilder: (_, _, _) => _emojiFallback(),
+                          ),
+                        )
                       : _emojiFallback(),
             ),
             Positioned(
@@ -352,7 +624,7 @@ class _EditAssetScreenState extends State<EditAssetScreen> {
                     icon: Icons.camera_alt_rounded,
                     onTap: _pickImage,
                     isPrimary: true,
-                    tooltip: 'Add photo',
+                    tooltip: 'Change photo',
                   ),
                 ],
               ),
@@ -363,7 +635,9 @@ class _EditAssetScreenState extends State<EditAssetScreen> {
     );
   }
 
-  Widget _emojiFallback() => Center(child: Text(_emoji, style: const TextStyle(fontSize: 48)));
+  Widget _emojiFallback() => Center(
+        child: Text(_emoji, style: const TextStyle(fontSize: 48)),
+      );
 
   Widget _buildCategoryDropdown() {
     return Column(
@@ -371,8 +645,14 @@ class _EditAssetScreenState extends State<EditAssetScreen> {
       children: [
         Padding(
           padding: const EdgeInsets.only(left: 4, bottom: 8),
-          child: Text('Category',
-              style: GoogleFonts.outfit(fontSize: 13, fontWeight: FontWeight.w600, color: AppColors.textSecondary)),
+          child: Text(
+            'Category',
+            style: GoogleFonts.outfit(
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+              color: AppColors.textSecondary,
+            ),
+          ),
         ),
         Container(
           decoration: BoxDecoration(
@@ -391,25 +671,44 @@ class _EditAssetScreenState extends State<EditAssetScreen> {
             child: DropdownButton<String?>(
               value: _categoryId,
               isExpanded: true,
-              icon: const Icon(Icons.keyboard_arrow_down_rounded, color: AppColors.textSecondary, size: 24),
-              iconSize: 24,
+              icon: const Icon(
+                Icons.keyboard_arrow_down_rounded,
+                color: AppColors.textSecondary,
+                size: 24,
+              ),
               padding: const EdgeInsets.symmetric(horizontal: 16),
               dropdownColor: AppColors.surfaceWhite,
-              hint: Text('Select category',
-                  style: GoogleFonts.outfit(color: AppColors.textSecondary, fontSize: 15)),
+              hint: Text(
+                'Select category',
+                style: GoogleFonts.outfit(
+                  color: AppColors.textSecondary,
+                  fontSize: 15,
+                ),
+              ),
               items: [
                 const DropdownMenuItem<String?>(
                   value: null,
-                  child: Text('Uncategorized', style: TextStyle(fontWeight: FontWeight.w500)),
+                  child: Text(
+                    'Uncategorized',
+                    style: TextStyle(fontWeight: FontWeight.w500),
+                  ),
                 ),
-                ..._categories.map((c) => DropdownMenuItem<String?>(
-                      value: c.id,
-                      child: Text(c.name, style: GoogleFonts.outfit(fontSize: 15)),
-                    )),
+                ..._categories.map(
+                  (c) => DropdownMenuItem<String?>(
+                    value: c.id,
+                    child: Text(
+                      c.name,
+                      style: GoogleFonts.outfit(fontSize: 15),
+                    ),
+                  ),
+                ),
               ],
               onChanged: (value) => setState(() => _categoryId = value),
               borderRadius: BorderRadius.circular(16),
-              style: GoogleFonts.outfit(fontSize: 15, color: AppColors.textPrimary),
+              style: GoogleFonts.outfit(
+                fontSize: 15,
+                color: AppColors.textPrimary,
+              ),
             ),
           ),
         ),
@@ -440,18 +739,33 @@ class _EditAssetScreenState extends State<EditAssetScreen> {
               color: AppColors.primaryPurple.withAlpha(20),
               borderRadius: BorderRadius.circular(12),
             ),
-            child: const Icon(Icons.qr_code_2_rounded, color: AppColors.primaryPurple, size: 24),
+            child: const Icon(
+              Icons.qr_code_2_rounded,
+              color: AppColors.primaryPurple,
+              size: 24,
+            ),
           ),
           const SizedBox(width: 14),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('Enable QR Code',
-                    style: GoogleFonts.outfit(fontSize: 15, fontWeight: FontWeight.w600, color: AppColors.textPrimary)),
+                Text(
+                  'Enable QR Code',
+                  style: GoogleFonts.outfit(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.textPrimary,
+                  ),
+                ),
                 const SizedBox(height: 2),
-                Text('Generate a QR tag for quick scanning.',
-                    style: GoogleFonts.outfit(fontSize: 12, color: AppColors.textSecondary)),
+                Text(
+                  'Generate a QR tag for quick scanning.',
+                  style: GoogleFonts.outfit(
+                    fontSize: 12,
+                    color: AppColors.textSecondary,
+                  ),
+                ),
               ],
             ),
           ),
@@ -473,8 +787,14 @@ class _EditAssetScreenState extends State<EditAssetScreen> {
         Row(
           children: [
             Expanded(
-              child: Text('Custom Fields',
-                  style: GoogleFonts.outfit(fontSize: 13, fontWeight: FontWeight.w600, color: AppColors.textSecondary)),
+              child: Text(
+                'Custom Fields',
+                style: GoogleFonts.outfit(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                  color: AppColors.textSecondary,
+                ),
+              ),
             ),
             Container(
               decoration: BoxDecoration(
@@ -483,11 +803,26 @@ class _EditAssetScreenState extends State<EditAssetScreen> {
               ),
               child: TextButton.icon(
                 onPressed: _addCustomField,
-                icon: const Icon(Icons.add_rounded, size: 16, color: AppColors.primaryPurple),
-                label: Text('Add Field', style: GoogleFonts.outfit(color: AppColors.primaryPurple, fontWeight: FontWeight.w600)),
+                icon: const Icon(
+                  Icons.add_rounded,
+                  size: 16,
+                  color: AppColors.primaryPurple,
+                ),
+                label: Text(
+                  'Add Field',
+                  style: GoogleFonts.outfit(
+                    color: AppColors.primaryPurple,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
                 style: TextButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 8,
+                  ),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10),
+                  ),
                 ),
               ),
             ),
@@ -504,12 +839,19 @@ class _EditAssetScreenState extends State<EditAssetScreen> {
             ),
             child: Row(
               children: [
-                const Icon(Icons.info_outline_rounded, color: AppColors.textSecondary, size: 20),
+                const Icon(
+                  Icons.info_outline_rounded,
+                  color: AppColors.textSecondary,
+                  size: 20,
+                ),
                 const SizedBox(width: 12),
                 Expanded(
                   child: Text(
                     'Add custom fields to store extra details like serial numbers, purchase dates, warranty info, etc.',
-                    style: GoogleFonts.outfit(fontSize: 13, color: AppColors.textMuted),
+                    style: GoogleFonts.outfit(
+                      fontSize: 13,
+                      color: AppColors.textMuted,
+                    ),
                   ),
                 ),
               ],
@@ -519,7 +861,10 @@ class _EditAssetScreenState extends State<EditAssetScreen> {
           ..._customFields.entries.map((entry) {
             return Container(
               margin: const EdgeInsets.only(top: 10),
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+              padding: const EdgeInsets.symmetric(
+                horizontal: 16,
+                vertical: 14,
+              ),
               decoration: BoxDecoration(
                 color: AppColors.surfaceWhite,
                 borderRadius: BorderRadius.circular(14),
@@ -540,7 +885,11 @@ class _EditAssetScreenState extends State<EditAssetScreen> {
                       color: AppColors.lightLavender,
                       borderRadius: BorderRadius.circular(10),
                     ),
-                    child: const Icon(Icons.label_outline_rounded, color: AppColors.textSecondary, size: 18),
+                    child: const Icon(
+                      Icons.label_outline_rounded,
+                      color: AppColors.textSecondary,
+                      size: 18,
+                    ),
                   ),
                   const SizedBox(width: 12),
                   Expanded(
@@ -549,12 +898,20 @@ class _EditAssetScreenState extends State<EditAssetScreen> {
                       children: [
                         Text(
                           entry.key,
-                          style: GoogleFonts.outfit(fontSize: 14, fontWeight: FontWeight.w700, color: AppColors.textPrimary),
+                          style: GoogleFonts.outfit(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w700,
+                            color: AppColors.textPrimary,
+                          ),
                         ),
                         const SizedBox(height: 2),
                         Text(
                           entry.value,
-                          style: GoogleFonts.outfit(fontSize: 12, color: AppColors.textSecondary, fontWeight: FontWeight.w400),
+                          style: GoogleFonts.outfit(
+                            fontSize: 12,
+                            color: AppColors.textSecondary,
+                            fontWeight: FontWeight.w400,
+                          ),
                         ),
                       ],
                     ),
@@ -562,11 +919,17 @@ class _EditAssetScreenState extends State<EditAssetScreen> {
                   Material(
                     color: Colors.transparent,
                     child: InkWell(
-                      onTap: () => setState(() => _customFields.remove(entry.key)),
+                      onTap: () => setState(
+                        () => _customFields.remove(entry.key),
+                      ),
                       borderRadius: BorderRadius.circular(10),
                       child: const Padding(
                         padding: EdgeInsets.all(6),
-                        child: Icon(Icons.delete_outline_rounded, color: AppColors.error, size: 20),
+                        child: Icon(
+                          Icons.delete_outline_rounded,
+                          color: AppColors.error,
+                          size: 20,
+                        ),
                       ),
                     ),
                   ),
@@ -583,7 +946,12 @@ class _EditAssetScreenState extends State<EditAssetScreen> {
           padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
           decoration: BoxDecoration(
             color: AppColors.surfaceWhite,
-            border: const Border(top: BorderSide(color: AppColors.lightLavenderBorder, width: 1)),
+            border: const Border(
+              top: BorderSide(
+                color: AppColors.lightLavenderBorder,
+                width: 1,
+              ),
+            ),
             boxShadow: [
               BoxShadow(
                 color: Colors.black.withAlpha(15),
@@ -601,19 +969,27 @@ class _EditAssetScreenState extends State<EditAssetScreen> {
                   ? const SizedBox(
                       width: 20,
                       height: 20,
-                      child: CircularProgressIndicator(strokeWidth: 2.5, color: Colors.white),
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2.5,
+                        color: Colors.white,
+                      ),
                     )
                   : const Icon(Icons.check_rounded, size: 22),
               label: Text(
                 _saving ? 'Saving…' : 'Save Changes',
-                style: GoogleFonts.outfit(fontSize: 16, fontWeight: FontWeight.w600),
+                style: GoogleFonts.outfit(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
+                ),
               ),
               style: ElevatedButton.styleFrom(
                 backgroundColor: AppColors.primaryPurple,
                 foregroundColor: Colors.white,
                 elevation: 0,
                 shadowColor: AppColors.primaryPurple.withAlpha(80),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(18),
+                ),
               ),
             ),
           ),
@@ -681,7 +1057,9 @@ class _IconActionButton extends StatelessWidget {
         color: isPrimary ? AppColors.primaryPurple : AppColors.surfaceWhite,
         shape: const CircleBorder(),
         elevation: isPrimary ? 4 : 2,
-        shadowColor: isPrimary ? AppColors.primaryPurple.withAlpha(80) : Colors.black.withAlpha(30),
+        shadowColor: isPrimary
+            ? AppColors.primaryPurple.withAlpha(80)
+            : Colors.black.withAlpha(30),
         child: InkWell(
           onTap: onTap,
           borderRadius: BorderRadius.circular(24),
