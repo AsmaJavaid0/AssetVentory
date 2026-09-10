@@ -130,19 +130,27 @@ class _FamilyDashboardScreenState extends State<FamilyDashboardScreen> {
     final memberAssets = assets.where((asset) => asset.ownerId == member.userId).toList();
     final visibleAssets = _searchQuery.isEmpty ? memberAssets : memberAssets.where((asset) => asset.name.toLowerCase().contains(_searchQuery)).toList();
     if (_searchQuery.isNotEmpty && visibleAssets.isEmpty) return const SizedBox.shrink();
-    final displayName = member.userId == widget.currentUser.id ? 'My Assets' : "${member.name.isEmpty ? 'Member' : member.name}'s Assets";
-    final initial = member.name.isNotEmpty ? member.name[0].toUpperCase() : '?';
+
+    // Always use the family-specific display name here. This keeps the name
+    // shown on the Family dashboard in sync with the editable name on the
+    // Family Members screen instead of falling back to the account name.
+    final familyDisplayName = member.familyDisplayName;
+    final displayName = member.userId == widget.currentUser.id
+        ? 'My Assets'
+        : "${familyDisplayName.isEmpty ? 'Member' : familyDisplayName}'s Assets";
+    final initial = familyDisplayName.isNotEmpty ? familyDisplayName[0].toUpperCase() : '?';
+
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       decoration: BoxDecoration(color: AppColors.surfaceWhite, borderRadius: BorderRadius.circular(18), border: Border.all(color: AppColors.lightLavenderBorder)),
       child: Material(color: Colors.transparent, borderRadius: BorderRadius.circular(18), child: InkWell(
         borderRadius: BorderRadius.circular(18),
-        onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => FamilyMemberAssetsScreen(familyId: widget.family.id, ownerId: member.userId, ownerName: member.name, isCurrentUser: member.userId == widget.currentUser.id, currentUser: widget.currentUser))),
+        onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => FamilyMemberAssetsScreen(familyId: widget.family.id, ownerId: member.userId, ownerName: familyDisplayName, isCurrentUser: member.userId == widget.currentUser.id, currentUser: widget.currentUser))),
         child: Padding(padding: const EdgeInsets.all(15), child: Row(children: [
           Container(width: 50, height: 50, decoration: const BoxDecoration(gradient: AppColors.logoGradient, shape: BoxShape.circle), child: Center(child: Text(initial, style: GoogleFonts.outfit(color: Colors.white, fontSize: 20, fontWeight: FontWeight.w700)))),
           const SizedBox(width: 14),
           Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text(displayName, style: GoogleFonts.outfit(fontSize: 16, fontWeight: FontWeight.w700, color: AppColors.textPrimary), maxLines: 1, overflow: TextOverflow.ellipsis),
+            Text(displayName, style: GoogleFonts.outfit(fontSize: 16, fontWeight: FontWeight.w700, color: AppColors.textPrimary), maxLines: 2, overflow: TextOverflow.ellipsis),
             const SizedBox(height: 3),
             Text('${visibleAssets.length} ${visibleAssets.length == 1 ? 'asset' : 'assets'}', style: GoogleFonts.outfit(fontSize: 12, color: AppColors.textSecondary)),
           ])),
