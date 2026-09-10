@@ -20,7 +20,7 @@ class FamilyMembersScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final familyRepository = serviceLocator.familyRepository;
+    final repository = serviceLocator.familyRepository;
 
     return Scaffold(
       backgroundColor: AppColors.scaffoldBg,
@@ -44,7 +44,6 @@ class FamilyMembersScreen extends StatelessWidget {
               Icons.person_add_alt_1_rounded,
               color: AppColors.primaryPurple,
             ),
-            tooltip: 'Invite Member',
             onPressed: () => InviteMemberScreen.navigateTo(
               context,
               family: family,
@@ -55,13 +54,12 @@ class FamilyMembersScreen extends StatelessWidget {
       ),
       floatingActionButton: FloatingActionButton.extended(
         heroTag: 'family_members_fab',
+        backgroundColor: AppColors.primaryPurple,
         onPressed: () => InviteMemberScreen.navigateTo(
           context,
           family: family,
           currentUser: currentUser,
         ),
-        backgroundColor: AppColors.primaryPurple,
-        elevation: 4,
         icon: const Icon(Icons.person_add_alt_1_rounded, color: Colors.white),
         label: Text(
           'Invite Member',
@@ -72,8 +70,21 @@ class FamilyMembersScreen extends StatelessWidget {
         ),
       ),
       body: StreamBuilder<List<FamilyMemberModel>>(
-        stream: familyRepository.streamFamilyMembers(family.id),
+        stream: repository.streamFamilyMembers(family.id),
         builder: (context, snapshot) {
+          if (snapshot.hasError) {
+            return Center(
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: Text(
+                  'Could not load family members.\n${snapshot.error}',
+                  textAlign: TextAlign.center,
+                  style: GoogleFonts.outfit(color: AppColors.error),
+                ),
+              ),
+            );
+          }
+
           if (snapshot.connectionState == ConnectionState.waiting) {
             return const Center(
               child: CircularProgressIndicator(color: AppColors.primaryPurple),
@@ -82,9 +93,9 @@ class FamilyMembersScreen extends StatelessWidget {
 
           final members = snapshot.data ?? [];
           final owner = members.firstWhere(
-            (m) => m.isOwner,
+            (member) => member.isOwner,
             orElse: () => FamilyMemberModel(
-              id: 'owner',
+              id: '${family.id}_${family.ownerId}',
               familyId: family.id,
               userId: family.ownerId,
               name: 'Family Owner',
@@ -95,43 +106,29 @@ class FamilyMembersScreen extends StatelessWidget {
             ),
           );
           final otherMembers = members.where((m) => !m.isOwner).toList();
-          final canEditAll = owner.userId == currentUser.id;
+          final canEdit = owner.userId == currentUser.id;
 
           return ListView(
-            padding: const EdgeInsets.fromLTRB(20, 16, 20, 100),
+            padding: const EdgeInsets.fromLTRB(20, 16, 20, 110),
             children: [
-              Text(
-                'Family Owner',
-                style: GoogleFonts.outfit(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w700,
-                  color: AppColors.textSecondary,
-                ),
-              ),
+              _sectionTitle('Family Owner'),
               const SizedBox(height: 10),
               _MemberCard(
                 member: owner,
                 isCurrent: owner.userId == currentUser.id,
-                canEdit: canEditAll || owner.userId == currentUser.id,
-                onEdit: () => _showDisplayNameDialog(context, owner),
+                canEdit: canEdit || owner.userId == currentUser.id,
+                onEdit: () => _editName(context, owner),
               ),
               const SizedBox(height: 24),
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Text(
-                    'Members (${otherMembers.length})',
-                    style: GoogleFonts.outfit(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w700,
-                      color: AppColors.textSecondary,
-                    ),
-                  ),
+                  _sectionTitle('Members (${otherMembers.length})'),
                   Text(
                     'Code: ${family.inviteCode}',
                     style: GoogleFonts.outfit(
                       fontSize: 12,
-                      fontWeight: FontWeight.w600,
+                      fontWeight: FontWeight.w700,
                       color: AppColors.primaryPurple,
                     ),
                   ),
@@ -139,50 +136,16 @@ class FamilyMembersScreen extends StatelessWidget {
               ),
               const SizedBox(height: 10),
               if (otherMembers.isEmpty)
-                Container(
-                  padding: const EdgeInsets.all(24),
-                  decoration: BoxDecoration(
-                    color: AppColors.surfaceWhite,
-                    borderRadius: BorderRadius.circular(18),
-                    border: Border.all(color: AppColors.lightLavenderBorder),
-                  ),
-                  child: Column(
-                    children: [
-                      const Icon(
-                        Icons.people_outline_rounded,
-                        size: 36,
-                        color: AppColors.textMuted,
-                      ),
-                      const SizedBox(height: 10),
-                      Text(
-                        'No other family members yet',
-                        style: GoogleFonts.outfit(
-                          fontSize: 15,
-                          fontWeight: FontWeight.w600,
-                          color: AppColors.textPrimary,
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        'Invite your family members using their email or share the invite code ${family.inviteCode}',
-                        textAlign: TextAlign.center,
-                        style: GoogleFonts.outfit(
-                          fontSize: 12,
-                          color: AppColors.textSecondary,
-                        ),
-                      ),
-                    ],
-                  ),
-                )
+                _emptyMembersCard()
               else
                 ...otherMembers.map(
                   (member) => Padding(
-                    padding: const EdgeInsets.only(bottom: 10),
+                    padding: const EdgeInsets.only(bottom: 12),
                     child: _MemberCard(
                       member: member,
                       isCurrent: member.userId == currentUser.id,
-                      canEdit: canEditAll || member.userId == currentUser.id,
-                      onEdit: () => _showDisplayNameDialog(context, member),
+                      canEdit: canEdit || member.userId == currentUser.id,
+                      onEdit: () => _editName(context, member),
                     ),
                   ),
                 ),
@@ -193,74 +156,103 @@ class FamilyMembersScreen extends StatelessWidget {
     );
   }
 
-  Future<void> _showDisplayNameDialog(
-    BuildContext context,
-    FamilyMemberModel member,
-  ) async {
-    final controller = TextEditingController(text: member.familyDisplayName);
+  Widget _sectionTitle(String text) {
+    return Text(
+      text,
+      style: GoogleFonts.outfit(
+        fontSize: 16,
+        fontWeight: FontWeight.w700,
+        color: AppColors.textSecondary,
+      ),
+    );
+  }
 
-    final displayName = await showDialog<String>(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: Text(
-          'Family display name',
-          style: GoogleFonts.outfit(fontWeight: FontWeight.w700),
-        ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'This is the name your family will see. Your account name stays unchanged.',
-              style: GoogleFonts.outfit(
-                fontSize: 13,
-                color: AppColors.textSecondary,
-              ),
-            ),
-            const SizedBox(height: 14),
-            TextField(
-              controller: controller,
-              autofocus: true,
-              maxLength: 40,
-              textCapitalization: TextCapitalization.words,
-              decoration: const InputDecoration(
-                labelText: 'Display name',
-                hintText: 'e.g. Asma - Phone, Dad, Mom',
-                prefixIcon: Icon(Icons.badge_outlined),
-              ),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(dialogContext).pop(),
-            child: const Text('Cancel'),
+  Widget _emptyMembersCard() {
+    return Container(
+      padding: const EdgeInsets.all(24),
+      decoration: BoxDecoration(
+        color: AppColors.surfaceWhite,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: AppColors.lightLavenderBorder),
+      ),
+      child: Column(
+        children: [
+          const Icon(
+            Icons.people_outline_rounded,
+            size: 36,
+            color: AppColors.textMuted,
           ),
-          FilledButton(
-            style: FilledButton.styleFrom(
-              backgroundColor: AppColors.primaryPurple,
+          const SizedBox(height: 10),
+          Text(
+            'No other family members yet',
+            style: GoogleFonts.outfit(
+              fontWeight: FontWeight.w600,
+              color: AppColors.textPrimary,
             ),
-            onPressed: () {
-              final value = controller.text.trim();
-              if (value.isEmpty) return;
-              Navigator.of(dialogContext).pop(value);
-            },
-            child: const Text('Save'),
           ),
         ],
       ),
     );
+  }
 
-    controller.dispose();
+  Future<void> _editName(
+    BuildContext context,
+    FamilyMemberModel member,
+  ) async {
+    // Keep the input value inside the dialog instead of disposing a
+    // TextEditingController while the dialog route is still being removed.
+    // That was causing Flutter's InheritedElement `_dependents.isEmpty`
+    // assertion on save.
+    String newName = member.familyDisplayName;
 
-    if (displayName == null || displayName.isEmpty || !context.mounted) return;
+    final result = await showDialog<String>(
+      context: context,
+      builder: (dialogContext) {
+        return AlertDialog(
+          title: Text(
+            'Family display name',
+            style: GoogleFonts.outfit(fontWeight: FontWeight.w700),
+          ),
+          content: TextField(
+            autofocus: true,
+            maxLength: 40,
+            textCapitalization: TextCapitalization.words,
+            controller: TextEditingController(text: newName),
+            onChanged: (value) => newName = value,
+            decoration: const InputDecoration(
+              labelText: 'Display name',
+              hintText: 'e.g. Dad, Mom, Asma Phone',
+              prefixIcon: Icon(Icons.badge_outlined),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              style: FilledButton.styleFrom(
+                backgroundColor: AppColors.primaryPurple,
+              ),
+              onPressed: () {
+                final value = newName.trim();
+                if (value.isEmpty) return;
+                Navigator.of(dialogContext).pop(value);
+              },
+              child: const Text('Save'),
+            ),
+          ],
+        );
+      },
+    );
 
-    final repository = serviceLocator.familyRepository;
+    if (result == null || result.trim().isEmpty || !context.mounted) return;
+
     try {
-      await repository.updateFamilyMemberDisplayName(
+      await serviceLocator.familyRepository.updateFamilyMemberDisplayName(
         familyId: family.id,
         userId: member.userId,
-        displayName: displayName,
+        displayName: result.trim(),
       );
 
       if (!context.mounted) return;
@@ -270,7 +262,10 @@ class FamilyMembersScreen extends StatelessWidget {
     } catch (e) {
       if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Could not update name: $e')),
+        SnackBar(
+          content: Text('Could not update name: $e'),
+          backgroundColor: AppColors.error,
+        ),
       );
     }
   }
@@ -310,13 +305,6 @@ class _MemberCard extends StatelessWidget {
               : AppColors.lightLavenderBorder,
           width: isCurrent ? 1.5 : 1.2,
         ),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withAlpha(4),
-            blurRadius: 8,
-            offset: const Offset(0, 2),
-          ),
-        ],
       ),
       child: Column(
         children: [
@@ -344,61 +332,58 @@ class _MemberCard extends StatelessWidget {
               ),
               const SizedBox(width: 14),
               Expanded(
-                child: Padding(
-                  padding: const EdgeInsets.only(top: 1),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Expanded(
-                            child: Text(
-                              displayName,
-                              style: GoogleFonts.outfit(
-                                fontSize: 15,
-                                fontWeight: FontWeight.w700,
-                                color: AppColors.textPrimary,
-                              ),
-                              softWrap: true,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Expanded(
+                          child: Text(
+                            displayName,
+                            softWrap: true,
+                            style: GoogleFonts.outfit(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w700,
+                              color: AppColors.textPrimary,
                             ),
                           ),
-                          if (isCurrent)
-                            Container(
-                              margin: const EdgeInsets.only(left: 6, top: 1),
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 6,
-                                vertical: 2,
-                              ),
-                              decoration: BoxDecoration(
-                                color: AppColors.primaryPurple.withAlpha(20),
-                                borderRadius: BorderRadius.circular(6),
-                              ),
-                              child: Text(
-                                'You',
-                                style: GoogleFonts.outfit(
-                                  fontSize: 10,
-                                  fontWeight: FontWeight.w600,
-                                  color: AppColors.primaryPurple,
-                                ),
-                              ),
-                            ),
-                        ],
-                      ),
-                      if (member.email.isNotEmpty) ...[
-                        const SizedBox(height: 2),
-                        Text(
-                          member.email,
-                          style: GoogleFonts.outfit(
-                            fontSize: 12,
-                            color: AppColors.textSecondary,
-                          ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
                         ),
+                        if (isCurrent)
+                          Container(
+                            margin: const EdgeInsets.only(left: 6),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 6,
+                              vertical: 2,
+                            ),
+                            decoration: BoxDecoration(
+                              color: AppColors.primaryPurple.withAlpha(20),
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: Text(
+                              'You',
+                              style: GoogleFonts.outfit(
+                                fontSize: 10,
+                                fontWeight: FontWeight.w600,
+                                color: AppColors.primaryPurple,
+                              ),
+                            ),
+                          ),
                       ],
+                    ),
+                    if (member.email.isNotEmpty) ...[
+                      const SizedBox(height: 3),
+                      Text(
+                        member.email,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: GoogleFonts.outfit(
+                          fontSize: 12,
+                          color: AppColors.textSecondary,
+                        ),
+                      ),
                     ],
-                  ),
+                  ],
                 ),
               ),
             ],
@@ -425,7 +410,10 @@ class _MemberCard extends StatelessWidget {
                 ),
               if (canEdit) const SizedBox(width: 5),
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 5,
+                ),
                 decoration: BoxDecoration(
                   color: member.isOwner
                       ? Colors.amber.withAlpha(40)
