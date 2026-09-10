@@ -199,11 +199,6 @@ class FamilyMembersScreen extends StatelessWidget {
   ) async {
     final controller = TextEditingController(text: member.familyDisplayName);
 
-    // Keep the dialog responsible only for collecting the new name.
-    // The Firestore update happens after the dialog is completely dismissed.
-    // This avoids rebuilding/disposal of inherited Flutter widgets while the
-    // dialog is still performing async work, which can trigger framework
-    // assertions such as "_dependents.isEmpty".
     final displayName = await showDialog<String>(
       context: context,
       builder: (dialogContext) => AlertDialog(
@@ -256,8 +251,6 @@ class FamilyMembersScreen extends StatelessWidget {
       ),
     );
 
-    // The controller is no longer attached to the dialog after showDialog
-    // completes, so it is safe to dispose it here.
     controller.dispose();
 
     if (displayName == null || displayName.isEmpty || !context.mounted) return;
@@ -306,7 +299,8 @@ class _MemberCard extends StatelessWidget {
             : 'U';
 
     return Container(
-      padding: const EdgeInsets.all(16),
+      constraints: const BoxConstraints(minHeight: 124),
+      padding: const EdgeInsets.fromLTRB(16, 15, 12, 10),
       decoration: BoxDecoration(
         color: AppColors.surfaceWhite,
         borderRadius: BorderRadius.circular(18),
@@ -324,114 +318,132 @@ class _MemberCard extends StatelessWidget {
           ),
         ],
       ),
-      child: Row(
+      child: Column(
         children: [
-          CircleAvatar(
-            radius: 22,
-            backgroundColor: member.isOwner
-                ? Colors.amber.shade700
-                : AppColors.primaryPurple,
-            backgroundImage: member.photoUrl.isNotEmpty
-                ? NetworkImage(member.photoUrl)
-                : null,
-            child: member.photoUrl.isEmpty
-                ? Text(
-                    initial,
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.bold,
-                      fontSize: 16,
-                    ),
-                  )
-                : null,
-          ),
-          const SizedBox(width: 14),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Expanded(
-                      child: Text(
-                        displayName,
-                        style: GoogleFonts.outfit(
-                          fontSize: 15,
-                          fontWeight: FontWeight.w700,
-                          color: AppColors.textPrimary,
-                        ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                    if (isCurrent)
-                      Container(
-                        margin: const EdgeInsets.only(left: 6),
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 6,
-                          vertical: 2,
-                        ),
-                        decoration: BoxDecoration(
-                          color: AppColors.primaryPurple.withAlpha(20),
-                          borderRadius: BorderRadius.circular(6),
-                        ),
-                        child: Text(
-                          'You',
-                          style: GoogleFonts.outfit(
-                            fontSize: 10,
-                            fontWeight: FontWeight.w600,
-                            color: AppColors.primaryPurple,
-                          ),
-                        ),
-                      ),
-                  ],
-                ),
-                if (member.email.isNotEmpty) ...[
-                  const SizedBox(height: 2),
-                  Text(
-                    member.email,
-                    style: GoogleFonts.outfit(
-                      fontSize: 12,
-                      color: AppColors.textSecondary,
-                    ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ],
-              ],
-            ),
-          ),
-          if (canEdit) ...[
-            const SizedBox(width: 6),
-            IconButton(
-              tooltip: 'Edit family name',
-              icon: const Icon(
-                Icons.edit_outlined,
-                size: 19,
-                color: AppColors.primaryPurple,
-              ),
-              onPressed: onEdit,
-            ),
-          ],
-          const SizedBox(width: 4),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-            decoration: BoxDecoration(
-              color: member.isOwner
-                  ? Colors.amber.withAlpha(40)
-                  : AppColors.lightLavender,
-              borderRadius: BorderRadius.circular(10),
-            ),
-            child: Text(
-              member.isOwner ? 'Owner' : member.role.toUpperCase(),
-              style: GoogleFonts.outfit(
-                fontSize: 11,
-                fontWeight: FontWeight.w700,
-                color: member.isOwner
-                    ? Colors.amber.shade900
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              CircleAvatar(
+                radius: 22,
+                backgroundColor: member.isOwner
+                    ? Colors.amber.shade700
                     : AppColors.primaryPurple,
+                backgroundImage: member.photoUrl.isNotEmpty
+                    ? NetworkImage(member.photoUrl)
+                    : null,
+                child: member.photoUrl.isEmpty
+                    ? Text(
+                        initial,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 16,
+                        ),
+                      )
+                    : null,
               ),
-            ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.only(top: 1),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Expanded(
+                            child: Text(
+                              displayName,
+                              style: GoogleFonts.outfit(
+                                fontSize: 15,
+                                fontWeight: FontWeight.w700,
+                                color: AppColors.textPrimary,
+                              ),
+                              softWrap: true,
+                            ),
+                          ),
+                          if (isCurrent)
+                            Container(
+                              margin: const EdgeInsets.only(left: 6, top: 1),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 6,
+                                vertical: 2,
+                              ),
+                              decoration: BoxDecoration(
+                                color: AppColors.primaryPurple.withAlpha(20),
+                                borderRadius: BorderRadius.circular(6),
+                              ),
+                              child: Text(
+                                'You',
+                                style: GoogleFonts.outfit(
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.w600,
+                                  color: AppColors.primaryPurple,
+                                ),
+                              ),
+                            ),
+                        ],
+                      ),
+                      if (member.email.isNotEmpty) ...[
+                        const SizedBox(height: 2),
+                        Text(
+                          member.email,
+                          style: GoogleFonts.outfit(
+                            fontSize: 12,
+                            color: AppColors.textSecondary,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 5),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.end,
+            children: [
+              if (canEdit)
+                IconButton(
+                  tooltip: 'Edit family name',
+                  visualDensity: VisualDensity.compact,
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(
+                    minWidth: 36,
+                    minHeight: 36,
+                  ),
+                  icon: const Icon(
+                    Icons.edit_outlined,
+                    size: 19,
+                    color: AppColors.primaryPurple,
+                  ),
+                  onPressed: onEdit,
+                ),
+              if (canEdit) const SizedBox(width: 5),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                decoration: BoxDecoration(
+                  color: member.isOwner
+                      ? Colors.amber.withAlpha(40)
+                      : AppColors.lightLavender,
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Text(
+                  member.isOwner ? 'Owner' : member.role.toUpperCase(),
+                  style: GoogleFonts.outfit(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                    color: member.isOwner
+                        ? Colors.amber.shade900
+                        : AppColors.primaryPurple,
+                  ),
+                ),
+              ),
+            ],
           ),
         ],
       ),
