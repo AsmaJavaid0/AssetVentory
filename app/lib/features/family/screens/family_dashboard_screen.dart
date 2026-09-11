@@ -8,6 +8,7 @@ import '../models/family_model.dart';
 import '../models/family_member_model.dart';
 import '../models/shared_asset_model.dart';
 import '../widgets/member_avatar_stack.dart';
+import '../widgets/shared_asset_card.dart';
 import 'family_members_screen.dart';
 import 'share_asset_screen.dart';
 import 'share_asset_permissions_screen.dart';
@@ -131,9 +132,6 @@ class _FamilyDashboardScreenState extends State<FamilyDashboardScreen> {
     final visibleAssets = _searchQuery.isEmpty ? memberAssets : memberAssets.where((asset) => asset.name.toLowerCase().contains(_searchQuery)).toList();
     if (_searchQuery.isNotEmpty && visibleAssets.isEmpty) return const SizedBox.shrink();
 
-    // Always use the family-specific display name here. This keeps the name
-    // shown on the Family dashboard in sync with the editable name on the
-    // Family Members screen instead of falling back to the account name.
     final familyDisplayName = member.familyDisplayName;
     final displayName = member.userId == widget.currentUser.id
         ? 'My Assets'
@@ -187,6 +185,12 @@ class _FamilyDashboardScreenState extends State<FamilyDashboardScreen> {
         SliverToBoxAdapter(child: Padding(padding: const EdgeInsets.fromLTRB(20, 16, 20, 0), child: _buildSearchField())),
         StreamBuilder<List<FamilyMemberModel>>(stream: _familyRepository.streamFamilyMembers(widget.family.id), builder: (context, memberSnapshot) {
           return StreamBuilder<List<SharedAssetModel>>(stream: _familyRepository.streamSharedAssets(widget.family.id), builder: (context, assetSnapshot) {
+            if (assetSnapshot.hasError) {
+              return SliverToBoxAdapter(child: Padding(padding: const EdgeInsets.fromLTRB(20, 16, 20, 32), child: _buildStreamError(assetSnapshot.error!)));
+            }
+            if (memberSnapshot.hasError) {
+              return SliverToBoxAdapter(child: Padding(padding: const EdgeInsets.fromLTRB(20, 16, 20, 32), child: _buildStreamError(memberSnapshot.error!)));
+            }
             if (assetSnapshot.connectionState == ConnectionState.waiting || memberSnapshot.connectionState == ConnectionState.waiting) return const SliverFillRemaining(hasScrollBody: false, child: Center(child: CircularProgressIndicator(color: AppColors.primaryPurple)));
             final members = memberSnapshot.data ?? [];
             final assets = assetSnapshot.data ?? [];
@@ -195,6 +199,21 @@ class _FamilyDashboardScreenState extends State<FamilyDashboardScreen> {
             return SliverPadding(padding: const EdgeInsets.fromLTRB(20, 16, 20, 32), sliver: SliverList(delegate: SliverChildBuilderDelegate((context, index) => _buildMemberCard(member: members[index], assets: assets), childCount: members.length)));
           });
         }),
+      ]),
+    );
+  }
+
+  Widget _buildStreamError(Object error) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(color: AppColors.surfaceWhite, borderRadius: BorderRadius.circular(20), border: Border.all(color: AppColors.lightLavenderBorder)),
+      child: Column(children: [
+        const Icon(Icons.cloud_off_rounded, size: 40, color: AppColors.error),
+        const SizedBox(height: 10),
+        Text('Could not load shared assets', style: GoogleFonts.outfit(fontSize: 16, fontWeight: FontWeight.w700)),
+        const SizedBox(height: 6),
+        Text(ErrorFormatter.format(error), textAlign: TextAlign.center, style: GoogleFonts.outfit(fontSize: 12, color: AppColors.textSecondary)),
       ]),
     );
   }
