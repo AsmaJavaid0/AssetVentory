@@ -72,13 +72,18 @@ class SecureFamilyRepository extends FamilyRepository {
             familyId: familyId,
             path: storagePath,
           );
-        } catch (_) {}
-      } catch (e) {
-        // Fallback: media upload might fail on network, but keep asset share working
+        } catch (_) {
+          // The asset record can still be shared. The receiver can resolve
+          // the private storage path later when opening the asset.
+        }
+      } catch (_) {
+        // Media upload failure must not block creation of the shared asset.
+        storagePath = null;
+        downloadUrl = null;
       }
     }
 
-    List<SharedDocumentModel> sharedDocs = [];
+    final sharedDocs = <SharedDocumentModel>[];
     if (permissions.viewDocuments) {
       try {
         final localDocs = await serviceLocator.assetDocumentRepository
@@ -101,8 +106,9 @@ class SecureFamilyRepository extends FamilyRepository {
                   path: docStoragePath,
                 );
               } catch (_) {}
-            } catch (e) {
-              // File upload fallback
+            } catch (_) {
+              docStoragePath = null;
+              docDownloadUrl = null;
             }
           }
           sharedDocs.add(SharedDocumentModel(
@@ -115,8 +121,8 @@ class SecureFamilyRepository extends FamilyRepository {
             downloadUrl: docDownloadUrl,
           ));
         }
-      } catch (e) {
-        // Continue if document fetch fails
+      } catch (_) {
+        // Continue without documents if local document lookup fails.
       }
     }
 
@@ -129,9 +135,11 @@ class SecureFamilyRepository extends FamilyRepository {
       name: asset.name,
       categoryName: categoryName,
       emoji: asset.emoji,
-      imagePath: permissions.viewDetails ? asset.imagePath : null,
-      imageUrl: permissions.viewDetails ? downloadUrl : null,
-      imageStoragePath: permissions.viewDetails ? storagePath : null,
+      // A device-local path is useless on another family member's phone.
+      // Keep it only when the file was successfully copied to shared storage.
+      imagePath: storagePath == null ? null : asset.imagePath,
+      imageUrl: downloadUrl,
+      imageStoragePath: storagePath,
       location: permissions.viewLocation ? asset.location : null,
       description: permissions.viewDetails ? asset.description : null,
       documents: permissions.viewDocuments ? sharedDocs : const [],
@@ -140,12 +148,13 @@ class SecureFamilyRepository extends FamilyRepository {
       updatedAt: now,
     );
 
-    try {
-      await _sharedAssets.doc(docId).set(shared.toFirestore())
-          .timeout(const Duration(seconds: 8));
-    } on TimeoutException {
-      // Firestore may queue the write while offline.
-    }
+    // IMPORTANT: never report success unless the shared_assets Firestore
+    // document has actually been accepted by Firestore. The old code caught
+    // TimeoutException here and returned success anyway, which produced the
+    // exact "Asset shared with your family!" snackbar while no shared record
+    // was guaranteed to exist.
+    await _sharedAssets.doc(docId).set(shared.toFirestore())
+        .timeout(const Duration(seconds: 12));
 
     return shared;
   }
