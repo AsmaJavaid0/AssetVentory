@@ -139,9 +139,11 @@ class SharedAssetModel {
   }
 
   String? get displayImageUrl {
-    if (imageUrl != null && imageUrl!.isNotEmpty) return imageUrl;
-    if (imageStoragePath != null && imageStoragePath!.startsWith('http')) return imageStoragePath;
-    if (imagePath != null && imagePath!.isNotEmpty) return imagePath;
+    if (imageUrl != null && imageUrl!.startsWith('http')) return imageUrl;
+    if (imageStoragePath != null && imageStoragePath!.startsWith('http')) {
+      return imageStoragePath;
+    }
+    if (imagePath != null && imagePath!.startsWith('http')) return imagePath;
     return null;
   }
 }
