@@ -106,7 +106,6 @@ class FamilyMembersScreen extends StatelessWidget {
             ),
           );
           final otherMembers = members.where((m) => !m.isOwner).toList();
-          final canEdit = owner.userId == currentUser.id;
 
           return ListView(
             padding: const EdgeInsets.fromLTRB(20, 16, 20, 110),
@@ -116,7 +115,7 @@ class FamilyMembersScreen extends StatelessWidget {
               _MemberCard(
                 member: owner,
                 isCurrent: owner.userId == currentUser.id,
-                canEdit: canEdit || owner.userId == currentUser.id,
+                canEdit: true,
                 onEdit: () => _editName(context, owner),
               ),
               const SizedBox(height: 24),
@@ -144,7 +143,9 @@ class FamilyMembersScreen extends StatelessWidget {
                     child: _MemberCard(
                       member: member,
                       isCurrent: member.userId == currentUser.id,
-                      canEdit: canEdit || member.userId == currentUser.id,
+                      // This is a viewer-local alias, so every family member
+                      // can rename anyone for their own screen only.
+                      canEdit: true,
                       onEdit: () => _editName(context, member),
                     ),
                   ),
@@ -199,10 +200,6 @@ class FamilyMembersScreen extends StatelessWidget {
     BuildContext context,
     FamilyMemberModel member,
   ) async {
-    // Keep the input value inside the dialog instead of disposing a
-    // TextEditingController while the dialog route is still being removed.
-    // That was causing Flutter's InheritedElement `_dependents.isEmpty`
-    // assertion on save.
     String newName = member.familyDisplayName;
 
     final result = await showDialog<String>(
