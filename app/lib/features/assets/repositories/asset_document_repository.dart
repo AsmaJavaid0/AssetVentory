@@ -81,6 +81,51 @@ class AssetDocumentRepository implements IAssetDocumentRepository {
   }
 
   @override
+  Future<LocalAssetDocument> replaceDocument(
+    LocalAssetDocument document,
+    File sourceFile,
+  ) async {
+    final newPath = await _fileStorage.saveDocument(
+      assetId: document.assetId,
+      sourceFile: sourceFile,
+    );
+    final now = DateTime.now();
+    final newName = sourceFile.path.split(Platform.pathSeparator).last;
+    final newType = _extension(sourceFile.path);
+    final newSize = await sourceFile.length();
+
+    try {
+      await (_database.update(_database.assetDocuments)
+            ..where((row) => row.id.equals(document.id)))
+          .write(
+        AssetDocumentsCompanion(
+          name: Value(newName),
+          filePath: Value(newPath),
+          fileType: Value(newType),
+          fileSize: Value(newSize),
+          updatedAt: Value(now),
+        ),
+      );
+    } catch (_) {
+      await _fileStorage.deleteFile(newPath);
+      rethrow;
+    }
+
+    await _fileStorage.deleteFile(document.filePath);
+
+    return LocalAssetDocument(
+      id: document.id,
+      assetId: document.assetId,
+      name: newName,
+      filePath: newPath,
+      fileType: newType,
+      fileSize: newSize,
+      createdAt: document.createdAt,
+      updatedAt: now,
+    );
+  }
+
+  @override
   Future<void> deleteDocument(LocalAssetDocument document) async {
     await (_database.delete(_database.assetDocuments)
           ..where((row) => row.id.equals(document.id)))
