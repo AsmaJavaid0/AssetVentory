@@ -79,11 +79,23 @@ service cloud.firestore {
         resource.data.userId == request.auth.uid ||
         isFamilyMember(resource.data.familyId)
       );
+
       allow create: if isAuthenticated() && request.resource.data.userId == request.auth.uid;
-      allow update: if isFamilyOwner(resource.data.familyId) ||
-        (isAuthenticated() &&
+
+      // Family owners can edit member records. A member can edit ONLY their
+      // own displayName. Use the authenticated UID from the stored member
+      // record and the post-write document so this remains valid even if the
+      // client constructs the document reference from familyId + userId.
+      allow update: if isAuthenticated() && (
+        isFamilyOwner(resource.data.familyId) ||
+        (
           resource.data.userId == request.auth.uid &&
-          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['displayName']));
+          request.resource.data.userId == request.auth.uid &&
+          request.resource.data.familyId == resource.data.familyId &&
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['displayName'])
+        )
+      );
+
       allow delete: if isFamilyOwner(resource.data.familyId) ||
         (isAuthenticated() && resource.data.userId == request.auth.uid);
     }
