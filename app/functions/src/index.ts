@@ -1,49 +1,124 @@
 import * as functions from 'firebase-functions';
 import * as admin from 'firebase-admin';
+import { randomBytes, scryptSync, timingSafeEqual } from 'crypto';
 
 admin.initializeApp();
+const db = admin.firestore();
 
-/**
- * Cloud Function triggered when a new task is created.
- * Sends FCM push notification to assigned family member if assignedTo != createdBy.
- */
+export const setFamilySharePin = functions.https.onCall(async (data, context) => {
+  if (!context.auth) throw new functions.https.HttpsError('unauthenticated', 'Sign in first.');
+
+  const familyId = String(data?.familyId ?? '').trim();
+  const pin = String(data?.pin ?? '');
+  if (!familyId || !/^\d{4,6}$/.test(pin)) {
+    throw new functions.https.HttpsError('invalid-argument', 'PIN must contain 4 to 6 digits.');
+  }
+
+  const familyRef = db.collection('families').doc(familyId);
+  const familySnap = await familyRef.get();
+  if (!familySnap.exists || familySnap.data()?.ownerId !== context.auth.uid) {
+    throw new functions.https.HttpsError('permission-denied', 'Only the family owner can change the PIN.');
+  }
+
+  const salt = randomBytes(16).toString('hex');
+  const hash = scryptSync(pin, salt, 64).toString('hex');
+  await familyRef.update({
+    pinEnabled: true,
+    pinSalt: salt,
+    pinHash: hash,
+    pinVersion: admin.firestore.FieldValue.increment(1),
+    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+  });
+
+  await revokeFamilyAccess(familyId);
+  return { success: true };
+});
+
+export const removeFamilySharePin = functions.https.onCall(async (data, context) => {
+  if (!context.auth) throw new functions.https.HttpsError('unauthenticated', 'Sign in first.');
+  const familyId = String(data?.familyId ?? '').trim();
+  const familySnap = await db.collection('families').doc(familyId).get();
+  if (!familySnap.exists || familySnap.data()?.ownerId !== context.auth.uid) {
+    throw new functions.https.HttpsError('permission-denied', 'Only the family owner can remove the PIN.');
+  }
+
+  await db.collection('families').doc(familyId).update({
+    pinEnabled: false,
+    pinSalt: admin.firestore.FieldValue.delete(),
+    pinHash: admin.firestore.FieldValue.delete(),
+    pinVersion: admin.firestore.FieldValue.increment(1),
+    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+  });
+  await revokeFamilyAccess(familyId);
+  return { success: true };
+});
+
+export const verifyFamilySharePin = functions.https.onCall(async (data, context) => {
+  if (!context.auth) throw new functions.https.HttpsError('unauthenticated', 'Sign in first.');
+  const familyId = String(data?.familyId ?? '').trim();
+  const pin = String(data?.pin ?? '');
+  if (!familyId || !/^\d{4,6}$/.test(pin)) {
+    throw new functions.https.HttpsError('invalid-argument', 'Enter a valid PIN.');
+  }
+
+  const familySnap = await db.collection('families').doc(familyId).get();
+  if (!familySnap.exists) throw new functions.https.HttpsError('not-found', 'Family not found.');
+  const family = familySnap.data()!;
+  if (!family.pinEnabled) return { success: true };
+
+  const memberSnap = await db.collection('family_members').doc(`${familyId}_${context.auth.uid}`).get();
+  if (!memberSnap.exists) throw new functions.https.HttpsError('permission-denied', 'You are not a member of this family.');
+
+  const salt = String(family.pinSalt ?? '');
+  const expected = String(family.pinHash ?? '');
+  const actual = scryptSync(pin, salt, 64);
+  const expectedBuffer = Buffer.from(expected, 'hex');
+  if (!salt || expectedBuffer.length !== actual.length || !timingSafeEqual(actual, expectedBuffer)) {
+    throw new functions.https.HttpsError('permission-denied', 'Incorrect family PIN.');
+  }
+
+  const version = Number(family.pinVersion ?? 1);
+  await db.collection('family_access').doc(`${familyId}_${context.auth.uid}`).set({
+    familyId,
+    userId: context.auth.uid,
+    pinVersion: version,
+    grantedAt: admin.firestore.FieldValue.serverTimestamp(),
+  });
+  return { success: true };
+});
+
+async function revokeFamilyAccess(familyId: string) {
+  const snapshot = await db.collection('family_access').where('familyId', '==', familyId).get();
+  if (snapshot.empty) return;
+  const batch = db.batch();
+  snapshot.docs.forEach((doc) => batch.delete(doc.ref));
+  await batch.commit();
+}
+
 export const onTaskCreated = functions.firestore
   .document('tasks/{taskId}')
   .onCreate(async (snapshot, context) => {
     const task = snapshot.data();
     if (!task) return;
-
     const assignedTo = task.assignedTo;
     const createdBy = task.createdBy;
-
-    // Send push notification if assigned to another family member
     if (assignedTo && assignedTo !== createdBy) {
-      const title = 'New Task Assigned';
-      const body = `${task.createdByName || 'A family member'} assigned you a task: "${task.title}"`;
-      await sendFcmNotification(assignedTo, title, body, {
+      await sendFcmNotification(assignedTo, 'New Task Assigned', `${task.createdByName || 'A family member'} assigned you a task: "${task.title}"`, {
         taskId: context.params.taskId,
         type: 'task_assigned',
       });
     }
   });
 
-/**
- * Cloud Function triggered when a task is updated.
- * Notifies assigned member if completed or updated by creator.
- */
 export const onTaskUpdated = functions.firestore
   .document('tasks/{taskId}')
   .onUpdate(async (change, context) => {
     const before = change.before.data();
     const after = change.after.data();
     if (!before || !after) return;
-
-    // Completion notification to task creator
     if (before.status !== 'completed' && after.status === 'completed') {
       if (after.createdBy && after.completedBy && after.createdBy !== after.completedBy) {
-        const title = 'Task Completed';
-        const body = `${after.completedByName || 'A family member'} completed: "${after.title}"`;
-        await sendFcmNotification(after.createdBy, title, body, {
+        await sendFcmNotification(after.createdBy, 'Task Completed', `${after.completedByName || 'A family member'} completed: "${after.title}"`, {
           taskId: context.params.taskId,
           type: 'task_completed',
         });
@@ -51,55 +126,16 @@ export const onTaskUpdated = functions.firestore
     }
   });
 
-/**
- * Helper function to query FCM tokens for a target user and dispatch Multicast FCM message.
- */
-async function sendFcmNotification(
-  userId: string,
-  title: string,
-  body: string,
-  data: Record<string, string>
-) {
+async function sendFcmNotification(userId: string, title: string, body: string, data: Record<string, string>) {
   try {
-    const devicesSnapshot = await admin
-      .firestore()
-      .collection('users')
-      .doc(userId)
-      .collection('devices')
-      .get();
-
-    if (devicesSnapshot.empty) return;
-
+    const devicesSnapshot = await db.collection('users').doc(userId).collection('devices').get();
     const tokens: string[] = [];
-    devicesSnapshot.forEach((doc) => {
-      const tokenData = doc.data();
-      if (tokenData.token) tokens.push(tokenData.token);
-    });
-
-    if (tokens.length === 0) return;
-
-    const message: admin.messaging.MulticastMessage = {
-      tokens,
-      notification: {
-        title,
-        body,
-      },
-      data,
-    };
-
-    const response = await admin.messaging().sendEachForMulticast(message);
-
-    // Clean up stale invalid tokens
+    devicesSnapshot.forEach((doc) => { if (doc.data().token) tokens.push(doc.data().token); });
+    if (!tokens.length) return;
+    const response = await admin.messaging().sendEachForMulticast({ tokens, notification: { title, body }, data });
     response.responses.forEach((resp, idx) => {
-      if (!resp.success && resp.error) {
-        const errCode = resp.error.code;
-        if (
-          errCode === 'messaging/invalid-registration-token' ||
-          errCode === 'messaging/registration-token-not-registered'
-        ) {
-          const badToken = tokens[idx];
-          admin.firestore().collection('users').doc(userId).collection('devices').doc(badToken).delete();
-        }
+      if (!resp.success && resp.error && ['messaging/invalid-registration-token', 'messaging/registration-token-not-registered'].includes(resp.error.code)) {
+        void db.collection('users').doc(userId).collection('devices').doc(tokens[idx]).delete();
       }
     });
   } catch (error) {
