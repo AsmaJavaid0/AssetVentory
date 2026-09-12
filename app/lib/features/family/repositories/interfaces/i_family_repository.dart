@@ -25,10 +25,12 @@ abstract class IFamilyRepository {
   Future<void> updateSharedAssetPermissions({required String sharedAssetId, required SharingPermissionsModel permissions});
   Future<void> unshareAsset(String sharedAssetId);
 
-  Future<void> setFamilySharePin({required String familyId, required String pin});
-  Future<void> removeFamilySharePin(String familyId);
-  Future<bool> verifyFamilySharePin({required String familyId, required String pin});
-  Future<bool> isFamilyShareUnlocked(String familyId);
+  // Family Share PIN security. The default implementations keep existing
+  // repository variants source-compatible; the secure repository overrides them.
+  Future<void> setFamilySharePin({required String familyId, required String pin}) => throw UnimplementedError();
+  Future<void> removeFamilySharePin(String familyId) => throw UnimplementedError();
+  Future<bool> verifyFamilySharePin({required String familyId, required String pin}) => throw UnimplementedError();
+  Future<bool> isFamilyShareUnlocked(String familyId) => throw UnimplementedError();
 
   Future<void> leaveFamily({required String familyId, required String userId});
   Future<void> transferOwnership({required String familyId, required String currentOwnerId, required String newOwnerId});
