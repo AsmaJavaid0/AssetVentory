@@ -56,27 +56,32 @@ class _SharedAssetDetailsScreenState extends State<SharedAssetDetailsScreen> {
   }
 
   Future<String?> _resolveDocumentPath(SharedDocumentModel doc) async {
-    final localPath = doc.filePath;
-    if (localPath != null && localPath.isNotEmpty) {
-      final file = File(localPath);
-      if (await file.exists()) return localPath;
-    }
-
-    final directUrl = doc.downloadUrl ??
-        (doc.storagePath?.startsWith('http') == true ? doc.storagePath : null);
-    if (directUrl != null && directUrl.isNotEmpty) return directUrl;
-
+    // A Supabase signed URL expires. Prefer the private storage path so the
+    // current family member receives a fresh URL on every viewing session.
     final storagePath = doc.storagePath;
-    if (storagePath != null && storagePath.isNotEmpty) {
+    if (storagePath != null && storagePath.isNotEmpty && !storagePath.startsWith('http')) {
       try {
         return await FamilyFileService().getDownloadUrl(
           familyId: widget.asset.familyId,
           path: storagePath,
         );
       } catch (e) {
-        debugPrint('Failed to resolve shared image ${doc.name}: $e');
+        debugPrint('Failed to resolve shared document ${doc.name}: $e');
       }
     }
+
+    // Local paths are only useful on the owner's device, but remain a valid
+    // fallback for older/local records.
+    final localPath = doc.filePath;
+    if (localPath != null && localPath.isNotEmpty) {
+      final file = File(localPath);
+      if (await file.exists()) return localPath;
+    }
+
+    // Backwards compatibility for older records that only contain a URL.
+    final directUrl = doc.downloadUrl ??
+        (doc.storagePath?.startsWith('http') == true ? doc.storagePath : null);
+    if (directUrl != null && directUrl.isNotEmpty) return directUrl;
     return null;
   }
 
@@ -99,6 +104,34 @@ class _SharedAssetDetailsScreenState extends State<SharedAssetDetailsScreen> {
     });
   }
 
+  Future<String?> _resolveAssetImagePath() async {
+    final asset = widget.asset;
+
+    // The stored imageUrl is a short-lived signed URL. Generate a new one
+    // from imageStoragePath for family members instead of reusing an expired URL.
+    final storagePath = asset.imageStoragePath;
+    if (storagePath != null && storagePath.isNotEmpty && !storagePath.startsWith('http')) {
+      try {
+        return await FamilyFileService().getDownloadUrl(
+          familyId: asset.familyId,
+          path: storagePath,
+        );
+      } catch (e) {
+        debugPrint('Failed to create fresh shared asset image URL: $e');
+      }
+    }
+
+    final localPath = asset.imagePath;
+    if (localPath != null && localPath.isNotEmpty && !localPath.startsWith('http')) {
+      final file = File(localPath);
+      if (await file.exists()) return localPath;
+    }
+
+    return asset.imageUrl ??
+        (asset.imageStoragePath?.startsWith('http') == true ? asset.imageStoragePath : null) ??
+        (asset.imagePath?.startsWith('http') == true ? asset.imagePath : null);
+  }
+
   Future<void> _resolveAssetImage() async {
     final asset = widget.asset;
     if (!asset.permissions.viewDetails) {
@@ -106,52 +139,14 @@ class _SharedAssetDetailsScreenState extends State<SharedAssetDetailsScreen> {
       return;
     }
 
-    final localPath = asset.imagePath;
-    if (localPath != null && localPath.isNotEmpty && !localPath.startsWith('http')) {
-      final file = File(localPath);
-      if (await file.exists()) {
-        if (!mounted) return;
-        setState(() {
-          _resolvedAssetImage = localPath;
-          _assetImageIsNetwork = false;
-          _loadingAssetImage = false;
-        });
-        return;
-      }
-    }
+    final path = await _resolveAssetImagePath();
+    if (!mounted) return;
 
-    final directUrl = asset.imageUrl ??
-        (asset.imageStoragePath?.startsWith('http') == true ? asset.imageStoragePath : null) ??
-        (asset.imagePath?.startsWith('http') == true ? asset.imagePath : null);
-    if (directUrl != null && directUrl.isNotEmpty) {
-      if (!mounted) return;
-      setState(() {
-        _resolvedAssetImage = directUrl;
-        _assetImageIsNetwork = true;
-        _loadingAssetImage = false;
-      });
-      return;
-    }
-
-    final storagePath = asset.imageStoragePath;
-    if (storagePath != null && storagePath.isNotEmpty) {
-      try {
-        final url = await FamilyFileService().getDownloadUrl(
-          familyId: asset.familyId,
-          path: storagePath,
-        );
-        if (!mounted) return;
-        setState(() {
-          _resolvedAssetImage = url;
-          _assetImageIsNetwork = true;
-          _loadingAssetImage = false;
-        });
-        return;
-      } catch (e) {
-        debugPrint('Failed to load shared asset image: $e');
-      }
-    }
-    if (mounted) setState(() => _loadingAssetImage = false);
+    setState(() {
+      _resolvedAssetImage = path;
+      _assetImageIsNetwork = path?.startsWith('http') == true;
+      _loadingAssetImage = false;
+    });
   }
 
   void _openAssetImage() {
@@ -181,6 +176,18 @@ class _SharedAssetDetailsScreenState extends State<SharedAssetDetailsScreen> {
     if (_documentLoading[doc.id] == true) return;
     setState(() => _documentLoading[doc.id] = true);
     try {
+      // A family member cannot use the owner's local filePath. Use the private
+      // Supabase path first and create a fresh signed URL for this viewer.
+      final storagePath = doc.storagePath;
+      if (storagePath != null && storagePath.isNotEmpty && !storagePath.startsWith('http')) {
+        final url = await FamilyFileService().getDownloadUrl(
+          familyId: widget.asset.familyId,
+          path: storagePath,
+        );
+        await _openUrl(url);
+        return;
+      }
+
       if (doc.filePath != null && doc.filePath!.isNotEmpty) {
         final file = File(doc.filePath!);
         if (await file.exists()) {
@@ -188,20 +195,14 @@ class _SharedAssetDetailsScreenState extends State<SharedAssetDetailsScreen> {
           return;
         }
       }
+
       final directUrl = doc.downloadUrl ??
           (doc.storagePath?.startsWith('http') == true ? doc.storagePath : null);
       if (directUrl != null && directUrl.isNotEmpty) {
         await _openUrl(directUrl);
         return;
       }
-      if (doc.storagePath != null && doc.storagePath!.isNotEmpty) {
-        final url = await FamilyFileService().getDownloadUrl(
-          familyId: widget.asset.familyId,
-          path: doc.storagePath!,
-        );
-        await _openUrl(url);
-        return;
-      }
+
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Could not locate this document.')),
