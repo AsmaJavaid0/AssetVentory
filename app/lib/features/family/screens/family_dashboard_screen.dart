@@ -11,7 +11,6 @@ import '../models/shared_asset_model.dart';
 import '../widgets/member_avatar_stack.dart';
 import 'family_members_screen.dart';
 import 'share_asset_screen.dart';
-import 'share_asset_permissions_screen.dart';
 import 'family_settings_screen.dart';
 import 'family_member_assets_screen.dart';
 import 'shared_asset_details_screen.dart';
@@ -38,15 +37,6 @@ class _FamilyDashboardScreenState extends State<FamilyDashboardScreen> {
   String _searchQuery = '';
 
   @override
-  void initState() {
-    super.initState();
-    _searchController.addListener(() {
-      final query = _searchController.text.trim().toLowerCase();
-      if (query != _searchQuery) setState(() => _searchQuery = query);
-    });
-  }
-
-  @override
   void dispose() {
     _searchController.dispose();
     super.dispose();
@@ -62,7 +52,7 @@ class _FamilyDashboardScreenState extends State<FamilyDashboardScreen> {
         ),
       ),
     );
-    if (result == true) widget.onFamilyUpdated();
+    if (result == true && mounted) widget.onFamilyUpdated();
   }
 
   void _openMembers() {
@@ -93,75 +83,60 @@ class _FamilyDashboardScreenState extends State<FamilyDashboardScreen> {
     }
   }
 
-  Future<void> _managePermissions(SharedAssetModel asset) async {
-    final updated = await ShareAssetPermissionsScreen.navigateTo(
-      context,
-      sharedAsset: asset,
-    );
-    if (updated == true && mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Sharing permissions updated.'),
-          backgroundColor: AppColors.success,
-        ),
-      );
-    }
-  }
-
   void _openSharedAsset(SharedAssetModel asset) {
     SharedAssetDetailsScreen.navigateTo(context, asset);
   }
 
-  Future<void> _confirmUnshare(SharedAssetModel asset) async {
-    final confirm = await showDialog<bool>(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: Text(
-          'Stop Sharing Asset?',
-          style: GoogleFonts.outfit(fontWeight: FontWeight.w700),
-        ),
-        content: Text(
-          'Are you sure you want to stop sharing "${asset.name}" with the family? Your local personal copy will not be affected.',
-          style: GoogleFonts.outfit(),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext, false),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext, true),
-            child: const Text(
-              'Stop Sharing',
-              style: TextStyle(color: AppColors.error),
-            ),
-          ),
-        ],
-      ),
+  Future<void> _openSearch() async {
+    _searchController.text = _searchQuery;
+    _searchController.selection = TextSelection.collapsed(
+      offset: _searchController.text.length,
     );
 
-    if (confirm != true) return;
-
-    try {
-      await _familyRepository.unshareAsset(asset.id);
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Asset is no longer shared with the family.'),
-            backgroundColor: AppColors.success,
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) {
+        return AlertDialog(
+          title: Text(
+            'Search shared assets',
+            style: GoogleFonts.outfit(fontWeight: FontWeight.w700),
           ),
-        );
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(ErrorFormatter.format(e)),
-            backgroundColor: AppColors.error,
+          content: TextField(
+            controller: _searchController,
+            autofocus: true,
+            textInputAction: TextInputAction.search,
+            decoration: InputDecoration(
+              hintText: 'Asset name',
+              prefixIcon: const Icon(Icons.search_rounded),
+              suffixIcon: IconButton(
+                onPressed: _searchController.clear,
+                icon: const Icon(Icons.close_rounded),
+              ),
+            ),
+            onChanged: (value) {
+              if (mounted) setState(() => _searchQuery = value.trim().toLowerCase());
+            },
           ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                setState(() => _searchQuery = '');
+                _searchController.clear();
+                Navigator.pop(dialogContext);
+              },
+              child: const Text('Clear'),
+            ),
+            FilledButton(
+              style: FilledButton.styleFrom(
+                backgroundColor: AppColors.primaryPurple,
+              ),
+              onPressed: () => Navigator.pop(dialogContext),
+              child: const Text('Done'),
+            ),
+          ],
         );
-      }
-    }
+      },
+    );
   }
 
   Widget _buildHeader(BuildContext context) {
@@ -177,9 +152,10 @@ class _FamilyDashboardScreenState extends State<FamilyDashboardScreen> {
           Container(
             width: 48,
             height: 48,
-            decoration: const BoxDecoration(
-              gradient: AppColors.logoGradient,
+            decoration: BoxDecoration(
+              color: Colors.white.withAlpha(35),
               shape: BoxShape.circle,
+              border: Border.all(color: Colors.white.withAlpha(90), width: 1.2),
             ),
             child: const Icon(
               Icons.diversity_3_rounded,
@@ -220,57 +196,17 @@ class _FamilyDashboardScreenState extends State<FamilyDashboardScreen> {
             ),
           ),
           const SizedBox(width: 8),
-          Material(
-            color: Colors.white.withAlpha(24),
-            shape: const CircleBorder(),
-            child: InkWell(
-              customBorder: const CircleBorder(),
-              onTap: _openSettings,
-              child: const SizedBox(
-                width: 42,
-                height: 42,
-                child: Icon(Icons.settings_outlined, color: Colors.white, size: 22),
-              ),
-            ),
+          IconButton(
+            tooltip: 'Search',
+            onPressed: _openSearch,
+            icon: const Icon(Icons.search_rounded, color: Colors.white, size: 24),
+          ),
+          IconButton(
+            tooltip: 'Settings',
+            onPressed: _openSettings,
+            icon: const Icon(Icons.settings_outlined, color: Colors.white, size: 22),
           ),
         ],
-      ),
-    );
-  }
-
-  Widget _buildSearchField() {
-    return Container(
-      decoration: BoxDecoration(
-        color: AppColors.surfaceWhite,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppColors.lightLavenderBorder),
-      ),
-      child: TextField(
-        controller: _searchController,
-        style: GoogleFonts.outfit(fontSize: 14),
-        decoration: InputDecoration(
-          hintText: 'Search shared assets...',
-          hintStyle: GoogleFonts.outfit(
-            fontSize: 14,
-            color: AppColors.textMuted,
-          ),
-          prefixIcon: const Icon(
-            Icons.search_rounded,
-            color: AppColors.primaryPurple,
-            size: 21,
-          ),
-          suffixIcon: _searchQuery.isEmpty
-              ? null
-              : IconButton(
-                  onPressed: _searchController.clear,
-                  icon: const Icon(Icons.close_rounded, size: 19),
-                ),
-          border: InputBorder.none,
-          contentPadding: const EdgeInsets.symmetric(
-            horizontal: 14,
-            vertical: 13,
-          ),
-        ),
       ),
     );
   }
@@ -283,18 +219,14 @@ class _FamilyDashboardScreenState extends State<FamilyDashboardScreen> {
   }) {
     final visibleAssets = assets
         .where((asset) => asset.ownerId == ownerId)
-        .where(
-          (asset) =>
-              _searchQuery.isEmpty ||
-              asset.name.toLowerCase().contains(_searchQuery),
-        )
+        .where((asset) => _searchQuery.isEmpty || asset.name.toLowerCase().contains(_searchQuery))
         .toList();
 
     if (visibleAssets.isEmpty) return const SizedBox.shrink();
 
     final cleanName = ownerName.trim().isEmpty ? 'Member' : ownerName.trim();
     final displayName = isCurrentUser ? 'My Assets' : "$cleanName's Assets";
-    final initial = cleanName.isEmpty ? '?' : cleanName[0].toUpperCase();
+    final initial = cleanName[0].toUpperCase();
 
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
@@ -329,15 +261,19 @@ class _FamilyDashboardScreenState extends State<FamilyDashboardScreen> {
                 Container(
                   width: 50,
                   height: 50,
-                  decoration: const BoxDecoration(
-                    gradient: AppColors.logoGradient,
+                  decoration: BoxDecoration(
+                    color: AppColors.lightLavender,
                     shape: BoxShape.circle,
+                    border: Border.all(
+                      color: AppColors.primaryPurple.withAlpha(150),
+                      width: 1.5,
+                    ),
                   ),
                   child: Center(
                     child: Text(
                       initial,
                       style: GoogleFonts.outfit(
-                        color: Colors.white,
+                        color: AppColors.primaryPurple,
                         fontSize: 20,
                         fontWeight: FontWeight.w700,
                       ),
@@ -394,29 +330,45 @@ class _FamilyDashboardScreenState extends State<FamilyDashboardScreen> {
       ),
       child: Column(
         children: [
-          const Icon(
-            Icons.inventory_2_outlined,
-            size: 40,
-            color: AppColors.primaryPurple,
-          ),
+          const Icon(Icons.inventory_2_outlined, size: 40, color: AppColors.primaryPurple),
           const SizedBox(height: 12),
           Text(
             search ? 'No matching assets' : 'No shared assets yet',
-            style: GoogleFonts.outfit(
-              fontSize: 16,
-              fontWeight: FontWeight.w700,
-            ),
+            style: GoogleFonts.outfit(fontSize: 16, fontWeight: FontWeight.w700),
           ),
           const SizedBox(height: 6),
           Text(
-            search
-                ? 'Try a different asset name.'
-                : 'Use the Share Asset button above to share an asset with your family.',
+            search ? 'Try a different asset name.' : 'Use Share Asset to share an asset with your family.',
             textAlign: TextAlign.center,
-            style: GoogleFonts.outfit(
-              fontSize: 13,
-              color: AppColors.textSecondary,
-            ),
+            style: GoogleFonts.outfit(fontSize: 13, color: AppColors.textSecondary),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildStreamError(Object error) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: AppColors.surfaceWhite,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: AppColors.lightLavenderBorder),
+      ),
+      child: Column(
+        children: [
+          const Icon(Icons.cloud_off_rounded, size: 40, color: AppColors.error),
+          const SizedBox(height: 10),
+          Text(
+            'Could not load shared assets',
+            style: GoogleFonts.outfit(fontSize: 16, fontWeight: FontWeight.w700),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            ErrorFormatter.format(error),
+            textAlign: TextAlign.center,
+            style: GoogleFonts.outfit(fontSize: 12, color: AppColors.textSecondary),
           ),
         ],
       ),
@@ -450,32 +402,16 @@ class _FamilyDashboardScreenState extends State<FamilyDashboardScreen> {
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Text(
-                                'Family Members',
-                                style: GoogleFonts.outfit(
-                                  fontSize: 15,
-                                  fontWeight: FontWeight.w700,
-                                ),
-                              ),
+                              Text('Family Members', style: GoogleFonts.outfit(fontSize: 15, fontWeight: FontWeight.w700)),
                               const SizedBox(height: 2),
-                              Text(
-                                '${members.length} people connected',
-                                style: GoogleFonts.outfit(
-                                  fontSize: 12,
-                                  color: AppColors.textSecondary,
-                                ),
-                              ),
+                              Text('${members.length} people connected', style: GoogleFonts.outfit(fontSize: 12, color: AppColors.textSecondary)),
                             ],
                           ),
                         ),
                         MemberAvatarStack(members: members, onTap: _openMembers),
                         const SizedBox(width: 8),
                         IconButton(
-                          icon: const Icon(
-                            Icons.arrow_forward_ios_rounded,
-                            size: 16,
-                            color: AppColors.primaryPurple,
-                          ),
+                          icon: const Icon(Icons.arrow_forward_ios_rounded, size: 16, color: AppColors.primaryPurple),
                           onPressed: _openMembers,
                         ),
                       ],
@@ -491,16 +427,8 @@ class _FamilyDashboardScreenState extends State<FamilyDashboardScreen> {
               child: Row(
                 children: [
                   Expanded(
-                    child: Text(
-                      'Shared Assets',
-                      style: GoogleFonts.outfit(
-                        fontSize: 18,
-                        fontWeight: FontWeight.w700,
-                        color: AppColors.textPrimary,
-                      ),
-                    ),
+                    child: Text('Shared Assets', style: GoogleFonts.outfit(fontSize: 18, fontWeight: FontWeight.w700, color: AppColors.textPrimary)),
                   ),
-                  const SizedBox(width: 12),
                   ElevatedButton.icon(
                     onPressed: _openShareAsset,
                     icon: const Icon(Icons.share_rounded, size: 16),
@@ -509,27 +437,13 @@ class _FamilyDashboardScreenState extends State<FamilyDashboardScreen> {
                       backgroundColor: AppColors.primaryPurple,
                       foregroundColor: Colors.white,
                       elevation: 0,
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 16,
-                        vertical: 10,
-                      ),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      textStyle: GoogleFonts.outfit(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w600,
-                      ),
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      textStyle: GoogleFonts.outfit(fontSize: 13, fontWeight: FontWeight.w600),
                     ),
                   ),
                 ],
               ),
-            ),
-          ),
-          SliverToBoxAdapter(
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
-              child: _buildSearchField(),
             ),
           ),
           StreamBuilder<List<SharedAssetModel>>(
@@ -547,133 +461,62 @@ class _FamilyDashboardScreenState extends State<FamilyDashboardScreen> {
               if (assetSnapshot.connectionState == ConnectionState.waiting) {
                 return const SliverFillRemaining(
                   hasScrollBody: false,
-                  child: Center(
-                    child: CircularProgressIndicator(
-                      color: AppColors.primaryPurple,
-                    ),
-                  ),
+                  child: Center(child: CircularProgressIndicator(color: AppColors.primaryPurple)),
                 );
               }
 
               final assets = assetSnapshot.data ?? [];
-
-              // IMPORTANT: Shared assets are the source for this section.
-              // Do not hide an asset just because its owner's family_members
-              // document is temporarily missing/stale. The previous code did
-              // exactly that: Saad's shared asset existed, but only Asma was
-              // returned by family_members, so the asset was filtered out.
               final groupedOwners = <String, String>{};
               for (final asset in assets) {
-                if (asset.ownerId.isEmpty) continue;
-                final memberName = assets
-                    .where((a) => a.ownerId == asset.ownerId)
-                    .map((a) => a.ownerName.trim())
-                    .firstWhere(
-                      (name) => name.isNotEmpty,
-                      orElse: () => 'Member',
-                    );
-                groupedOwners[asset.ownerId] = memberName;
+                if (asset.ownerId.isNotEmpty) {
+                  groupedOwners[asset.ownerId] = asset.ownerName.trim().isEmpty ? 'Member' : asset.ownerName.trim();
+                }
               }
 
-              // Prefer the current family display name when the membership
-              // record exists, but keep owners that are only present in the
-              // shared_assets collection visible.
-              try {
-                final memberFuture = _familyRepository.getFamilyMembers(widget.family.id);
-                return FutureBuilder<List<FamilyMemberModel>>(
-                  future: memberFuture,
-                  builder: (context, memberSnapshot) {
-                    final members = memberSnapshot.data ?? [];
-                    for (final member in members) {
-                      if (groupedOwners.containsKey(member.userId)) {
-                        groupedOwners[member.userId] = member.familyDisplayName;
-                      }
+              return FutureBuilder<List<FamilyMemberModel>>(
+                future: _familyRepository.getFamilyMembers(widget.family.id),
+                builder: (context, memberSnapshot) {
+                  final members = memberSnapshot.data ?? [];
+                  for (final member in members) {
+                    if (groupedOwners.containsKey(member.userId)) {
+                      groupedOwners[member.userId] = member.familyDisplayName;
                     }
+                  }
 
-                    final ownerIds = groupedOwners.keys.where((ownerId) {
-                      if (_searchQuery.isEmpty) return true;
-                      return assets.any(
-                        (asset) =>
-                            asset.ownerId == ownerId &&
-                            asset.name.toLowerCase().contains(_searchQuery),
-                      );
-                    }).toList();
+                  final ownerIds = groupedOwners.keys.where((ownerId) {
+                    if (_searchQuery.isEmpty) return true;
+                    return assets.any((asset) => asset.ownerId == ownerId && asset.name.toLowerCase().contains(_searchQuery));
+                  }).toList();
 
-                    if (ownerIds.isEmpty) {
-                      return SliverToBoxAdapter(
-                        child: Padding(
-                          padding: const EdgeInsets.fromLTRB(20, 16, 20, 32),
-                          child: _buildNoAssetsState(
-                            search: _searchQuery.isNotEmpty,
-                          ),
-                        ),
-                      );
-                    }
-
-                    return SliverPadding(
-                      padding: const EdgeInsets.fromLTRB(20, 16, 20, 32),
-                      sliver: SliverList(
-                        delegate: SliverChildBuilderDelegate(
-                          (context, index) {
-                            final ownerId = ownerIds[index];
-                            return _buildMemberCard(
-                              ownerId: ownerId,
-                              ownerName: groupedOwners[ownerId] ?? 'Member',
-                              isCurrentUser: ownerId == widget.currentUser.id,
-                              assets: assets,
-                            );
-                          },
-                          childCount: ownerIds.length,
-                        ),
+                  if (ownerIds.isEmpty) {
+                    return SliverToBoxAdapter(
+                      child: Padding(
+                        padding: const EdgeInsets.fromLTRB(20, 16, 20, 32),
+                        child: _buildNoAssetsState(search: _searchQuery.isNotEmpty),
                       ),
                     );
-                  },
-                );
-              } catch (_) {
-                return SliverToBoxAdapter(
-                  child: Padding(
-                    padding: const EdgeInsets.fromLTRB(20, 16, 20, 32),
-                    child: _buildNoAssetsState(
-                      search: _searchQuery.isNotEmpty,
-                    ),
-                  ),
-                );
-              }
-            },
-          ),
-        ],
-      ),
-    );
-  }
+                  }
 
-  Widget _buildStreamError(Object error) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: AppColors.surfaceWhite,
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: AppColors.lightLavenderBorder),
-      ),
-      child: Column(
-        children: [
-          const Icon(Icons.cloud_off_rounded, size: 40, color: AppColors.error),
-          const SizedBox(height: 10),
-          Text(
-            'Could not load shared assets',
-            style: GoogleFonts.outfit(
-              fontSize: 16,
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-          const SizedBox(height: 6),
-          Text(
-            ErrorFormatter.format(error),
-            textAlign: TextAlign.center,
-            style: GoogleFonts.outfit(
-              fontSize: 12,
-              color: AppColors.textSecondary,
-            ),
+                  return SliverPadding(
+                    padding: const EdgeInsets.fromLTRB(20, 16, 20, 32),
+                    sliver: SliverList(
+                      delegate: SliverChildBuilderDelegate(
+                        (context, index) {
+                          final ownerId = ownerIds[index];
+                          return _buildMemberCard(
+                            ownerId: ownerId,
+                            ownerName: groupedOwners[ownerId] ?? 'Member',
+                            isCurrentUser: ownerId == widget.currentUser.id,
+                            assets: assets,
+                          );
+                        },
+                        childCount: ownerIds.length,
+                      ),
+                    ),
+                  );
+                },
+              );
+            },
           ),
         ],
       ),
