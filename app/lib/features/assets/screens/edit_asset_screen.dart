@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:emoji_picker_flutter/emoji_picker_flutter.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:open_filex/open_filex.dart';
 
@@ -42,12 +43,15 @@ class _EditAssetScreenState extends State<EditAssetScreen> {
   List<LocalCategory> _categories = [];
   late Future<List<LocalAssetDocument>> _documents;
   File? _newImage;
+  bool _photoRemoved = false;
   final _newFiles = <File>[];
   final _removedIds = <String>{};
   final _replacements = <String, File>{};
   bool _loading = true;
   bool _saving = false;
   bool _deleting = false;
+
+  bool get _hasPhoto => _newImage != null || (widget.asset.imagePath != null && !_photoRemoved);
 
   static const _extensions = [
     'pdf','doc','docx','xls','xlsx','ppt','pptx','txt','csv','rtf','zip',
@@ -77,11 +81,101 @@ class _EditAssetScreenState extends State<EditAssetScreen> {
     }
   }
 
-  Future<void> _pickImage() async {
+  Future<void> _pickAssetImage(ImageSource source) async {
     try {
-      final picked = await _picker.pickImage(source: ImageSource.gallery, imageQuality: 80);
-      if (picked != null && mounted) setState(() => _newImage = File(picked.path));
+      final picked = await _picker.pickImage(source: source, imageQuality: 85);
+      if (picked != null && mounted) {
+        setState(() {
+          _newImage = File(picked.path);
+          _photoRemoved = false;
+        });
+      }
     } catch (_) {}
+  }
+
+  void _removeAssetPhoto() {
+    setState(() {
+      _newImage = null;
+      _photoRemoved = true;
+    });
+  }
+
+  void _openEmojiPicker() {
+    showModalBottomSheet<void>(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (sheet) => SizedBox(
+        height: 340,
+        child: EmojiPicker(
+          onEmojiSelected: (_, emoji) {
+            setState(() {
+              _emoji = emoji.emoji;
+              _newImage = null;
+              _photoRemoved = true;
+            });
+            Navigator.pop(sheet);
+          },
+        ),
+      ),
+    );
+  }
+
+  Future<void> _showAvatarOptions() async {
+    await showModalBottomSheet<void>(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (sheetContext) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const SizedBox(height: 12),
+            Text(
+              _hasPhoto ? 'Asset Photo Options' : 'Choose Visual',
+              style: GoogleFonts.outfit(fontSize: 18, fontWeight: FontWeight.w700),
+            ),
+            const SizedBox(height: 8),
+            ListTile(
+              leading: const Icon(Icons.photo_camera_rounded, color: AppColors.primaryPurple),
+              title: const Text('Take Photo'),
+              onTap: () {
+                Navigator.pop(sheetContext);
+                _pickAssetImage(ImageSource.camera);
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.photo_library_rounded, color: AppColors.primaryPurple),
+              title: const Text('Choose from Gallery'),
+              onTap: () {
+                Navigator.pop(sheetContext);
+                _pickAssetImage(ImageSource.gallery);
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.emoji_emotions_outlined, color: AppColors.primaryPurple),
+              title: Text(_hasPhoto ? 'Replace with Emoji' : 'Change Emoji'),
+              onTap: () {
+                Navigator.pop(sheetContext);
+                _openEmojiPicker();
+              },
+            ),
+            if (_hasPhoto)
+              ListTile(
+                leading: const Icon(Icons.delete_outline_rounded, color: AppColors.error),
+                title: const Text('Remove Photo', style: TextStyle(color: AppColors.error)),
+                onTap: () {
+                  Navigator.pop(sheetContext);
+                  _removeAssetPhoto();
+                },
+              ),
+            const SizedBox(height: 8),
+          ],
+        ),
+      ),
+    );
   }
 
   Future<List<PlatformFile>> _files() => FilePicker.pickFiles(
@@ -117,7 +211,16 @@ class _EditAssetScreenState extends State<EditAssetScreen> {
     } catch (_) {}
   }
 
-  Future<void> _replace(LocalAssetDocument document) async {
+  Future<void> _replaceFromGallery(LocalAssetDocument document) async {
+    try {
+      final picked = await _picker.pickImage(source: ImageSource.gallery, imageQuality: 90);
+      if (picked != null && mounted) {
+        setState(() => _replacements[document.id] = File(picked.path));
+      }
+    } catch (_) {}
+  }
+
+  Future<void> _replaceFromFile(LocalAssetDocument document) async {
     try {
       final picked = await _files();
       if (!mounted || picked.isEmpty) return;
@@ -126,23 +229,84 @@ class _EditAssetScreenState extends State<EditAssetScreen> {
     } catch (_) {}
   }
 
+  Future<void> _replace(LocalAssetDocument document) async {
+    await showModalBottomSheet<void>(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (sheetContext) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const SizedBox(height: 12),
+            Text(
+              'Replace Media',
+              style: GoogleFonts.outfit(fontSize: 18, fontWeight: FontWeight.w700),
+            ),
+            const SizedBox(height: 8),
+            ListTile(
+              leading: const Icon(Icons.photo_library_rounded, color: AppColors.primaryPurple),
+              title: const Text('Photos from Gallery'),
+              subtitle: const Text('Pick a replacement photo'),
+              onTap: () {
+                Navigator.pop(sheetContext);
+                _replaceFromGallery(document);
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.insert_drive_file_outlined, color: AppColors.primaryPurple),
+              title: const Text('Documents & Files'),
+              subtitle: const Text('PDFs, spreadsheets, and more'),
+              onTap: () {
+                Navigator.pop(sheetContext);
+                _replaceFromFile(document);
+              },
+            ),
+            const SizedBox(height: 8),
+          ],
+        ),
+      ),
+    );
+  }
+
   Future<void> _mediaMenu() async {
     await showModalBottomSheet<void>(
       context: context,
-      builder: (sheet) => SafeArea(
-        child: Column(mainAxisSize: MainAxisSize.min, children: [
-          const ListTile(title: Text('Add Media'), subtitle: Text('Choose photos or documents')),
-          ListTile(
-            leading: const Icon(Icons.photo_library_outlined),
-            title: const Text('Gallery'),
-            onTap: () { Navigator.pop(sheet); _addImages(); },
-          ),
-          ListTile(
-            leading: const Icon(Icons.attach_file),
-            title: const Text('Documents & Files'),
-            onTap: () { Navigator.pop(sheet); _addFiles(); },
-          ),
-        ]),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (sheetContext) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const SizedBox(height: 12),
+            Text(
+              'Add Media',
+              style: GoogleFonts.outfit(fontSize: 18, fontWeight: FontWeight.w700),
+            ),
+            const SizedBox(height: 8),
+            ListTile(
+              leading: const Icon(Icons.photo_library_rounded, color: AppColors.primaryPurple),
+              title: const Text('Photos from Gallery'),
+              subtitle: const Text('Pick one or more images'),
+              onTap: () {
+                Navigator.pop(sheetContext);
+                _addImages();
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.insert_drive_file_outlined, color: AppColors.primaryPurple),
+              title: const Text('Documents & Files'),
+              subtitle: const Text('PDFs, spreadsheets, and more'),
+              onTap: () {
+                Navigator.pop(sheetContext);
+                _addFiles();
+              },
+            ),
+            const SizedBox(height: 8),
+          ],
+        ),
       ),
     );
   }
@@ -187,13 +351,17 @@ class _EditAssetScreenState extends State<EditAssetScreen> {
     if (!_formKey.currentState!.validate()) return;
     setState(() => _saving = true);
     try {
+      final clearPhoto = _photoRemoved && _newImage == null;
+      final effectiveImagePath = clearPhoto ? null : (_newImage?.path ?? widget.asset.imagePath);
+
       await _assets.updateAsset(widget.asset.copyWith(
         name: _name.text.trim(),
         emoji: _emoji,
         categoryId: _categoryId,
         location: _location.text.trim().isEmpty ? null : _location.text.trim(),
         description: _description.text.trim().isEmpty ? null : _description.text.trim(),
-        imagePath: _newImage?.path ?? widget.asset.imagePath,
+        imagePath: effectiveImagePath,
+        clearImagePath: clearPhoto,
         qrEnabled: _qrEnabled,
         customFields: _customFields,
         updatedAt: DateTime.now(),
@@ -243,15 +411,6 @@ class _EditAssetScreenState extends State<EditAssetScreen> {
     }
   }
 
-  void _emojiPicker() {
-    showModalBottomSheet<void>(
-      context: context,
-      builder: (sheet) => SizedBox(
-        height: 340,
-        child: EmojiPicker(onEmojiSelected: (_, emoji) { setState(() => _emoji = emoji.emoji); Navigator.pop(sheet); }),
-      ),
-    );
-  }
 
   Future<void> _customField({String? oldKey, String? oldValue}) async {
     final key = TextEditingController(text: oldKey ?? '');
@@ -325,19 +484,68 @@ class _EditAssetScreenState extends State<EditAssetScreen> {
       body: _loading ? const Center(child: CircularProgressIndicator()) : Form(
         key: _formKey,
         child: ListView(padding: const EdgeInsets.fromLTRB(20, 20, 20, 120), children: [
-          Center(child: Stack(children: [
-            CircleAvatar(
-              radius: 56,
-              backgroundColor: AppColors.lightLavender,
-              backgroundImage: _newImage != null ? FileImage(_newImage!) : (widget.asset.imagePath != null ? FileImage(File(widget.asset.imagePath!)) : null),
-              child: _newImage == null && widget.asset.imagePath == null ? Text(_emoji, style: const TextStyle(fontSize: 42)) : null,
+          Center(
+            child: GestureDetector(
+              onTap: _showAvatarOptions,
+              child: Stack(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(4),
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      border: Border.all(
+                        color: AppColors.primaryPurple,
+                        width: 3,
+                      ),
+                      boxShadow: [
+                        BoxShadow(
+                          color: AppColors.primaryPurple.withValues(alpha: 0.22),
+                          blurRadius: 14,
+                          offset: const Offset(0, 4),
+                        ),
+                      ],
+                    ),
+                    child: CircleAvatar(
+                      radius: 56,
+                      backgroundColor: AppColors.lightLavender,
+                      backgroundImage: _hasPhoto
+                          ? (_newImage != null
+                              ? FileImage(_newImage!)
+                              : FileImage(File(widget.asset.imagePath!)))
+                          : null,
+                      child: !_hasPhoto
+                          ? Text(_emoji, style: const TextStyle(fontSize: 42))
+                          : null,
+                    ),
+                  ),
+                  Positioned(
+                    bottom: 2,
+                    right: 2,
+                    child: Material(
+                      color: AppColors.primaryPurple,
+                      shape: const CircleBorder(),
+                      elevation: 3,
+                      child: InkWell(
+                        customBorder: const CircleBorder(),
+                        onTap: _showAvatarOptions,
+                        child: Padding(
+                          padding: const EdgeInsets.all(9),
+                          child: Icon(
+                            _hasPhoto ? Icons.camera_alt_rounded : Icons.edit_rounded,
+                            color: Colors.white,
+                            size: 20,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
             ),
-            Positioned(bottom: 0, right: 0, child: FloatingActionButton.small(onPressed: _pickImage, child: const Icon(Icons.camera_alt))),
-          ])),
+          ),
           const SizedBox(height: 24),
           CustomTextField(controller: _name, labelText: 'Name', hintText: 'Asset name', validator: (v) => v == null || v.trim().isEmpty ? 'Please enter a name' : null),
           const SizedBox(height: 14),
-          ListTile(contentPadding: EdgeInsets.zero, title: Text('Emoji: $_emoji'), trailing: TextButton(onPressed: _emojiPicker, child: const Text('Change'))),
           DropdownButtonFormField<String?>(
             initialValue: _categoryId,
             decoration: const InputDecoration(labelText: 'Category'),
