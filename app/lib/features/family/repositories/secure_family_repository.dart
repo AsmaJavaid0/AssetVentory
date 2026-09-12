@@ -2,8 +2,11 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 
 import '../../../core/di/service_locator.dart';
+import '../../../core/storage/app_preferences_service.dart';
+import '../models/family_member_model.dart';
 import '../models/shared_asset_model.dart';
 import '../models/shared_document_model.dart';
 import '../models/sharing_permissions_model.dart';
@@ -18,15 +21,76 @@ import 'family_repository.dart';
 class SecureFamilyRepository extends FamilyRepository {
   final FamilyFileService _files;
   final FirebaseFirestore _db;
+  final AppPreferencesService _preferences;
 
   SecureFamilyRepository({
     FamilyFileService? files,
     FirebaseFirestore? firestore,
+    AppPreferencesService? preferences,
   })  : _files = files ?? FamilyFileService(),
-        _db = firestore ?? FirebaseFirestore.instance;
+        _db = firestore ?? FirebaseFirestore.instance,
+        _preferences = preferences ?? AppPreferencesService();
 
   CollectionReference<Map<String, dynamic>> get _sharedAssets =>
       _db.collection('shared_assets');
+
+  String get _viewerId => FirebaseAuth.instance.currentUser?.uid ?? '';
+
+  String _displayNameFor(FamilyMemberModel member) {
+    if (_viewerId.isEmpty) return member.familyDisplayName;
+    return _preferences.familyDisplayName(
+      familyId: member.familyId,
+      viewerId: _viewerId,
+      memberUserId: member.userId,
+      fallback: member.name.isNotEmpty ? member.name : member.familyDisplayName,
+    );
+  }
+
+  FamilyMemberModel _forViewer(FamilyMemberModel member) {
+    return member.copyWith(displayName: _displayNameFor(member));
+  }
+
+  @override
+  Future<List<FamilyMemberModel>> getFamilyMembers(String familyId) async {
+    final members = await super.getFamilyMembers(familyId);
+    return members.map(_forViewer).toList();
+  }
+
+  @override
+  Stream<List<FamilyMemberModel>> streamFamilyMembers(String familyId) {
+    return super.streamFamilyMembers(familyId).map(
+      (members) => members.map(_forViewer).toList(),
+    );
+  }
+
+  @override
+  Future<void> updateFamilyMemberDisplayName({
+    required String familyId,
+    required String userId,
+    required String displayName,
+  }) async {
+    if (_viewerId.isEmpty) {
+      throw StateError('You must be signed in to edit a family display name.');
+    }
+
+    final trimmedName = displayName.trim();
+    if (trimmedName.isEmpty) {
+      throw ArgumentError('Family display name cannot be empty.');
+    }
+    if (trimmedName.length > 40) {
+      throw ArgumentError('Family display name must be 40 characters or less.');
+    }
+
+    // IMPORTANT: family display names are viewer-specific. This writes only
+    // to this device's preferences, so renaming Dad as "Papa" here does not
+    // change Dad's name on Dad's phone or any other family member's screen.
+    await _preferences.setFamilyDisplayName(
+      familyId: familyId,
+      viewerId: _viewerId,
+      memberUserId: userId,
+      displayName: trimmedName,
+    );
+  }
 
   String _contentType(String path) {
     final extension = path.split('.').last.toLowerCase();
@@ -43,6 +107,25 @@ class SecureFamilyRepository extends FamilyRepository {
       'txt': 'text/plain',
     };
     return types[extension] ?? 'application/octet-stream';
+  }
+
+  @override
+  Stream<List<SharedAssetModel>> streamSharedAssets(String familyId) {
+    return _sharedAssets.where('familyId', isEqualTo: familyId).snapshots().map((snapshot) {
+      final assets = snapshot.docs.map(SharedAssetModel.fromFirestore).toList();
+
+      // Keep the signed-in user's shared assets first. Other members follow
+      // in their existing most-recently-shared order.
+      final viewerId = _viewerId;
+      assets.sort((a, b) {
+        final aMine = a.ownerId == viewerId;
+        final bMine = b.ownerId == viewerId;
+        if (aMine != bMine) return aMine ? -1 : 1;
+        return b.sharedAt.compareTo(a.sharedAt);
+      });
+
+      return assets;
+    });
   }
 
   @override
@@ -77,7 +160,6 @@ class SecureFamilyRepository extends FamilyRepository {
           // the private storage path later when opening the asset.
         }
       } catch (_) {
-        // Media upload failure must not block creation of the shared asset.
         storagePath = null;
         downloadUrl = null;
       }
@@ -121,9 +203,7 @@ class SecureFamilyRepository extends FamilyRepository {
             downloadUrl: docDownloadUrl,
           ));
         }
-      } catch (_) {
-        // Continue without documents if local document lookup fails.
-      }
+      } catch (_) {}
     }
 
     final shared = SharedAssetModel(
@@ -135,8 +215,6 @@ class SecureFamilyRepository extends FamilyRepository {
       name: asset.name,
       categoryName: categoryName,
       emoji: asset.emoji,
-      // A device-local path is useless on another family member's phone.
-      // Keep it only when the file was successfully copied to shared storage.
       imagePath: storagePath == null ? null : asset.imagePath,
       imageUrl: downloadUrl,
       imageStoragePath: storagePath,
@@ -148,11 +226,6 @@ class SecureFamilyRepository extends FamilyRepository {
       updatedAt: now,
     );
 
-    // IMPORTANT: never report success unless the shared_assets Firestore
-    // document has actually been accepted by Firestore. The old code caught
-    // TimeoutException here and returned success anyway, which produced the
-    // exact "Asset shared with your family!" snackbar while no shared record
-    // was guaranteed to exist.
     await _sharedAssets.doc(docId).set(shared.toFirestore())
         .timeout(const Duration(seconds: 12));
 
@@ -172,10 +245,7 @@ class SecureFamilyRepository extends FamilyRepository {
     if (familyId != null && storagePath != null && storagePath.isNotEmpty) {
       try {
         await _files.deleteFile(familyId: familyId, path: storagePath);
-      } catch (_) {
-        // Firestore sharing state is already removed. Storage cleanup can be
-        // retried later without blocking the user's unshare action.
-      }
+      } catch (_) {}
     }
   }
 
