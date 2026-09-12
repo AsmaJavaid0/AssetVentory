@@ -3,7 +3,6 @@ import 'dart:io';
 import 'package:emoji_picker_flutter/emoji_picker_flutter.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:open_filex/open_filex.dart';
 
@@ -17,12 +16,10 @@ import '../widgets/full_screen_image_viewer.dart';
 
 class EditAssetScreen extends StatefulWidget {
   final LocalAsset asset;
-
   const EditAssetScreen({super.key, required this.asset});
 
-  static Future<void> navigateTo(BuildContext context, LocalAsset asset) =>
-      Navigator.of(context).push(
-        MaterialPageRoute<void>(builder: (_) => EditAssetScreen(asset: asset)),
+  static Future<void> navigateTo(BuildContext context, LocalAsset asset) => Navigator.of(context).push(
+        MaterialPageRoute(builder: (_) => EditAssetScreen(asset: asset)),
       );
 
   @override
@@ -31,1131 +28,283 @@ class EditAssetScreen extends StatefulWidget {
 
 class _EditAssetScreenState extends State<EditAssetScreen> {
   final _formKey = GlobalKey<FormState>();
-  final _assetRepository = serviceLocator.assetRepository;
-  final _categoryRepository = serviceLocator.categoryRepository;
-  final _documentRepository = serviceLocator.assetDocumentRepository;
-  final _imagePicker = ImagePicker();
-
-  late final TextEditingController _nameController;
-  late final TextEditingController _locationController;
-  late final TextEditingController _descriptionController;
+  final _assets = serviceLocator.assetRepository;
+  final _categoriesRepo = serviceLocator.categoryRepository;
+  final _docs = serviceLocator.assetDocumentRepository;
+  final _picker = ImagePicker();
+  late final TextEditingController _name;
+  late final TextEditingController _location;
+  late final TextEditingController _description;
   late String _emoji;
   String? _categoryId;
   late bool _qrEnabled;
   late Map<String, String> _customFields;
   List<LocalCategory> _categories = [];
-  late Future<List<LocalAssetDocument>> _documentsFuture;
-
+  late Future<List<LocalAssetDocument>> _documents;
   File? _newImage;
-  final List<File> _newDocuments = [];
-  final Set<String> _deletedDocumentIds = {};
-  final Map<String, File> _replacements = {};
-
+  final _newFiles = <File>[];
+  final _removedIds = <String>{};
+  final _replacements = <String, File>{};
   bool _loading = true;
   bool _saving = false;
   bool _deleting = false;
 
-  static const _imageExtensions = {
-    'jpg',
-    'jpeg',
-    'png',
-    'gif',
-    'webp',
-    'bmp',
-    'heic',
-  };
-
-  static const _allowedFileExtensions = [
-    'pdf',
-    'doc',
-    'docx',
-    'xls',
-    'xlsx',
-    'ppt',
-    'pptx',
-    'txt',
-    'csv',
-    'rtf',
-    'zip',
-    'png',
-    'jpg',
-    'jpeg',
-    'gif',
-    'webp',
+  static const _extensions = [
+    'pdf','doc','docx','xls','xlsx','ppt','pptx','txt','csv','rtf','zip',
+    'png','jpg','jpeg','gif','webp','bmp','heic',
   ];
 
   @override
   void initState() {
     super.initState();
-    final asset = widget.asset;
-    _nameController = TextEditingController(text: asset.name);
-    _locationController = TextEditingController(text: asset.location ?? '');
-    _descriptionController =
-        TextEditingController(text: asset.description ?? '');
-    _emoji = asset.emoji ?? '📦';
-    _categoryId = asset.categoryId;
-    _qrEnabled = asset.qrEnabled;
-    _customFields = Map<String, String>.from(asset.customFields);
-    _documentsFuture = _loadDocuments();
+    _name = TextEditingController(text: widget.asset.name);
+    _location = TextEditingController(text: widget.asset.location ?? '');
+    _description = TextEditingController(text: widget.asset.description ?? '');
+    _emoji = widget.asset.emoji ?? '📦';
+    _categoryId = widget.asset.categoryId;
+    _qrEnabled = widget.asset.qrEnabled;
+    _customFields = Map<String, String>.from(widget.asset.customFields);
+    _documents = _docs.getDocuments(widget.asset.id);
     _loadCategories();
-  }
-
-  Future<List<LocalAssetDocument>> _loadDocuments() async {
-    try {
-      return await _documentRepository.getDocuments(widget.asset.id);
-    } catch (e) {
-      debugPrint('Document load error: $e');
-      return const <LocalAssetDocument>[];
-    }
   }
 
   Future<void> _loadCategories() async {
     try {
-      final categories = await _categoryRepository.getCategories('local_user');
-      if (!mounted) return;
-      setState(() {
-        _categories = categories;
-        _loading = false;
-      });
-    } catch (e) {
-      debugPrint('Category load error: $e');
+      final categories = await _categoriesRepo.getCategories('local_user');
+      if (mounted) setState(() { _categories = categories; _loading = false; });
+    } catch (_) {
       if (mounted) setState(() => _loading = false);
     }
   }
 
-  Future<void> _pickImage() async {
-    final picked = await _imagePicker.pickImage(
-      source: ImageSource.gallery,
-      imageQuality: 90,
-      maxWidth: 2048,
-      maxHeight: 2048,
-    );
-    if (picked != null && mounted) {
-      setState(() => _newImage = File(picked.path));
-    }
-  }
-
-  Future<void> _showMediaPicker() async {
-    await showModalBottomSheet<void>(
-      context: context,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-      ),
-      builder: (sheetContext) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const SizedBox(height: 12),
-            Text(
-              'Add Media',
-              style: GoogleFonts.outfit(
-                fontSize: 18,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-            ListTile(
-              leading: const Icon(Icons.photo_library_rounded),
-              title: const Text('Photos from Gallery'),
-              subtitle: const Text('Pick one or more images'),
-              onTap: () {
-                Navigator.pop(sheetContext);
-                _pickGalleryMedia();
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.insert_drive_file_outlined),
-              title: const Text('Documents & Files'),
-              subtitle: const Text('PDFs, documents, spreadsheets, and more'),
-              onTap: () {
-                Navigator.pop(sheetContext);
-                _pickFileMedia();
-              },
-            ),
-            const SizedBox(height: 8),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Future<void> _pickGalleryMedia() async {
-    try {
-      final picked = await _imagePicker.pickMultiImage(
-        imageQuality: 90,
-        maxWidth: 2048,
-        maxHeight: 2048,
+  Future<List<PlatformFile>> _files() => FilePicker.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: _extensions,
+        allowMultiple: true,
       );
-      if (!mounted || picked.isEmpty) return;
 
+  Future<void> _addFiles() async {
+    try {
+      final picked = await _files();
+      if (!mounted || picked.isEmpty) return;
       setState(() {
-        for (final xFile in picked) {
-          final file = File(xFile.path);
-          if (!_newDocuments.any((item) => item.path == file.path)) {
-            _newDocuments.add(file);
+        for (final item in picked) {
+          final path = item.path;
+          if (path != null && !_newFiles.any((file) => file.path == path)) {
+            _newFiles.add(File(path));
           }
         }
       });
-    } catch (e) {
-      debugPrint('Pick images error: $e');
-    }
+    } catch (_) {}
   }
 
-  Future<void> _pickFileMedia() async {
+  Future<void> _addImages() async {
     try {
-      final picked = await FilePicker.pickFiles(
-        type: FileType.custom,
-        allowedExtensions: _allowedFileExtensions,
-      );
-      if (picked.isEmpty) return;
-
-      final path = picked.first.path;
-      if (path == null) return;
-      final file = File(path);
-
+      final picked = await _picker.pickMultiImage(imageQuality: 90, maxWidth: 2048, maxHeight: 2048);
+      if (!mounted) return;
       setState(() {
-        if (!_newDocuments.any((item) => item.path == file.path)) {
-          _newDocuments.add(file);
+        for (final item in picked) {
+          final file = File(item.path);
+          if (!_newFiles.any((existing) => existing.path == file.path)) _newFiles.add(file);
         }
       });
-    } catch (e) {
-      debugPrint('Pick file error: $e');
-    }
+    } catch (_) {}
   }
 
-  Future<void> _replaceDocument(LocalAssetDocument document) async {
+  Future<void> _replace(LocalAssetDocument document) async {
     try {
-      final picked = await FilePicker.pickFiles(
-        type: FileType.custom,
-        allowedExtensions: _allowedFileExtensions,
-      );
-      if (picked.isEmpty) return;
-
+      final picked = await _files();
+      if (!mounted || picked.isEmpty) return;
       final path = picked.first.path;
-      if (path == null) return;
+      if (path != null) setState(() => _replacements[document.id] = File(path));
+    } catch (_) {}
+  }
 
-      setState(() => _replacements[document.id] = File(path));
-    } catch (e) {
-      debugPrint('Replace document error: $e');
+  Future<void> _mediaMenu() async {
+    await showModalBottomSheet<void>(
+      context: context,
+      builder: (sheet) => SafeArea(
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          const ListTile(title: Text('Add Media'), subtitle: Text('Choose photos or documents')),
+          ListTile(
+            leading: const Icon(Icons.photo_library_outlined),
+            title: const Text('Gallery'),
+            onTap: () { Navigator.pop(sheet); _addImages(); },
+          ),
+          ListTile(
+            leading: const Icon(Icons.attach_file),
+            title: const Text('Documents & Files'),
+            onTap: () { Navigator.pop(sheet); _addFiles(); },
+          ),
+        ]),
+      ),
+    );
+  }
+
+  bool _isImage(String path) {
+    final p = path.toLowerCase();
+    return ['.jpg','.jpeg','.png','.gif','.webp','.bmp','.heic'].any(p.endsWith);
+  }
+
+  String _fileName(String path) => path.split(Platform.pathSeparator).last;
+
+  Future<void> _open(LocalAssetDocument document) async {
+    final path = _replacements[document.id]?.path ?? document.filePath;
+    final file = File(path);
+    if (!await file.exists()) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('This file is no longer available.')));
+      return;
+    }
+    if (_isImage(path)) {
+      if (mounted) FullScreenImageViewer.show(context, imagePath: path, title: document.name);
+    } else {
+      await OpenFilex.open(path);
     }
   }
 
-  Future<void> _removeDocument(LocalAssetDocument document) async {
-    final confirmed = await showDialog<bool>(
+  Future<void> _remove(LocalAssetDocument document) async {
+    final yes = await showDialog<bool>(
       context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: Text(
-          'Remove File?',
-          style: GoogleFonts.outfit(fontWeight: FontWeight.w700),
-        ),
-        content: Text(
-          'Remove "${document.name}" from this asset?',
-          style: GoogleFonts.outfit(),
-        ),
+      builder: (dialog) => AlertDialog(
+        title: const Text('Remove File?'),
+        content: Text('Remove "${document.name}" from this asset?'),
         actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext, false),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext, true),
-            child: const Text(
-              'Remove',
-              style: TextStyle(color: AppColors.error),
-            ),
-          ),
+          TextButton(onPressed: () => Navigator.pop(dialog, false), child: const Text('Cancel')),
+          TextButton(onPressed: () => Navigator.pop(dialog, true), child: const Text('Remove')),
         ],
       ),
     );
-
-    if (confirmed != true || !mounted) return;
-
-    setState(() {
-      _deletedDocumentIds.add(document.id);
-      _replacements.remove(document.id);
-    });
-  }
-
-  Future<void> _openDocument(LocalAssetDocument document) async {
-    final path = _replacements[document.id]?.path ?? document.filePath;
-    final file = File(path);
-
-    if (!await file.exists()) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('This file is no longer available.')),
-      );
-      return;
-    }
-
-    if (_isImagePath(path)) {
-      if (!mounted) return;
-      FullScreenImageViewer.show(
-        context,
-        imagePath: path,
-        title: document.name,
-      );
-      return;
-    }
-
-    final result = await OpenFilex.open(path);
-    if (!mounted) return;
-    if (result.type != ResultType.done) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Could not open ${document.name}.')),
-      );
-    }
-  }
-
-  bool _isImagePath(String path) {
-    final lower = path.toLowerCase();
-    return _imageExtensions.any((extension) => lower.endsWith('.$extension'));
-  }
-
-  bool _isImage(LocalAssetDocument document) {
-    final replacement = _replacements[document.id];
-    if (replacement != null) return _isImagePath(replacement.path);
-    if (document.fileType != null) {
-      return _imageExtensions.contains(document.fileType!.toLowerCase());
-    }
-    return _isImagePath(document.name);
+    if (yes == true && mounted) setState(() { _removedIds.add(document.id); _replacements.remove(document.id); });
   }
 
   Future<void> _save() async {
     if (!_formKey.currentState!.validate()) return;
-
     setState(() => _saving = true);
-
     try {
-      final updated = widget.asset.copyWith(
-        name: _nameController.text.trim(),
+      await _assets.updateAsset(widget.asset.copyWith(
+        name: _name.text.trim(),
         emoji: _emoji,
         categoryId: _categoryId,
-        location: _locationController.text.trim().isEmpty
-            ? null
-            : _locationController.text.trim(),
-        description: _descriptionController.text.trim().isEmpty
-            ? null
-            : _descriptionController.text.trim(),
+        location: _location.text.trim().isEmpty ? null : _location.text.trim(),
+        description: _description.text.trim().isEmpty ? null : _description.text.trim(),
         imagePath: _newImage?.path ?? widget.asset.imagePath,
         qrEnabled: _qrEnabled,
         customFields: _customFields,
         updatedAt: DateTime.now(),
-      );
+      ));
 
-      await _assetRepository.updateAsset(updated);
-
-      final existingDocuments = await _documentsFuture;
-
+      final existing = await _documents;
       for (final entry in _replacements.entries) {
-        if (_deletedDocumentIds.contains(entry.key)) continue;
-        final document = existingDocuments.firstWhere(
-          (item) => item.id == entry.key,
-        );
-        await _documentRepository.replaceDocument(document, entry.value);
-      }
-
-      for (final document in existingDocuments) {
-        if (_deletedDocumentIds.contains(document.id)) {
-          await _documentRepository.deleteDocument(document);
+        if (!_removedIds.contains(entry.key)) {
+          final document = existing.firstWhere((item) => item.id == entry.key);
+          await _docs.replaceDocument(document, entry.value);
         }
       }
-
-      for (final file in _newDocuments) {
-        await _documentRepository.addDocument(
-          assetId: widget.asset.id,
-          sourceFile: file,
-          displayName: file.path.split(Platform.pathSeparator).last,
-        );
+      for (final document in existing) {
+        if (_removedIds.contains(document.id)) await _docs.deleteDocument(document);
       }
-
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Asset updated successfully!'),
-          backgroundColor: AppColors.success,
-        ),
-      );
-      Navigator.of(context).pop(true);
+      for (final file in _newFiles) {
+        await _docs.addDocument(assetId: widget.asset.id, sourceFile: file, displayName: _fileName(file.path));
+      }
+      if (mounted) Navigator.pop(context, true);
     } catch (e) {
       debugPrint('Update asset error: $e');
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Failed to update asset. Please try again.'),
-          backgroundColor: AppColors.error,
-        ),
-      );
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Failed to update asset.')));
     } finally {
       if (mounted) setState(() => _saving = false);
     }
   }
 
   Future<void> _delete() async {
-    final confirm = await showDialog<bool>(
+    final yes = await showDialog<bool>(
       context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: Text(
-          'Delete Asset',
-          style: GoogleFonts.outfit(fontWeight: FontWeight.w700),
-        ),
-        content: Text(
-          'Are you sure you want to delete "${widget.asset.name}"? This action cannot be undone.',
-          style: GoogleFonts.outfit(),
-        ),
+      builder: (dialog) => AlertDialog(
+        title: const Text('Delete Asset'),
+        content: Text('Delete "${widget.asset.name}"? This cannot be undone.'),
         actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext, false),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext, true),
-            child: const Text(
-              'Delete',
-              style: TextStyle(color: AppColors.error),
-            ),
-          ),
+          TextButton(onPressed: () => Navigator.pop(dialog, false), child: const Text('Cancel')),
+          TextButton(onPressed: () => Navigator.pop(dialog, true), child: const Text('Delete')),
         ],
       ),
     );
-    if (confirm != true) return;
-
+    if (yes != true) return;
     setState(() => _deleting = true);
     try {
-      await _assetRepository.deleteAsset(widget.asset.id);
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Asset deleted.'),
-          backgroundColor: AppColors.success,
-        ),
-      );
-      Navigator.of(context).pop(true);
-    } catch (e) {
-      debugPrint('Delete asset error: $e');
-      if (!mounted) return;
-      setState(() => _deleting = false);
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Failed to delete asset.'),
-          backgroundColor: AppColors.error,
-        ),
-      );
+      await _assets.deleteAsset(widget.asset.id);
+      if (mounted) Navigator.pop(context, true);
+    } finally {
+      if (mounted) setState(() => _deleting = false);
     }
   }
 
-  void _showEmojiPicker() {
+  void _emojiPicker() {
     showModalBottomSheet<void>(
       context: context,
-      backgroundColor: AppColors.surfaceWhite,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-      ),
-      builder: (pickerContext) => SizedBox(
+      builder: (sheet) => SizedBox(
         height: 340,
-        child: EmojiPicker(
-          onEmojiSelected: (_, emoji) {
-            setState(() => _emoji = emoji.emoji);
-            Navigator.pop(pickerContext);
-          },
-        ),
+        child: EmojiPicker(onEmojiSelected: (_, emoji) { setState(() => _emoji = emoji.emoji); Navigator.pop(sheet); }),
       ),
     );
   }
 
-  Future<void> _editCustomField(String oldKey, String oldValue) async {
-    final keyController = TextEditingController(text: oldKey);
-    final valueController = TextEditingController(text: oldValue);
-
+  Future<void> _customField({String? oldKey, String? oldValue}) async {
+    final key = TextEditingController(text: oldKey ?? '');
+    final value = TextEditingController(text: oldValue ?? '');
     await showDialog<void>(
       context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: Text(
-          'Edit Custom Field',
-          style: GoogleFonts.outfit(fontWeight: FontWeight.w700),
-        ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            CustomTextField(
-              controller: keyController,
-              hintText: 'Field name',
-            ),
-            const SizedBox(height: 12),
-            CustomTextField(
-              controller: valueController,
-              hintText: 'Value',
-            ),
-          ],
-        ),
+      builder: (dialog) => AlertDialog(
+        title: Text(oldKey == null ? 'Add Custom Field' : 'Edit Custom Field'),
+        content: Column(mainAxisSize: MainAxisSize.min, children: [
+          CustomTextField(controller: key, hintText: 'Field name'),
+          const SizedBox(height: 12),
+          CustomTextField(controller: value, hintText: 'Value'),
+        ]),
         actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            onPressed: () {
-              final key = keyController.text.trim();
-              final value = valueController.text.trim();
-              if (key.isEmpty || value.isEmpty) return;
-              setState(() {
-                _customFields.remove(oldKey);
-                _customFields[key] = value;
-              });
-              Navigator.pop(dialogContext);
-            },
-            child: const Text('Save'),
-          ),
+          TextButton(onPressed: () => Navigator.pop(dialog), child: const Text('Cancel')),
+          TextButton(onPressed: () {
+            if (key.text.trim().isEmpty || value.text.trim().isEmpty) return;
+            setState(() {
+              if (oldKey != null) _customFields.remove(oldKey);
+              _customFields[key.text.trim()] = value.text.trim();
+            });
+            Navigator.pop(dialog);
+          }, child: const Text('Save')),
         ],
       ),
     );
-    keyController.dispose();
-    valueController.dispose();
+    key.dispose();
+    value.dispose();
   }
 
-  Future<void> _showAddCustomFieldDialog() async {
-    final keyController = TextEditingController();
-    final valueController = TextEditingController();
-    await showDialog<void>(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: Text(
-          'Add Custom Field',
-          style: GoogleFonts.outfit(fontWeight: FontWeight.w700),
-        ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            CustomTextField(controller: keyController, hintText: 'Field name'),
-            const SizedBox(height: 12),
-            CustomTextField(controller: valueController, hintText: 'Value'),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            onPressed: () {
-              final key = keyController.text.trim();
-              final value = valueController.text.trim();
-              if (key.isEmpty || value.isEmpty) return;
-              setState(() => _customFields[key] = value);
-              Navigator.pop(dialogContext);
-            },
-            child: const Text('Add'),
-          ),
-        ],
-      ),
-    );
-    keyController.dispose();
-    valueController.dispose();
-  }
-
-  Widget _buildImagePicker() {
-    final imagePath = _newImage?.path ?? widget.asset.imagePath;
-    return Center(
-      child: GestureDetector(
-        onTap: _pickImage,
-        child: Stack(
-          alignment: Alignment.bottomRight,
-          children: [
-            Container(
-              width: 110,
-              height: 110,
-              decoration: BoxDecoration(
-                color: AppColors.lightLavender,
-                shape: BoxShape.circle,
-                border: Border.all(
-                  color: AppColors.primaryPurple,
-                  width: 2,
+  Widget _documentsSection() => FutureBuilder<List<LocalAssetDocument>>(
+        future: _documents,
+        builder: (context, snapshot) {
+          if (snapshot.connectionState == ConnectionState.waiting) return const Center(child: CircularProgressIndicator());
+          final documents = (snapshot.data ?? const <LocalAssetDocument>[]).where((d) => !_removedIds.contains(d.id)).toList();
+          final total = documents.length + _newFiles.length;
+          return Card(
+            child: Column(children: [
+              ListTile(title: Text('$total file${total == 1 ? '' : 's'}'), trailing: TextButton.icon(onPressed: _mediaMenu, icon: const Icon(Icons.add), label: const Text('Add Media'))),
+              for (final document in documents) ListTile(
+                leading: const Icon(Icons.insert_drive_file_outlined),
+                title: Text(_replacements[document.id] == null ? document.name : '${_fileName(_replacements[document.id]!.path)} • replacement', maxLines: 2, overflow: TextOverflow.ellipsis),
+                subtitle: Text(_isImage(_replacements[document.id]?.path ?? document.filePath) ? 'Image • Tap to view' : 'Document • Tap to open'),
+                onTap: () => _open(document),
+                trailing: PopupMenuButton<String>(
+                  onSelected: (value) { if (value == 'replace') _replace(document); if (value == 'remove') _remove(document); },
+                  itemBuilder: (_) => const [PopupMenuItem(value: 'replace', child: Text('Replace')), PopupMenuItem(value: 'remove', child: Text('Remove'))],
                 ),
               ),
-              child: _newImage != null
-                  ? ClipOval(
-                      child: Image.file(
-                        _newImage!,
-                        fit: BoxFit.cover,
-                        width: 110,
-                        height: 110,
-                      ),
-                    )
-                  : imagePath != null && imagePath.isNotEmpty
-                      ? ClipOval(
-                          child: Image.file(
-                            File(imagePath),
-                            fit: BoxFit.cover,
-                            errorBuilder: (_, _, _) => _emojiFallback(),
-                          ),
-                        )
-                      : _emojiFallback(),
-            ),
-            Positioned(
-              right: -4,
-              bottom: -4,
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  _IconActionButton(
-                    icon: Icons.emoji_emotions_outlined,
-                    onTap: _showEmojiPicker,
-                    tooltip: 'Change emoji',
-                  ),
-                  const SizedBox(height: 8),
-                  _IconActionButton(
-                    icon: Icons.camera_alt_rounded,
-                    onTap: _pickImage,
-                    isPrimary: true,
-                    tooltip: 'Change photo',
-                  ),
-                ],
+              for (final file in _newFiles) ListTile(
+                leading: const Icon(Icons.new_releases_outlined),
+                title: Text(_fileName(file.path), maxLines: 2, overflow: TextOverflow.ellipsis),
+                subtitle: const Text('New file'),
+                trailing: IconButton(icon: const Icon(Icons.close, color: AppColors.error), onPressed: () => setState(() => _newFiles.remove(file))),
               ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _emojiFallback() => Center(
-        child: Text(_emoji, style: const TextStyle(fontSize: 48)),
-      );
-
-  Widget _buildCategoryDropdown() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Padding(
-          padding: const EdgeInsets.only(left: 4, bottom: 8),
-          child: Text(
-            'Category',
-            style: GoogleFonts.outfit(
-              fontSize: 13,
-              fontWeight: FontWeight.w600,
-              color: AppColors.textSecondary,
-            ),
-          ),
-        ),
-        Container(
-          decoration: BoxDecoration(
-            color: AppColors.surfaceWhite,
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: AppColors.inputBorder, width: 1.2),
-          ),
-          child: DropdownButtonHideUnderline(
-            child: DropdownButton<String?>(
-              value: _categoryId,
-              isExpanded: true,
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              dropdownColor: AppColors.surfaceWhite,
-              hint: Text(
-                'Select category',
-                style: GoogleFonts.outfit(
-                  color: AppColors.textSecondary,
-                  fontSize: 15,
-                ),
-              ),
-              items: [
-                const DropdownMenuItem<String?>(
-                  value: null,
-                  child: Text('Uncategorized'),
-                ),
-                ..._categories.map(
-                  (category) => DropdownMenuItem<String?>(
-                    value: category.id,
-                    child: Text(category.name),
-                  ),
-                ),
-              ],
-              onChanged: (value) => setState(() => _categoryId = value),
-              borderRadius: BorderRadius.circular(16),
-              style: GoogleFonts.outfit(
-                fontSize: 15,
-                color: AppColors.textPrimary,
-              ),
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildCustomFields() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          children: [
-            Expanded(
-              child: Text(
-                'Custom Fields',
-                style: GoogleFonts.outfit(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w600,
-                  color: AppColors.textSecondary,
-                ),
-              ),
-            ),
-            TextButton.icon(
-              onPressed: _showAddCustomFieldDialog,
-              icon: const Icon(Icons.add_rounded, size: 16),
-              label: const Text('Add Field'),
-            ),
-          ],
-        ),
-        if (_customFields.isEmpty)
-          Container(
-            margin: const EdgeInsets.only(top: 8),
-            padding: const EdgeInsets.all(20),
-            decoration: BoxDecoration(
-              color: AppColors.lightLavender.withAlpha(100),
-              borderRadius: BorderRadius.circular(14),
-              border: Border.all(color: AppColors.lightLavenderBorder),
-            ),
-            child: const Text(
-              'Add custom fields to store extra details such as serial numbers, purchase dates, or warranty information.',
-            ),
-          )
-        else
-          ..._customFields.entries.map(
-            (entry) => Container(
-              margin: const EdgeInsets.only(top: 10),
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-              decoration: BoxDecoration(
-                color: AppColors.surfaceWhite,
-                borderRadius: BorderRadius.circular(14),
-                border: Border.all(color: AppColors.lightLavenderBorder),
-              ),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: InkWell(
-                      onTap: () => _editCustomField(entry.key, entry.value),
-                      borderRadius: BorderRadius.circular(8),
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(vertical: 4),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              entry.key,
-                              style: GoogleFonts.outfit(
-                                fontSize: 14,
-                                fontWeight: FontWeight.w700,
-                              ),
-                            ),
-                            const SizedBox(height: 3),
-                            Text(
-                              entry.value,
-                              style: GoogleFonts.outfit(
-                                fontSize: 12,
-                                color: AppColors.textSecondary,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ),
-                  IconButton(
-                    tooltip: 'Edit field',
-                    onPressed: () => _editCustomField(entry.key, entry.value),
-                    icon: const Icon(Icons.edit_outlined, size: 19),
-                  ),
-                  IconButton(
-                    tooltip: 'Delete field',
-                    onPressed: () => setState(
-                      () => _customFields.remove(entry.key),
-                    ),
-                    icon: const Icon(
-                      Icons.delete_outline_rounded,
-                      color: AppColors.error,
-                      size: 20,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-      ],
-    );
-  }
-
-  Widget _buildDocuments() {
-    return FutureBuilder<List<LocalAssetDocument>>(
-      future: _documentsFuture,
-      builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) {
-          return Container(
-            padding: const EdgeInsets.all(22),
-            decoration: _cardDecoration(),
-            child: const Center(
-              child: SizedBox(
-                width: 22,
-                height: 22,
-                child: CircularProgressIndicator(strokeWidth: 2.5),
-              ),
-            ),
+              if (total == 0) const Padding(padding: EdgeInsets.all(20), child: Text('No files attached yet.')),
+            ]),
           );
-        }
-
-        final documents = snapshot.data ?? const <LocalAssetDocument>[];
-        final visibleDocuments = documents
-            .where((document) => !_deletedDocumentIds.contains(document.id))
-            .toList();
-        final total = visibleDocuments.length + _newDocuments.length;
-
-        return Container(
-          decoration: _cardDecoration(),
-          child: Column(
-            children: [
-              Padding(
-                padding: const EdgeInsets.fromLTRB(14, 8, 8, 8),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: Text(
-                        '$total file${total == 1 ? '' : 's'}',
-                        style: GoogleFonts.outfit(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w600,
-                          color: AppColors.textSecondary,
-                        ),
-                      ),
-                    ),
-                    TextButton.icon(
-                      onPressed: _showMediaPicker,
-                      icon: const Icon(Icons.add_rounded, size: 18),
-                      label: const Text('Add Media'),
-                    ),
-                  ],
-                ),
-              ),
-              if (total == 0)
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(20, 8, 20, 22),
-                  child: Text(
-                    'No files attached yet. Tap Add Media to add photos or documents.',
-                    textAlign: TextAlign.center,
-                    style: GoogleFonts.outfit(
-                      fontSize: 13,
-                      color: AppColors.textSecondary,
-                    ),
-                  ),
-                ),
-              for (var index = 0; index < visibleDocuments.length; index++) ...[
-                _buildDocumentTile(visibleDocuments[index]),
-                if (index != visibleDocuments.length - 1 ||
-                    _newDocuments.isNotEmpty)
-                  const Divider(height: 1, indent: 72, endIndent: 16),
-              ],
-              for (var index = 0; index < _newDocuments.length; index++) ...[
-                _buildNewDocumentTile(_newDocuments[index]),
-                if (index != _newDocuments.length - 1)
-                  const Divider(height: 1, indent: 72, endIndent: 16),
-              ],
-            ],
-          ),
-        );
-      },
-    );
-  }
-
-  Widget _buildDocumentTile(LocalAssetDocument document) {
-    final replacement = _replacements[document.id];
-    final displayPath = replacement?.path ?? document.filePath;
-    final image = _isImage(document);
-
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-      child: Row(
-        children: [
-          _documentPreview(document, replacement),
-          const SizedBox(width: 12),
-          Expanded(
-            child: InkWell(
-              onTap: () => _openDocument(document),
-              borderRadius: BorderRadius.circular(10),
-              child: Padding(
-                padding: const EdgeInsets.symmetric(vertical: 4),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      replacement == null
-                          ? document.name
-                          : '${_fileName(displayPath)} • replacement',
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: GoogleFonts.outfit(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w700,
-                        color: AppColors.textPrimary,
-                      ),
-                    ),
-                    const SizedBox(height: 3),
-                    Text(
-                      image ? 'Image • Tap to view' : 'Document • Tap to open',
-                      style: GoogleFonts.outfit(
-                        fontSize: 12,
-                        color: AppColors.textSecondary,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ),
-          PopupMenuButton<String>(
-            tooltip: 'Edit file',
-            onSelected: (value) {
-              if (value == 'replace') _replaceDocument(document);
-              if (value == 'remove') _removeDocument(document);
-            },
-            itemBuilder: (_) => const [
-              PopupMenuItem(
-                value: 'replace',
-                child: Text('Replace'),
-              ),
-              PopupMenuItem(
-                value: 'remove',
-                child: Text('Remove'),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildNewDocumentTile(File file) {
-    final image = _isImagePath(file.path);
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-      child: Row(
-        children: [
-          if (image && file.existsSync())
-            ClipRRect(
-              borderRadius: BorderRadius.circular(12),
-              child: Image.file(
-                file,
-                width: 48,
-                height: 48,
-                fit: BoxFit.cover,
-              ),
-            )
-          else
-            _fileIcon(_extension(file.path)),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  _fileName(file.path),
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: GoogleFonts.outfit(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-                const SizedBox(height: 3),
-                Text(
-                  image ? 'New image' : 'New document',
-                  style: GoogleFonts.outfit(
-                    fontSize: 12,
-                    color: AppColors.primaryPurple,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          IconButton(
-            tooltip: 'Remove',
-            icon: const Icon(
-              Icons.close_rounded,
-              color: AppColors.error,
-              size: 20,
-            ),
-            onPressed: () => setState(() => _newDocuments.remove(file)),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _documentPreview(LocalAssetDocument document, [File? replacement]) {
-    final path = replacement?.path ?? document.filePath;
-    if (_isImagePath(path) && File(path).existsSync()) {
-      return ClipRRect(
-        borderRadius: BorderRadius.circular(12),
-        child: Image.file(
-          File(path),
-          width: 48,
-          height: 48,
-          fit: BoxFit.cover,
-          errorBuilder: (_, _, _) => _fileIcon(document.fileType),
-        ),
-      );
-    }
-    return _fileIcon(document.fileType);
-  }
-
-  Widget _fileIcon(String? type) {
-    final extension = type?.toLowerCase() ?? '';
-    final icon = extension == 'pdf'
-        ? Icons.picture_as_pdf_outlined
-        : extension == 'doc' || extension == 'docx'
-            ? Icons.description_outlined
-            : extension == 'xls' || extension == 'xlsx'
-                ? Icons.table_chart_outlined
-                : Icons.insert_drive_file_outlined;
-
-    return Container(
-      width: 48,
-      height: 48,
-      decoration: BoxDecoration(
-        color: AppColors.lightLavender,
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Icon(
-        icon,
-        color: AppColors.primaryPurple,
-        size: 25,
-      ),
-    );
-  }
-
-  String _fileName(String path) => path.split(Platform.pathSeparator).last;
-
-  String? _extension(String path) {
-    final name = _fileName(path);
-    final index = name.lastIndexOf('.');
-    return index == -1 ? null : name.substring(index + 1).toLowerCase();
-  }
-
-  Widget _buildQrToggle() {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-      decoration: BoxDecoration(
-        color: AppColors.surfaceWhite,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppColors.lightLavenderBorder),
-      ),
-      child: Row(
-        children: [
-          Container(
-            padding: const EdgeInsets.all(10),
-            decoration: BoxDecoration(
-              color: AppColors.primaryPurple.withAlpha(20),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: const Icon(
-              Icons.qr_code_2_rounded,
-              color: AppColors.primaryPurple,
-              size: 24,
-            ),
-          ),
-          const SizedBox(width: 14),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Enable QR Code',
-                  style: GoogleFonts.outfit(
-                    fontSize: 15,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  'Generate a QR tag for quick scanning.',
-                  style: GoogleFonts.outfit(
-                    fontSize: 12,
-                    color: AppColors.textSecondary,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          Switch(
-            value: _qrEnabled,
-            activeThumbColor: AppColors.primaryPurple,
-            activeTrackColor: AppColors.primaryPurple.withAlpha(80),
-            onChanged: (value) => setState(() => _qrEnabled = value),
-          ),
-        ],
-      ),
-    );
-  }
-
-  BoxDecoration _cardDecoration() => BoxDecoration(
-        color: AppColors.surfaceWhite,
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: AppColors.lightLavenderBorder),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withAlpha(5),
-            blurRadius: 8,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      );
-
-  Widget _buildSaveBar() => SafeArea(
-        child: Container(
-          padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
-          decoration: BoxDecoration(
-            color: AppColors.surfaceWhite,
-            border: const Border(
-              top: BorderSide(
-                color: AppColors.lightLavenderBorder,
-                width: 1,
-              ),
-            ),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withAlpha(15),
-                blurRadius: 20,
-                offset: const Offset(0, -4),
-              ),
-            ],
-          ),
-          child: SizedBox(
-            width: double.infinity,
-            height: 56,
-            child: ElevatedButton.icon(
-              onPressed: _saving ? null : _save,
-              icon: _saving
-                  ? const SizedBox(
-                      width: 20,
-                      height: 20,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2.5,
-                        color: Colors.white,
-                      ),
-                    )
-                  : const Icon(Icons.check_rounded, size: 22),
-              label: Text(
-                _saving ? 'Saving…' : 'Save Changes',
-                style: GoogleFonts.outfit(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppColors.primaryPurple,
-                foregroundColor: Colors.white,
-                elevation: 0,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(18),
-                ),
-              ),
-            ),
-          ),
-        ),
+        },
       );
 
   @override
@@ -1163,183 +312,58 @@ class _EditAssetScreenState extends State<EditAssetScreen> {
     return Scaffold(
       backgroundColor: AppColors.scaffoldBg,
       appBar: AppBar(
-        title: Text(
-          'Edit Asset',
-          style: GoogleFonts.outfit(fontWeight: FontWeight.w700),
-        ),
-        leading: IconButton(
-          icon: const Icon(Icons.close_rounded),
-          onPressed: () => Navigator.pop(context, false),
-        ),
-        actions: [
-          IconButton(
-            tooltip: 'Delete asset',
-            icon: const Icon(Icons.delete_outline, color: AppColors.error),
-            onPressed: _deleting ? null : _delete,
-          ),
-        ],
+        title: const Text('Edit Asset'),
+        leading: IconButton(icon: const Icon(Icons.close), onPressed: () => Navigator.pop(context, false)),
+        actions: [IconButton(icon: const Icon(Icons.delete_outline, color: AppColors.error), onPressed: _deleting ? null : _delete)],
       ),
-      body: _loading
-          ? Center(
-              child: CircularProgressIndicator(
-                color: AppColors.primaryPurple,
-                strokeWidth: 3,
-              ),
-            )
-          : GestureDetector(
-              onTap: () => FocusScope.of(context).unfocus(),
-              child: SingleChildScrollView(
-                padding: EdgeInsets.fromLTRB(
-                  20,
-                  16,
-                  20,
-                  _saving ? 32 : 120,
-                ),
-                child: Form(
-                  key: _formKey,
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      _buildImagePicker(),
-                      const SizedBox(height: 28),
-                      const _SectionHeader(title: 'Basic Info'),
-                      const SizedBox(height: 16),
-                      CustomTextField(
-                        controller: _nameController,
-                        hintText: 'Asset name',
-                        labelText: 'Name',
-                        prefixIcon: Icons.inventory_2_outlined,
-                        validator: (value) => value == null || value.trim().isEmpty
-                            ? 'Please enter a name'
-                            : null,
-                      ),
-                      const SizedBox(height: 16),
-                      _buildCategoryDropdown(),
-                      const SizedBox(height: 24),
-                      const _SectionHeader(title: 'Details'),
-                      const SizedBox(height: 16),
-                      CustomTextField(
-                        controller: _locationController,
-                        hintText: 'e.g. Living Room, Garage, Office',
-                        labelText: 'Location',
-                        prefixIcon: Icons.location_on_outlined,
-                      ),
-                      const SizedBox(height: 16),
-                      CustomTextField(
-                        controller: _descriptionController,
-                        hintText: 'Add a description…',
-                        labelText: 'Description',
-                        prefixIcon: Icons.notes_outlined,
-                        keyboardType: TextInputType.multiline,
-                        textInputAction: TextInputAction.newline,
-                        maxLines: 3,
-                      ),
-                      const SizedBox(height: 24),
-                      const _SectionHeader(title: 'Custom Fields'),
-                      const SizedBox(height: 16),
-                      _buildCustomFields(),
-                      const SizedBox(height: 24),
-                      const _SectionHeader(title: 'Documents & Media'),
-                      const SizedBox(height: 8),
-                      Text(
-                        'Add, replace, remove, or open files attached to this asset.',
-                        style: GoogleFonts.outfit(
-                          fontSize: 13,
-                          color: AppColors.textSecondary,
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                      _buildDocuments(),
-                      const SizedBox(height: 24),
-                      const _SectionHeader(title: 'Advanced'),
-                      const SizedBox(height: 16),
-                      _buildQrToggle(),
-                    ],
-                  ),
-                ),
-              ),
+      body: _loading ? const Center(child: CircularProgressIndicator()) : Form(
+        key: _formKey,
+        child: ListView(padding: const EdgeInsets.fromLTRB(20, 20, 20, 120), children: [
+          Center(child: Stack(children: [
+            CircleAvatar(
+              radius: 56,
+              backgroundColor: AppColors.lightLavender,
+              backgroundImage: _newImage != null ? FileImage(_newImage!) : (widget.asset.imagePath != null ? FileImage(File(widget.asset.imagePath!)) : null),
+              child: _newImage == null && widget.asset.imagePath == null ? Text(_emoji, style: const TextStyle(fontSize: 42)) : null,
             ),
-      bottomNavigationBar: _loading ? null : _buildSaveBar(),
+            Positioned(bottom: 0, right: 0, child: FloatingActionButton.small(onPressed: _pickImage, child: const Icon(Icons.camera_alt))),
+          ])),
+          const SizedBox(height: 24),
+          CustomTextField(controller: _name, labelText: 'Name', hintText: 'Asset name', validator: (v) => v == null || v.trim().isEmpty ? 'Please enter a name' : null),
+          const SizedBox(height: 14),
+          ListTile(contentPadding: EdgeInsets.zero, title: Text('Emoji: $_emoji'), trailing: TextButton(onPressed: _emojiPicker, child: const Text('Change'))),
+          DropdownButtonFormField<String?>(
+            value: _categoryId,
+            decoration: const InputDecoration(labelText: 'Category'),
+            items: [const DropdownMenuItem<String?>(value: null, child: Text('Uncategorized')), ..._categories.map((c) => DropdownMenuItem<String?>(value: c.id, child: Text(c.name)))],
+            onChanged: (value) => setState(() => _categoryId = value),
+          ),
+          const SizedBox(height: 14),
+          CustomTextField(controller: _location, labelText: 'Location', hintText: 'Where is this asset?'),
+          const SizedBox(height: 14),
+          CustomTextField(controller: _description, labelText: 'Description', hintText: 'Add details...', maxLines: 3),
+          const SizedBox(height: 20),
+          Row(children: [Expanded(child: Text('Custom Fields', style: Theme.of(context).textTheme.titleMedium)), TextButton.icon(onPressed: () => _customField(), icon: const Icon(Icons.add), label: const Text('Add Field'))]),
+          for (final entry in _customFields.entries) ListTile(contentPadding: EdgeInsets.zero, title: Text(entry.key), subtitle: Text(entry.value), onTap: () => _customField(oldKey: entry.key, oldValue: entry.value), trailing: IconButton(icon: const Icon(Icons.delete_outline, color: AppColors.error), onPressed: () => setState(() => _customFields.remove(entry.key)))),
+          const SizedBox(height: 20),
+          Text('Documents & Media', style: Theme.of(context).textTheme.titleMedium),
+          const SizedBox(height: 6),
+          const Text('Add, replace, remove, or open files attached to this asset.'),
+          const SizedBox(height: 12),
+          _documentsSection(),
+          const SizedBox(height: 20),
+          SwitchListTile.adaptive(contentPadding: EdgeInsets.zero, title: const Text('Enable QR Code'), value: _qrEnabled, onChanged: (value) => setState(() => _qrEnabled = value)),
+        ]),
+      ),
+      bottomNavigationBar: _loading ? null : SafeArea(child: Padding(padding: const EdgeInsets.all(16), child: SizedBox(height: 54, child: ElevatedButton.icon(onPressed: _saving ? null : _save, icon: _saving ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2)) : const Icon(Icons.check), label: Text(_saving ? 'Saving…' : 'Save Changes'))))),
     );
   }
 
   @override
   void dispose() {
-    _nameController.dispose();
-    _locationController.dispose();
-    _descriptionController.dispose();
+    _name.dispose();
+    _location.dispose();
+    _description.dispose();
     super.dispose();
-  }
-}
-
-class _SectionHeader extends StatelessWidget {
-  final String title;
-
-  const _SectionHeader({required this.title});
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      children: [
-        Container(
-          width: 4,
-          height: 20,
-          decoration: BoxDecoration(
-            color: AppColors.primaryPurple,
-            borderRadius: BorderRadius.circular(2),
-          ),
-        ),
-        const SizedBox(width: 10),
-        Text(
-          title,
-          style: GoogleFonts.outfit(
-            fontSize: 16,
-            fontWeight: FontWeight.w700,
-            color: AppColors.textPrimary,
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-class _IconActionButton extends StatelessWidget {
-  final IconData icon;
-  final VoidCallback onTap;
-  final bool isPrimary;
-  final String? tooltip;
-
-  const _IconActionButton({
-    required this.icon,
-    required this.onTap,
-    this.isPrimary = false,
-    this.tooltip,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Tooltip(
-      message: tooltip ?? '',
-      child: Material(
-        color: isPrimary ? AppColors.primaryPurple : AppColors.surfaceWhite,
-        shape: const CircleBorder(),
-        elevation: isPrimary ? 4 : 2,
-        shadowColor: isPrimary
-            ? AppColors.primaryPurple.withAlpha(80)
-            : Colors.black.withAlpha(30),
-        child: InkWell(
-          onTap: onTap,
-          borderRadius: BorderRadius.circular(24),
-          child: Padding(
-            padding: const EdgeInsets.all(10),
-            child: Icon(
-              icon,
-              color: isPrimary ? Colors.white : AppColors.textSecondary,
-              size: 20,
-            ),
-          ),
-        ),
-      ),
-    );
   }
 }
