@@ -62,30 +62,26 @@ service cloud.firestore {
     }
 
     match /families/{familyId} {
-      // Users must be able to read a family before joining by invitation code.
       allow read: if isAuthenticated();
       allow create: if isAuthenticated() && request.resource.data.ownerId == request.auth.uid;
-
-      // Joining is performed by an authenticated user in a transaction that
-      // increments memberCount by exactly one and never changes ownerId.
-      // The family_members rule separately guarantees that the new member
-      // record belongs to request.auth.uid.
       allow update: if isFamilyOwner(familyId) ||
         (isAuthenticated() &&
           request.resource.data.ownerId == resource.data.ownerId &&
           request.resource.data.memberCount == resource.data.memberCount + 1) ||
         isLeavingFamily(familyId);
-
       allow delete: if isFamilyOwner(familyId);
     }
 
     match /family_members/{memberId} {
+      // A user may read their own membership document even when it does not
+      // exist yet. This is required because the join transaction checks the
+      // membership document before creating it.
       allow read: if isAuthenticated() && (
-        resource.data.userId == request.auth.uid ||
+        (resource.data.userId == request.auth.uid) ||
+        memberId.matches('.*_' + request.auth.uid) ||
         isFamilyMember(resource.data.familyId)
       );
 
-      // A user can create only their own membership record.
       allow create: if isAuthenticated() &&
         request.resource.data.userId == request.auth.uid;
 
@@ -104,7 +100,6 @@ service cloud.firestore {
     }
 
     match /family_invitations/{inviteId} {
-      // The invited user can read their invitation before joining.
       allow read: if isAuthenticated() && (
         resource.data.receiverEmail == request.auth.token.email ||
         isFamilyMember(resource.data.familyId)
@@ -114,8 +109,6 @@ service cloud.firestore {
         request.resource.data.senderId == request.auth.uid &&
         isFamilyMember(request.resource.data.familyId);
 
-      // The invited user can accept their own invitation. This intentionally
-      // does not require them to already be a family member.
       allow update: if isAuthenticated() && (
         isFamilyMember(resource.data.familyId) ||
         resource.data.receiverEmail == request.auth.token.email
