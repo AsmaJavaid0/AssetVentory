@@ -206,9 +206,9 @@ class _EditAssetScreenState extends State<EditAssetScreen> {
         type: FileType.custom,
         allowedExtensions: _allowedFileExtensions,
       );
-      if (!mounted || picked == null || picked.files.isEmpty) return;
+      if (picked.isEmpty) return;
 
-      final path = picked.files.first.path;
+      final path = picked.first.path;
       if (path == null) return;
       final file = File(path);
 
@@ -228,9 +228,9 @@ class _EditAssetScreenState extends State<EditAssetScreen> {
         type: FileType.custom,
         allowedExtensions: _allowedFileExtensions,
       );
-      if (!mounted || picked == null || picked.files.isEmpty) return;
+      if (picked.isEmpty) return;
 
-      final path = picked.files.first.path;
+      final path = picked.first.path;
       if (path == null) return;
 
       setState(() => _replacements[document.id] = File(path));
@@ -466,7 +466,7 @@ class _EditAssetScreenState extends State<EditAssetScreen> {
     final keyController = TextEditingController(text: oldKey);
     final valueController = TextEditingController(text: oldValue);
 
-    final result = await showDialog<bool>(
+    await showDialog<void>(
       context: context,
       builder: (dialogContext) => AlertDialog(
         title: Text(
@@ -489,7 +489,7 @@ class _EditAssetScreenState extends State<EditAssetScreen> {
         ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(dialogContext, false),
+            onPressed: () => Navigator.pop(dialogContext),
             child: const Text('Cancel'),
           ),
           TextButton(
@@ -501,22 +501,55 @@ class _EditAssetScreenState extends State<EditAssetScreen> {
                 _customFields.remove(oldKey);
                 _customFields[key] = value;
               });
-              Navigator.pop(dialogContext, true);
+              Navigator.pop(dialogContext);
             },
             child: const Text('Save'),
           ),
         ],
       ),
     );
-
-    if (result == true) {
-      keyController.dispose();
-      valueController.dispose();
-    }
+    keyController.dispose();
+    valueController.dispose();
   }
 
-  void _addCustomField() {
-    _editCustomField('', '').then((_) {});
+  Future<void> _showAddCustomFieldDialog() async {
+    final keyController = TextEditingController();
+    final valueController = TextEditingController();
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text(
+          'Add Custom Field',
+          style: GoogleFonts.outfit(fontWeight: FontWeight.w700),
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            CustomTextField(controller: keyController, hintText: 'Field name'),
+            const SizedBox(height: 12),
+            CustomTextField(controller: valueController, hintText: 'Value'),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () {
+              final key = keyController.text.trim();
+              final value = valueController.text.trim();
+              if (key.isEmpty || value.isEmpty) return;
+              setState(() => _customFields[key] = value);
+              Navigator.pop(dialogContext);
+            },
+            child: const Text('Add'),
+          ),
+        ],
+      ),
+    );
+    keyController.dispose();
+    valueController.dispose();
   }
 
   Widget _buildImagePicker() {
@@ -537,13 +570,6 @@ class _EditAssetScreenState extends State<EditAssetScreen> {
                   color: AppColors.primaryPurple,
                   width: 2,
                 ),
-                boxShadow: [
-                  BoxShadow(
-                    color: AppColors.primaryPurple.withAlpha(30),
-                    blurRadius: 16,
-                    offset: const Offset(0, 4),
-                  ),
-                ],
               ),
               child: _newImage != null
                   ? ClipOval(
@@ -671,7 +697,7 @@ class _EditAssetScreenState extends State<EditAssetScreen> {
               ),
             ),
             TextButton.icon(
-              onPressed: () => _showAddCustomFieldDialog(),
+              onPressed: _showAddCustomFieldDialog,
               icon: const Icon(Icons.add_rounded, size: 16),
               label: const Text('Add Field'),
             ),
@@ -705,25 +731,29 @@ class _EditAssetScreenState extends State<EditAssetScreen> {
                   Expanded(
                     child: InkWell(
                       onTap: () => _editCustomField(entry.key, entry.value),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            entry.key,
-                            style: GoogleFonts.outfit(
-                              fontSize: 14,
-                              fontWeight: FontWeight.w700,
+                      borderRadius: BorderRadius.circular(8),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 4),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              entry.key,
+                              style: GoogleFonts.outfit(
+                                fontSize: 14,
+                                fontWeight: FontWeight.w700,
+                              ),
                             ),
-                          ),
-                          const SizedBox(height: 3),
-                          Text(
-                            entry.value,
-                            style: GoogleFonts.outfit(
-                              fontSize: 12,
-                              color: AppColors.textSecondary,
+                            const SizedBox(height: 3),
+                            Text(
+                              entry.value,
+                              style: GoogleFonts.outfit(
+                                fontSize: 12,
+                                color: AppColors.textSecondary,
+                              ),
                             ),
-                          ),
-                        ],
+                          ],
+                        ),
                       ),
                     ),
                   ),
@@ -749,46 +779,6 @@ class _EditAssetScreenState extends State<EditAssetScreen> {
           ),
       ],
     );
-  }
-
-  Future<void> _showAddCustomFieldDialog() async {
-    final keyController = TextEditingController();
-    final valueController = TextEditingController();
-    await showDialog<void>(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: Text(
-          'Add Custom Field',
-          style: GoogleFonts.outfit(fontWeight: FontWeight.w700),
-        ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            CustomTextField(controller: keyController, hintText: 'Field name'),
-            const SizedBox(height: 12),
-            CustomTextField(controller: valueController, hintText: 'Value'),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            onPressed: () {
-              final key = keyController.text.trim();
-              final value = valueController.text.trim();
-              if (key.isEmpty || value.isEmpty) return;
-              setState(() => _customFields[key] = value);
-              Navigator.pop(dialogContext);
-            },
-            child: const Text('Add'),
-          ),
-        ],
-      ),
-    );
-    keyController.dispose();
-    valueController.dispose();
   }
 
   Widget _buildDocuments() {
@@ -1037,8 +1027,7 @@ class _EditAssetScreenState extends State<EditAssetScreen> {
     );
   }
 
-  String _fileName(String path) =>
-      path.split(Platform.pathSeparator).last;
+  String _fileName(String path) => path.split(Platform.pathSeparator).last;
 
   String? _extension(String path) {
     final name = _fileName(path);
