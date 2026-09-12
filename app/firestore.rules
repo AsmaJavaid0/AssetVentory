@@ -34,6 +34,15 @@ service cloud.firestore {
         getAfter(/databases/$(database)/documents/family_members/$(familyId + '_' + request.auth.uid)).data.userId == request.auth.uid;
     }
 
+    // During the accept/join transaction, the new membership exists in the
+    // transaction's after-state even though the user is not a family member
+    // in the database's current state yet.
+    function isJoiningFamilyAsMember(familyId) {
+      return isAuthenticated() &&
+        getAfter(/databases/$(database)/documents/family_members/$(familyId + '_' + request.auth.uid)).data.familyId == familyId &&
+        getAfter(/databases/$(database)/documents/family_members/$(familyId + '_' + request.auth.uid)).data.userId == request.auth.uid;
+    }
+
     function isLeavingFamily(familyId) {
       return isAuthenticated() &&
         request.resource.data.ownerId == resource.data.ownerId &&
@@ -113,13 +122,19 @@ service cloud.firestore {
         resource.data.receiverEmail == request.auth.token.email ||
         isFamilyMember(resource.data.familyId)
       );
+
       allow create: if isAuthenticated() &&
         request.resource.data.senderId == request.auth.uid &&
         isFamilyMember(request.resource.data.familyId);
+
+      // The invited user must also be allowed to mark the invitation accepted
+      // inside the same transaction that creates their family membership.
       allow update: if isAuthenticated() && (
         isFamilyMember(resource.data.familyId) ||
-        resource.data.receiverEmail == request.auth.token.email
+        resource.data.receiverEmail == request.auth.token.email ||
+        isJoiningFamilyAsMember(resource.data.familyId)
       );
+
       allow delete: if isAuthenticated() && (
         isFamilyOwner(resource.data.familyId) ||
         resource.data.receiverEmail == request.auth.token.email
