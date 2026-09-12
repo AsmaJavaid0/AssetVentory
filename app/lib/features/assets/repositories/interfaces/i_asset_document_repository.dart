@@ -8,6 +8,10 @@ abstract class IAssetDocumentRepository {
     required File sourceFile,
     String? displayName,
   });
+  Future<LocalAssetDocument> replaceDocument(
+    LocalAssetDocument document,
+    File sourceFile,
+  );
   Future<void> deleteDocument(LocalAssetDocument document);
   Future<void> deleteDocumentsForAsset(String assetId);
 }
