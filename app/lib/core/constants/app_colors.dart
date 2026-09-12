@@ -8,12 +8,12 @@ class AppColors {
   static const Color heroDarkBgDarker = Color(0xFF120826);
   static const Color heroCardBg = Color(0xFF281850);
 
-  // Soft Light Lavender Interface
-  static const Color scaffoldBg = Color(0xFFF6F4FC);
+  // Soft Light Lavender/Blue Interface
+  static const Color scaffoldBg = Color(0xFFF6F5FC);
   static const Color surfaceWhite = Color(0xFFFFFFFF);
   static const Color cardLight = Color(0xFFFFFFFF);
-  static const Color lightLavender = Color(0xFFEDE9F8);
-  static const Color lightLavenderBorder = Color(0xFFE2DCF3);
+  static const Color lightLavender = Color(0xFFEEF1FB);
+  static const Color lightLavenderBorder = Color(0xFFDCE3F5);
 
   // Vibrant Blue/Purple Gradients
   static const Color primaryPurple = Color(0xFF7E43F8);
