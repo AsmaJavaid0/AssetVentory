@@ -1,9 +1,6 @@
 name: app
 description: "A new Flutter project."
-# The following line prevents the package from being accidentally published to
-# pub.dev using `flutter pub publish`. This is preferred for private packages.
-publish_to: 'none' # Remove this line if you wish to publish to pub.dev
-
+publish_to: 'none'
 version: 1.0.0+1
 
 environment:
@@ -17,6 +14,7 @@ dependencies:
   firebase_core: ^4.13.0
   firebase_auth: ^6.2.0
   cloud_firestore: ^6.1.2
+  cloud_functions: ^6.1.0
   google_sign_in: ^6.2.2
   google_fonts: ^6.2.1
   shared_preferences: ^2.3.2
