@@ -12,11 +12,7 @@ class SharedAssetModel {
   final String? categoryName;
   final String? emoji;
   final String? imagePath;
-
-  /// Legacy/public URL field retained for backwards compatibility.
   final String? imageUrl;
-
-  /// Private Supabase Storage path. It is never exposed as a public URL.
   final String? imageStoragePath;
   final String? location;
   final String? description;
@@ -49,6 +45,13 @@ class SharedAssetModel {
     DocumentSnapshot<Map<String, dynamic>> doc,
   ) {
     final data = doc.data() ?? {};
+    final imageStoragePath = data['imageStoragePath'] as String?;
+    final documents = (data['documents'] as List<dynamic>?)
+            ?.map((item) => SharedDocumentModel.fromMap(
+                Map<String, dynamic>.from(item as Map)))
+            .toList() ??
+        const [];
+
     return SharedAssetModel(
       id: doc.id,
       familyId: data['familyId'] as String? ?? '',
@@ -59,15 +62,15 @@ class SharedAssetModel {
       categoryName: data['categoryName'] as String?,
       emoji: data['emoji'] as String?,
       imagePath: data['imagePath'] as String?,
-      imageUrl: data['imageUrl'] as String?,
-      imageStoragePath: data['imageStoragePath'] as String?,
+      // Stored download URLs are signed URLs and expire. When a private
+      // storage path exists, force the viewer to resolve a fresh URL instead.
+      imageUrl: imageStoragePath != null && imageStoragePath.isNotEmpty
+          ? null
+          : data['imageUrl'] as String?,
+      imageStoragePath: imageStoragePath,
       location: data['location'] as String?,
       description: data['description'] as String?,
-      documents: (data['documents'] as List<dynamic>?)
-              ?.map((item) => SharedDocumentModel.fromMap(
-                  Map<String, dynamic>.from(item as Map)))
-              .toList() ??
-          const [],
+      documents: documents,
       permissions: SharingPermissionsModel.fromMap(
         data['permissions'] as Map<String, dynamic>?,
       ),
