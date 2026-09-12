@@ -77,10 +77,16 @@ class _EditAssetScreenState extends State<EditAssetScreen> {
     }
   }
 
+  Future<void> _pickImage() async {
+    try {
+      final picked = await _picker.pickImage(source: ImageSource.gallery, imageQuality: 80);
+      if (picked != null && mounted) setState(() => _newImage = File(picked.path));
+    } catch (_) {}
+  }
+
   Future<List<PlatformFile>> _files() => FilePicker.pickFiles(
         type: FileType.custom,
         allowedExtensions: _extensions,
-        allowMultiple: true,
       );
 
   Future<void> _addFiles() async {
@@ -333,7 +339,7 @@ class _EditAssetScreenState extends State<EditAssetScreen> {
           const SizedBox(height: 14),
           ListTile(contentPadding: EdgeInsets.zero, title: Text('Emoji: $_emoji'), trailing: TextButton(onPressed: _emojiPicker, child: const Text('Change'))),
           DropdownButtonFormField<String?>(
-            value: _categoryId,
+            initialValue: _categoryId,
             decoration: const InputDecoration(labelText: 'Category'),
             items: [const DropdownMenuItem<String?>(value: null, child: Text('Uncategorized')), ..._categories.map((c) => DropdownMenuItem<String?>(value: c.id, child: Text(c.name)))],
             onChanged: (value) => setState(() => _categoryId = value),

@@ -6,8 +6,6 @@ import '../../../core/di/service_locator.dart';
 import '../../../core/utils/error_formatter.dart';
 import '../../auth/models/user_model.dart';
 import '../models/shared_asset_model.dart';
-import '../models/sharing_permissions_model.dart';
-import '../repositories/family_repository.dart';
 import 'share_asset_permissions_screen.dart';
 import 'shared_asset_details_screen.dart';
 import '../widgets/shared_asset_card.dart';
