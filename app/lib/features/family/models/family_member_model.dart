@@ -29,6 +29,21 @@ class FamilyMemberModel {
   String get familyDisplayName =>
       displayName.trim().isNotEmpty ? displayName.trim() : name;
 
+  /// The account name derived from the email address, used as the default
+  /// visible name before the viewer creates a local family alias.
+  String get emailBasedName {
+    final value = email.trim();
+    if (value.isEmpty || !value.contains('@')) return '';
+    final localPart = value.split('@').first.trim();
+    if (localPart.isEmpty) return '';
+    return localPart
+        .replaceAll(RegExp(r'[._-]+'), ' ')
+        .split(' ')
+        .where((part) => part.isNotEmpty)
+        .map((part) => part[0].toUpperCase() + part.substring(1))
+        .join(' ');
+  }
+
   factory FamilyMemberModel.fromFirestore(
     DocumentSnapshot<Map<String, dynamic>> doc,
   ) {
