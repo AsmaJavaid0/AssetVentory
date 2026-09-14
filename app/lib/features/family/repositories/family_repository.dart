@@ -368,6 +368,26 @@ class FamilyRepository implements IFamilyRepository {
     }
   }
 
+  @override
+  Future<void> setFamilySharePin({required String familyId, required String pin}) async {
+    throw UnimplementedError('PIN management is handled by SecureFamilyRepository.');
+  }
+
+  @override
+  Future<void> removeFamilySharePin(String familyId) async {
+    throw UnimplementedError('PIN management is handled by SecureFamilyRepository.');
+  }
+
+  @override
+  Future<bool> verifyFamilySharePin({required String familyId, required String pin}) async {
+    throw UnimplementedError('PIN management is handled by SecureFamilyRepository.');
+  }
+
+  @override
+  Future<bool> isFamilyShareUnlocked(String familyId) async {
+    throw UnimplementedError('PIN management is handled by SecureFamilyRepository.');
+  }
+
   Future<void> _joinFamilyTransaction({required FamilyModel family, required FamilyMemberModel member, required String userId, required DateTime now, String? invitationId}) {
     final userRef = _users.doc(userId);
     final memberRef = _members.doc(member.id);
@@ -434,7 +454,7 @@ class FamilyRepository implements IFamilyRepository {
     final memberId = '${familyId}_$userId';
     try {
       final userShared = await _sharedAssets.where('familyId', isEqualTo: familyId).where('ownerId', isEqualTo: userId).get().timeout(const Duration(seconds: 6));
-      for (final doc in userShared.docs) await unshareAsset(doc.id);
+      for (final doc in userShared.docs) { await unshareAsset(doc.id); }
       await _firestore.runTransaction((transaction) async {
         final memberRef = _members.doc(memberId);
         final familyRef = _families.doc(familyId);
@@ -478,7 +498,7 @@ class FamilyRepository implements IFamilyRepository {
     final members = results[1];
     final invitations = results[2];
     final batch = _firestore.batch();
-    for (final doc in shared.docs) batch.delete(doc.reference);
+    for (final doc in shared.docs) { batch.delete(doc.reference); }
     for (final doc in members.docs) {
       final userId = doc.data()['userId'] as String?;
       if (userId != null && userId.isNotEmpty) {
@@ -486,7 +506,7 @@ class FamilyRepository implements IFamilyRepository {
       }
       batch.delete(doc.reference);
     }
-    for (final doc in invitations.docs) batch.delete(doc.reference);
+    for (final doc in invitations.docs) { batch.delete(doc.reference); }
     batch.delete(_families.doc(familyId));
     await batch.commit().timeout(const Duration(seconds: 12));
     for (final doc in shared.docs) {

@@ -8,7 +8,8 @@ service cloud.firestore {
     }
 
     function isOwner(userId) {
-      return isAuthenticated() && request.auth.uid == userId;
+      return isAuthenticated() &&
+        request.auth.uid == userId;
     }
 
     function isFamilyMember(familyId) {
@@ -23,6 +24,30 @@ service cloud.firestore {
         get(/databases/$(database)/documents/families/$(familyId)).data.ownerId == request.auth.uid;
     }
 
+    // Family Share PIN security.
+    // When PIN protection is disabled, normal family members have access.
+    // When PIN protection is enabled, the user must have a valid
+    // family_access record with the current PIN version.
+    function hasFamilyShareAccess(familyId) {
+      return isFamilyMember(familyId) &&
+        (
+          !get(/databases/$(database)/documents/families/$(familyId)).data.pinEnabled ||
+          (
+            exists(/databases/$(database)/documents/family_access/$(familyId + '_' + request.auth.uid)) &&
+            get(/databases/$(database)/documents/family_access/$(familyId + '_' + request.auth.uid)).data.userId == request.auth.uid &&
+            get(/databases/$(database)/documents/family_access/$(familyId + '_' + request.auth.uid)).data.pinVersion ==
+              get(/databases/$(database)/documents/families/$(familyId)).data.pinVersion
+          )
+        );
+    }
+
+    function isJoiningFamily(familyId) {
+      return isAuthenticated() &&
+        request.resource.data.ownerId == resource.data.ownerId &&
+        request.resource.data.memberCount == resource.data.memberCount + 1 &&
+        getAfter(/databases/$(database)/documents/family_members/$(familyId + '_' + request.auth.uid)).data.userId == request.auth.uid;
+    }
+
     function isLeavingFamily(familyId) {
       return isAuthenticated() &&
         request.resource.data.ownerId == resource.data.ownerId &&
@@ -34,8 +59,11 @@ service cloud.firestore {
       allow read: if isAuthenticated();
       allow create: if isOwner(userId);
       allow update: if isOwner(userId) ||
-        (isFamilyOwner(resource.data.familyId) &&
-          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['familyId', 'updatedAt']));
+        (
+          isFamilyOwner(resource.data.familyId) &&
+          request.resource.data.diff(resource.data).affectedKeys()
+            .hasOnly(['familyId', 'updatedAt'])
+        );
       allow delete: if isOwner(userId);
 
       match /devices/{tokenId} {
@@ -44,91 +72,129 @@ service cloud.firestore {
     }
 
     match /tasks/{taskId} {
-      allow read: if isAuthenticated() && (
-        resource.data.assignedTo == request.auth.uid ||
-        resource.data.createdBy == request.auth.uid
-      );
+      allow read: if isAuthenticated() &&
+        (
+          resource.data.assignedTo == request.auth.uid ||
+          resource.data.createdBy == request.auth.uid
+        );
+
       allow create: if isAuthenticated() &&
         request.resource.data.createdBy == request.auth.uid &&
-        (request.resource.data.familyId == null || isFamilyMember(request.resource.data.familyId));
-      allow update: if isAuthenticated() && (
-        resource.data.assignedTo == request.auth.uid ||
-        resource.data.createdBy == request.auth.uid
-      );
-      allow delete: if isAuthenticated() && (
-        resource.data.createdBy == request.auth.uid ||
-        resource.data.assignedTo == request.auth.uid
-      );
+        (
+          request.resource.data.familyId == null ||
+          isFamilyMember(request.resource.data.familyId)
+        );
+
+      allow update: if isAuthenticated() &&
+        (
+          resource.data.assignedTo == request.auth.uid ||
+          resource.data.createdBy == request.auth.uid
+        );
+
+      allow delete: if isAuthenticated() &&
+        (
+          resource.data.createdBy == request.auth.uid ||
+          resource.data.assignedTo == request.auth.uid
+        );
     }
 
     match /families/{familyId} {
       allow read: if isAuthenticated();
-      allow create: if isAuthenticated() && request.resource.data.ownerId == request.auth.uid;
-      allow update: if isFamilyOwner(familyId) ||
-        (isAuthenticated() &&
-          request.resource.data.ownerId == resource.data.ownerId &&
-          request.resource.data.memberCount == resource.data.memberCount + 1) ||
+
+      allow create: if isAuthenticated() &&
+        request.resource.data.ownerId == request.auth.uid;
+
+      allow update: if
+        (
+          isFamilyOwner(familyId) &&
+          request.resource.data.diff(resource.data).affectedKeys()
+            .hasOnly(['name', 'description', 'updatedAt', 'pinEnabled', 'pinVersion'])
+        ) ||
+        isJoiningFamily(familyId) ||
         isLeavingFamily(familyId);
+
       allow delete: if isFamilyOwner(familyId);
     }
 
     match /family_members/{memberId} {
-      // A user may read their own membership document even when it does not
-      // exist yet. This is required because the join transaction checks the
-      // membership document before creating it.
-      allow read: if isAuthenticated() && (
-        (resource.data.userId == request.auth.uid) ||
-        memberId.matches('.*_' + request.auth.uid) ||
-        isFamilyMember(resource.data.familyId)
-      );
+      // A user may read their own membership document.
+      // Family members can also read membership documents for their family.
+      allow read: if isAuthenticated() &&
+        (
+          resource.data.userId == request.auth.uid ||
+          memberId.matches('.*_' + request.auth.uid) ||
+          isFamilyMember(resource.data.familyId)
+        );
 
       allow create: if isAuthenticated() &&
         request.resource.data.userId == request.auth.uid;
 
-      allow update: if isAuthenticated() && (
-        isFamilyOwner(resource.data.familyId) ||
+      allow update: if isAuthenticated() &&
         (
-          resource.data.userId == request.auth.uid &&
-          request.resource.data.userId == request.auth.uid &&
-          request.resource.data.familyId == resource.data.familyId &&
-          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['displayName'])
-        )
-      );
+          isFamilyOwner(resource.data.familyId) ||
+          (
+            resource.data.userId == request.auth.uid &&
+            request.resource.data.userId == request.auth.uid &&
+            request.resource.data.familyId == resource.data.familyId &&
+            request.resource.data.diff(resource.data).affectedKeys()
+              .hasOnly(['displayName'])
+          )
+        );
 
       allow delete: if isFamilyOwner(resource.data.familyId) ||
-        (isAuthenticated() && resource.data.userId == request.auth.uid);
+        (
+          isAuthenticated() &&
+          resource.data.userId == request.auth.uid
+        );
     }
 
     match /family_invitations/{inviteId} {
-      allow read: if isAuthenticated() && (
-        resource.data.receiverEmail == request.auth.token.email ||
-        isFamilyMember(resource.data.familyId)
-      );
+      allow read: if isAuthenticated() &&
+        (
+          resource.data.receiverEmail == request.auth.token.email ||
+          isFamilyMember(resource.data.familyId)
+        );
 
       allow create: if isAuthenticated() &&
         request.resource.data.senderId == request.auth.uid &&
         isFamilyMember(request.resource.data.familyId);
 
-      allow update: if isAuthenticated() && (
-        isFamilyMember(resource.data.familyId) ||
-        resource.data.receiverEmail == request.auth.token.email
-      );
+      allow update: if isAuthenticated() &&
+        (
+          isFamilyMember(resource.data.familyId) ||
+          resource.data.receiverEmail == request.auth.token.email
+        );
 
-      allow delete: if isAuthenticated() && (
-        isFamilyOwner(resource.data.familyId) ||
-        resource.data.receiverEmail == request.auth.token.email
-      );
+      allow delete: if isAuthenticated() &&
+        (
+          isFamilyOwner(resource.data.familyId) ||
+          resource.data.receiverEmail == request.auth.token.email
+        );
+    }
+
+    // Stores successful PIN authorization for a family member.
+    match /family_access/{accessId} {
+      allow read: if isAuthenticated() &&
+        resource.data.userId == request.auth.uid;
+
+      // Access records must only be created/updated/deleted
+      // by the trusted backend function.
+      allow create, update, delete: if false;
     }
 
     match /shared_assets/{sharedAssetId} {
-      allow read: if isAuthenticated() && isFamilyMember(resource.data.familyId);
-      allow create: if isAuthenticated() &&
-        isFamilyMember(request.resource.data.familyId) &&
+      allow read: if hasFamilyShareAccess(resource.data.familyId);
+
+      allow create: if
+        hasFamilyShareAccess(request.resource.data.familyId) &&
         request.resource.data.ownerId == request.auth.uid;
-      allow update, delete: if isAuthenticated() && (
-        resource.data.ownerId == request.auth.uid ||
-        isFamilyOwner(resource.data.familyId)
-      );
+
+      allow update, delete: if
+        hasFamilyShareAccess(resource.data.familyId) &&
+        (
+          resource.data.ownerId == request.auth.uid ||
+          isFamilyOwner(resource.data.familyId)
+        );
     }
   }
 }

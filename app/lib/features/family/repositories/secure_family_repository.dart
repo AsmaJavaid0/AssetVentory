@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:cloud_functions/cloud_functions.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
 import '../../../core/di/service_locator.dart';
@@ -15,52 +16,67 @@ import '../../assets/models/local_asset.dart';
 import '../services/family_file_service.dart';
 import 'family_repository.dart';
 
-/// Family repository variant that keeps family media in a private Supabase
-/// Storage bucket. Firebase Auth/Firestore remain the source of identity and
-/// family membership.
 class SecureFamilyRepository extends FamilyRepository {
   final FamilyFileService _files;
   final FirebaseFirestore _db;
   final AppPreferencesService _preferences;
+  final FirebaseFunctions _functions;
 
   SecureFamilyRepository({
     FamilyFileService? files,
     FirebaseFirestore? firestore,
     AppPreferencesService? preferences,
+    FirebaseFunctions? functions,
   })  : _files = files ?? FamilyFileService(),
         _db = firestore ?? FirebaseFirestore.instance,
-        _preferences = preferences ?? AppPreferencesService();
+        _preferences = preferences ?? AppPreferencesService(),
+        _functions = functions ?? FirebaseFunctions.instance;
 
   CollectionReference<Map<String, dynamic>> get _sharedAssets =>
       _db.collection('shared_assets');
+
+  CollectionReference<Map<String, dynamic>> get _families =>
+      _db.collection('families');
+
+  CollectionReference<Map<String, dynamic>> get _familyAccess =>
+      _db.collection('family_access');
 
   String get _viewerId => FirebaseAuth.instance.currentUser?.uid ?? '';
 
   String _displayNameFor(FamilyMemberModel member) {
     if (_viewerId.isEmpty) return member.familyDisplayName;
+
     return _preferences.familyDisplayName(
       familyId: member.familyId,
       viewerId: _viewerId,
       memberUserId: member.userId,
-      fallback: member.name.isNotEmpty ? member.name : member.familyDisplayName,
+      fallback: member.name.isNotEmpty
+          ? member.name
+          : member.familyDisplayName,
     );
   }
 
   FamilyMemberModel _forViewer(FamilyMemberModel member) {
-    return member.copyWith(displayName: _displayNameFor(member));
+    return member.copyWith(
+      displayName: _displayNameFor(member),
+    );
   }
 
   @override
-  Future<List<FamilyMemberModel>> getFamilyMembers(String familyId) async {
+  Future<List<FamilyMemberModel>> getFamilyMembers(
+    String familyId,
+  ) async {
     final members = await super.getFamilyMembers(familyId);
     return members.map(_forViewer).toList();
   }
 
   @override
-  Stream<List<FamilyMemberModel>> streamFamilyMembers(String familyId) {
+  Stream<List<FamilyMemberModel>> streamFamilyMembers(
+    String familyId,
+  ) {
     return super.streamFamilyMembers(familyId).map(
-      (members) => members.map(_forViewer).toList(),
-    );
+          (members) => members.map(_forViewer).toList(),
+        );
   }
 
   @override
@@ -70,6 +86,7 @@ class SecureFamilyRepository extends FamilyRepository {
     required String fallback,
   }) {
     if (_viewerId.isEmpty) return fallback;
+
     return _preferences.familyDisplayName(
       familyId: familyId,
       viewerId: _viewerId,
@@ -85,19 +102,25 @@ class SecureFamilyRepository extends FamilyRepository {
     required String displayName,
   }) async {
     if (_viewerId.isEmpty) {
-      throw StateError('You must be signed in to edit a family display name.');
+      throw StateError(
+        'You must be signed in to edit a family display name.',
+      );
     }
 
     final trimmedName = displayName.trim();
+
     if (trimmedName.isEmpty) {
-      throw ArgumentError('Family display name cannot be empty.');
-    }
-    if (trimmedName.length > 40) {
-      throw ArgumentError('Family display name must be 40 characters or less.');
+      throw ArgumentError(
+        'Family display name cannot be empty.',
+      );
     }
 
-    // IMPORTANT: family display names are viewer-specific. This writes
-    // to this device's preferences so it is immediately updated locally.
+    if (trimmedName.length > 40) {
+      throw ArgumentError(
+        'Family display name must be 40 characters or less.',
+      );
+    }
+
     await _preferences.setFamilyDisplayName(
       familyId: familyId,
       viewerId: _viewerId,
@@ -105,8 +128,6 @@ class SecureFamilyRepository extends FamilyRepository {
       displayName: trimmedName,
     );
 
-    // Also attempt to update Firestore document if permissions allow
-    // (e.g. user updating their own display name or family owner updating member).
     try {
       await super.updateFamilyMemberDisplayName(
         familyId: familyId,
@@ -114,15 +135,16 @@ class SecureFamilyRepository extends FamilyRepository {
         displayName: trimmedName,
       );
     } catch (_) {
-      // Non-fatal if Firestore rules disallow editing another member's global doc
+      // Non-fatal if Firestore rules disallow editing
+      // another member's global document.
     }
 
-    // Immediately notify all screens and widgets listening to name updates
     nameUpdateNotifier.value++;
   }
 
   String _contentType(String path) {
     final extension = path.split('.').last.toLowerCase();
+
     const types = {
       'jpg': 'image/jpeg',
       'jpeg': 'image/jpeg',
@@ -132,24 +154,36 @@ class SecureFamilyRepository extends FamilyRepository {
       'heic': 'image/heic',
       'pdf': 'application/pdf',
       'doc': 'application/msword',
-      'docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      'docx':
+          'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
       'txt': 'text/plain',
     };
+
     return types[extension] ?? 'application/octet-stream';
   }
 
   @override
-  Stream<List<SharedAssetModel>> streamSharedAssets(String familyId) {
-    return _sharedAssets.where('familyId', isEqualTo: familyId).snapshots().map((snapshot) {
-      final assets = snapshot.docs.map(SharedAssetModel.fromFirestore).toList();
+  Stream<List<SharedAssetModel>> streamSharedAssets(
+    String familyId,
+  ) {
+    return _sharedAssets
+        .where('familyId', isEqualTo: familyId)
+        .snapshots()
+        .map((snapshot) {
+      final assets = snapshot.docs
+          .map(SharedAssetModel.fromFirestore)
+          .toList();
 
-      // Keep the signed-in user's shared assets first. Other members follow
-      // in their existing most-recently-shared order.
       final viewerId = _viewerId;
+
       assets.sort((a, b) {
         final aMine = a.ownerId == viewerId;
         final bMine = b.ownerId == viewerId;
-        if (aMine != bMine) return aMine ? -1 : 1;
+
+        if (aMine != bMine) {
+          return aMine ? -1 : 1;
+        }
+
         return b.sharedAt.compareTo(a.sharedAt);
       });
 
@@ -170,7 +204,10 @@ class SecureFamilyRepository extends FamilyRepository {
 
     String? storagePath;
     String? downloadUrl;
-    if (permissions.viewDetails && asset.imagePath != null && asset.imagePath!.isNotEmpty) {
+
+    if (permissions.viewDetails &&
+        asset.imagePath != null &&
+        asset.imagePath!.isNotEmpty) {
       try {
         storagePath = await _files.uploadFile(
           familyId: familyId,
@@ -179,14 +216,15 @@ class SecureFamilyRepository extends FamilyRepository {
           fileName: asset.imagePath!.split(RegExp(r'[\\/]')).last,
           contentType: _contentType(asset.imagePath!),
         );
+
         try {
           downloadUrl = await _files.getDownloadUrl(
             familyId: familyId,
             path: storagePath,
           );
         } catch (_) {
-          // The asset record can still be shared. The receiver can resolve
-          // the private storage path later when opening the asset.
+          // Asset can still be shared. The receiver can
+          // resolve the private storage path later.
         }
       } catch (_) {
         storagePath = null;
@@ -195,13 +233,16 @@ class SecureFamilyRepository extends FamilyRepository {
     }
 
     final sharedDocs = <SharedDocumentModel>[];
+
     if (permissions.viewDocuments) {
       try {
         final localDocs = await serviceLocator.assetDocumentRepository
             .getDocuments(asset.id);
+
         for (final doc in localDocs) {
           String? docStoragePath;
           String? docDownloadUrl;
+
           if (File(doc.filePath).existsSync()) {
             try {
               docStoragePath = await _files.uploadFile(
@@ -211,6 +252,7 @@ class SecureFamilyRepository extends FamilyRepository {
                 fileName: doc.filePath.split(RegExp(r'[\\/]')).last,
                 contentType: _contentType(doc.filePath),
               );
+
               try {
                 docDownloadUrl = await _files.getDownloadUrl(
                   familyId: familyId,
@@ -222,15 +264,18 @@ class SecureFamilyRepository extends FamilyRepository {
               docDownloadUrl = null;
             }
           }
-          sharedDocs.add(SharedDocumentModel(
-            id: doc.id,
-            name: doc.name,
-            filePath: doc.filePath,
-            fileType: doc.fileType,
-            fileSize: doc.fileSize,
-            storagePath: docStoragePath,
-            downloadUrl: docDownloadUrl,
-          ));
+
+          sharedDocs.add(
+            SharedDocumentModel(
+              id: doc.id,
+              name: doc.name,
+              filePath: doc.filePath,
+              fileType: doc.fileType,
+              fileSize: doc.fileSize,
+              storagePath: docStoragePath,
+              downloadUrl: docDownloadUrl,
+            ),
+          );
         }
       } catch (_) {}
     }
@@ -240,7 +285,9 @@ class SecureFamilyRepository extends FamilyRepository {
       familyId: familyId,
       assetId: asset.id,
       ownerId: owner.id,
-      ownerName: owner.name.isNotEmpty ? owner.name : owner.email.split('@').first,
+      ownerName: owner.name.isNotEmpty
+          ? owner.name
+          : owner.email.split('@').first,
       name: asset.name,
       categoryName: categoryName,
       emoji: asset.emoji,
@@ -255,8 +302,15 @@ class SecureFamilyRepository extends FamilyRepository {
       updatedAt: now,
     );
 
-    await _sharedAssets.doc(docId).set(shared.toFirestore())
-        .timeout(const Duration(seconds: 12));
+    try {
+      await _sharedAssets
+          .doc(docId)
+          .set(shared.toFirestore())
+          .timeout(const Duration(seconds: 12));
+    } on TimeoutException {
+      // Preserve the PIN branch's behavior of not crashing
+      // the UI on a Firestore timeout.
+    }
 
     return shared;
   }
@@ -265,26 +319,119 @@ class SecureFamilyRepository extends FamilyRepository {
   Future<void> unshareAsset(String sharedAssetId) async {
     final doc = await _sharedAssets.doc(sharedAssetId).get();
     final data = doc.data();
+
     final familyId = data?['familyId'] as String?;
     final storagePath = data?['imageStoragePath'] as String?;
 
-    await _sharedAssets.doc(sharedAssetId).delete()
+    await _sharedAssets
+        .doc(sharedAssetId)
+        .delete()
         .timeout(const Duration(seconds: 8));
 
-    if (familyId != null && storagePath != null && storagePath.isNotEmpty) {
+    if (familyId != null &&
+        storagePath != null &&
+        storagePath.isNotEmpty) {
       try {
-        await _files.deleteFile(familyId: familyId, path: storagePath);
+        await _files.deleteFile(
+          familyId: familyId,
+          path: storagePath,
+        );
       } catch (_) {}
     }
   }
 
-  /// Returns a short-lived URL only after the Edge Function has verified that
-  /// the current Firebase user belongs to the same family.
-  Future<String> getSecureImageUrl(SharedAssetModel asset) async {
+  // ---------------------------------------------------------------------------
+  // Family Share PIN security
+  // ---------------------------------------------------------------------------
+
+  @override
+  Future<void> setFamilySharePin({
+    required String familyId,
+    required String pin,
+  }) async {
+    await _functions
+        .httpsCallable('setFamilySharePin')
+        .call({
+      'familyId': familyId,
+      'pin': pin,
+    });
+  }
+
+  @override
+  Future<void> removeFamilySharePin(
+    String familyId,
+  ) async {
+    await _functions
+        .httpsCallable('removeFamilySharePin')
+        .call({
+      'familyId': familyId,
+    });
+  }
+
+  @override
+  Future<bool> verifyFamilySharePin({
+    required String familyId,
+    required String pin,
+  }) async {
+    final result = await _functions
+        .httpsCallable('verifyFamilySharePin')
+        .call({
+      'familyId': familyId,
+      'pin': pin,
+    });
+
+    return result.data is Map &&
+        result.data['success'] == true;
+  }
+
+  @override
+  Future<bool> isFamilyShareUnlocked(
+    String familyId,
+  ) async {
+    final user = FirebaseAuth.instance.currentUser;
+
+    if (user == null) return false;
+
+    final family = await _families.doc(familyId).get();
+
+    if (!family.exists) return false;
+
+    final data = family.data() ?? {};
+
+    if (data['pinEnabled'] != true) {
+      return true;
+    }
+
+    final access = await _familyAccess
+        .doc('${familyId}_${user.uid}')
+        .get();
+
+    if (!access.exists) {
+      return false;
+    }
+
+    final currentVersion =
+        (data['pinVersion'] as num?)?.toInt() ?? 1;
+
+    final grantedVersion =
+        (access.data()?['pinVersion'] as num?)?.toInt() ?? 0;
+
+    return currentVersion == grantedVersion &&
+        access.data()?['userId'] == user.uid;
+  }
+
+  Future<String> getSecureImageUrl(
+    SharedAssetModel asset,
+  ) async {
     final path = asset.imageStoragePath;
+
     if (path == null || path.isEmpty) {
       return asset.displayImageUrl ?? '';
     }
-    return _files.getDownloadUrl(familyId: asset.familyId, path: path);
+
+    return _files.getDownloadUrl(
+      familyId: asset.familyId,
+      path: path,
+    );
   }
 }
