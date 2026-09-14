@@ -20,18 +20,74 @@ class FamilyMembersScreen extends StatefulWidget {
 
 class _FamilyMembersScreenState extends State<FamilyMembersScreen> {
   final Map<String, String> _nameOverrides = {};
+  final Map<String, UserModel> _cachedUsers = {};
+  UserModel? _ownerUser;
 
-  String _emailName(String email) {
-    final local = email.trim().split('@').first;
-    if (local.isEmpty) return '';
-    return local.replaceAll(RegExp(r'[._-]+'), ' ').split(' ').where((p) => p.isNotEmpty)
-        .map((p) => p[0].toUpperCase() + p.substring(1)).join(' ');
+  @override
+  void initState() {
+    super.initState();
+    _loadOwnerUser();
+  }
+
+  Future<void> _loadOwnerUser() async {
+    if (widget.family.ownerId.isEmpty) return;
+    if (widget.family.ownerId == widget.currentUser.id) {
+      if (mounted) setState(() => _ownerUser = widget.currentUser);
+      return;
+    }
+    try {
+      final res = await serviceLocator.firestoreService.getUser(widget.family.ownerId);
+      final user = res.orNull;
+      if (user != null && mounted) {
+        setState(() {
+          _ownerUser = user;
+          _cachedUsers[widget.family.ownerId] = user;
+        });
+      }
+    } catch (_) {}
+  }
+
+  void _ensureUserProfile(String userId) {
+    if (userId.isEmpty || _cachedUsers.containsKey(userId)) return;
+    if (userId == widget.currentUser.id) {
+      _cachedUsers[userId] = widget.currentUser;
+      return;
+    }
+    serviceLocator.firestoreService.getUser(userId).then((res) {
+      final user = res.orNull;
+      if (user != null && mounted) {
+        setState(() {
+          _cachedUsers[userId] = user;
+        });
+      }
+    }).catchError((_) {});
   }
 
   String _defaultMemberName(FamilyMemberModel member) {
-    if (member.emailBasedName.isNotEmpty) return member.emailBasedName;
-    if (member.name.trim().isNotEmpty) return member.name.trim();
-    return 'Member';
+    if (_nameOverrides.containsKey(member.userId)) {
+      return _nameOverrides[member.userId]!;
+    }
+    final savedPref = serviceLocator.familyRepository.getFamilyMemberDisplayName(
+      familyId: widget.family.id,
+      userId: member.userId,
+      fallback: '',
+    );
+    if (savedPref.isNotEmpty) return savedPref;
+
+    if (member.displayName.trim().isNotEmpty && member.displayName.trim() != member.email.trim()) {
+      return member.displayName.trim();
+    }
+    final cached = _cachedUsers[member.userId] ?? (member.userId == widget.currentUser.id ? widget.currentUser : null);
+    if (cached != null && cached.name.trim().isNotEmpty) {
+      return cached.name.trim();
+    }
+    if (member.name.trim().isNotEmpty && member.name.trim() != member.email.trim()) {
+      return member.name.trim();
+    }
+    if (member.emailBasedName.isNotEmpty) {
+      return member.emailBasedName;
+    }
+    return member.isOwner ? 'Family Owner' : 'Member';
   }
 
   @override
@@ -59,25 +115,76 @@ class _FamilyMembersScreenState extends State<FamilyMembersScreen> {
           if (snapshot.connectionState == ConnectionState.waiting) return const Center(child: CircularProgressIndicator(color: AppColors.primaryPurple));
 
           final members = snapshot.data ?? [];
-          final owner = members.firstWhere(
-            (member) => member.isOwner,
-            orElse: () => FamilyMemberModel(
-              id: '${widget.family.id}_${widget.family.ownerId}', familyId: widget.family.id,
-              userId: widget.family.ownerId,
-              name: widget.family.ownerId == widget.currentUser.id ? widget.currentUser.name : '',
-              displayName: widget.family.ownerId == widget.currentUser.id ? widget.currentUser.name : '',
-              email: widget.family.ownerId == widget.currentUser.id ? widget.currentUser.email : '',
-              role: 'owner', joinedAt: widget.family.createdAt,
-            ),
+
+          // Preload profiles for members if needed
+          for (final m in members) {
+            if (m.userId.isNotEmpty) _ensureUserProfile(m.userId);
+          }
+          if (widget.family.ownerId.isNotEmpty) {
+            _ensureUserProfile(widget.family.ownerId);
+          }
+
+          // Identify owner in members list
+          FamilyMemberModel? ownerMember;
+          try {
+            ownerMember = members.firstWhere((m) => m.userId == widget.family.ownerId || m.isOwner);
+          } catch (_) {
+            ownerMember = null;
+          }
+
+          final ownerUserId = widget.family.ownerId.isNotEmpty
+              ? widget.family.ownerId
+              : (ownerMember?.userId ?? '');
+
+          final ownerCached = _ownerUser ?? _cachedUsers[ownerUserId];
+
+          final ownerRealName = (ownerCached?.name.trim().isNotEmpty == true)
+              ? ownerCached!.name.trim()
+              : (ownerUserId == widget.currentUser.id
+                  ? widget.currentUser.name.trim()
+                  : (ownerMember?.name.trim().isNotEmpty == true
+                      ? ownerMember!.name.trim()
+                      : ''));
+
+          final ownerEmail = (ownerCached?.email.trim().isNotEmpty == true)
+              ? ownerCached!.email.trim()
+              : (ownerUserId == widget.currentUser.id
+                  ? widget.currentUser.email.trim()
+                  : (ownerMember?.email ?? ''));
+
+          final owner = FamilyMemberModel(
+            id: ownerMember?.id ?? '${widget.family.id}_$ownerUserId',
+            familyId: widget.family.id,
+            userId: ownerUserId,
+            name: ownerRealName.isNotEmpty
+                ? ownerRealName
+                : (ownerMember?.name.isNotEmpty == true ? ownerMember!.name : 'Family Owner'),
+            displayName: ownerMember?.displayName.trim().isNotEmpty == true
+                ? ownerMember!.displayName.trim()
+                : ownerRealName,
+            email: ownerEmail,
+            photoUrl: ownerMember?.photoUrl.isNotEmpty == true
+                ? ownerMember!.photoUrl
+                : (ownerCached?.photoUrl ?? ''),
+            role: 'owner',
+            joinedAt: ownerMember?.joinedAt ?? widget.family.createdAt,
           );
-          final otherMembers = members.where((m) => !m.isOwner).toList();
+
+          // Other members excludes owner
+          final otherMembers = members.where((m) => !m.isOwner && m.userId != widget.family.ownerId).toList();
 
           return ListView(
             padding: const EdgeInsets.fromLTRB(20, 16, 20, 110),
             children: [
               Text('Family Owner', style: GoogleFonts.outfit(fontSize: 13, fontWeight: FontWeight.w600, color: AppColors.primaryPurple)),
               const SizedBox(height: 6),
-              _MemberCard(member: owner, isCurrent: owner.userId == widget.currentUser.id, displayNameOverride: _nameOverrides[owner.userId], onEdit: () => _editName(context, owner)),
+              _MemberCard(
+                member: owner,
+                isCurrent: owner.userId == widget.currentUser.id,
+                displayNameOverride: _nameOverrides[owner.userId],
+                cachedUser: ownerCached,
+                onEdit: () => _editName(context, owner),
+              ),
               const SizedBox(height: 24),
               Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
                 _sectionTitle('Members (${otherMembers.length})'),
@@ -85,7 +192,16 @@ class _FamilyMembersScreenState extends State<FamilyMembersScreen> {
               ]),
               const SizedBox(height: 10),
               if (otherMembers.isEmpty) _emptyMembersCard()
-              else ...otherMembers.map((member) => Padding(padding: const EdgeInsets.only(bottom: 12), child: _MemberCard(member: member, isCurrent: member.userId == widget.currentUser.id, displayNameOverride: _nameOverrides[member.userId], onEdit: () => _editName(context, member)))),
+              else ...otherMembers.map((member) => Padding(
+                padding: const EdgeInsets.only(bottom: 12),
+                child: _MemberCard(
+                  member: member,
+                  isCurrent: member.userId == widget.currentUser.id,
+                  displayNameOverride: _nameOverrides[member.userId],
+                  cachedUser: _cachedUsers[member.userId],
+                  onEdit: () => _editName(context, member),
+                ),
+              )),
             ],
           );
         },
@@ -136,33 +252,175 @@ class _MemberCard extends StatelessWidget {
   final FamilyMemberModel member;
   final bool isCurrent;
   final String? displayNameOverride;
+  final UserModel? cachedUser;
   final VoidCallback? onEdit;
-  const _MemberCard({required this.member, this.isCurrent = false, this.displayNameOverride, this.onEdit});
+
+  const _MemberCard({
+    required this.member,
+    this.isCurrent = false,
+    this.displayNameOverride,
+    this.cachedUser,
+    this.onEdit,
+  });
+
+  String _resolveName() {
+    if (displayNameOverride?.trim().isNotEmpty == true) {
+      return displayNameOverride!.trim();
+    }
+    final savedPref = serviceLocator.familyRepository.getFamilyMemberDisplayName(
+      familyId: member.familyId,
+      userId: member.userId,
+      fallback: '',
+    );
+    if (savedPref.isNotEmpty) return savedPref;
+
+    if (member.displayName.trim().isNotEmpty && member.displayName.trim() != member.email.trim()) {
+      return member.displayName.trim();
+    }
+    if (cachedUser != null && cachedUser!.name.trim().isNotEmpty) {
+      return cachedUser!.name.trim();
+    }
+    if (member.name.trim().isNotEmpty && member.name.trim() != member.email.trim()) {
+      return member.name.trim();
+    }
+    if (member.emailBasedName.isNotEmpty) {
+      return member.emailBasedName;
+    }
+    return member.isOwner ? 'Family Owner' : 'Member';
+  }
 
   @override
   Widget build(BuildContext context) {
-    final displayName = displayNameOverride?.trim().isNotEmpty == true ? displayNameOverride!.trim() : (member.emailBasedName.isNotEmpty ? member.emailBasedName : member.familyDisplayName);
+    final displayName = _resolveName();
     final initial = displayName.isNotEmpty ? displayName[0].toUpperCase() : 'U';
+
     return Container(
-      constraints: const BoxConstraints(minHeight: 124), padding: const EdgeInsets.fromLTRB(16, 15, 12, 10),
-      decoration: BoxDecoration(color: AppColors.surfaceWhite, borderRadius: BorderRadius.circular(18), border: Border.all(color: isCurrent ? AppColors.primaryPurple.withAlpha(80) : AppColors.lightLavenderBorder, width: isCurrent ? 1.5 : 1.2)),
-      child: Column(children: [
-        Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Container(width: 44, height: 44, decoration: BoxDecoration(color: AppColors.lightLavender, shape: BoxShape.circle, border: Border.all(color: AppColors.primaryPurple.withAlpha(150), width: 1.5)), child: Center(child: Text(initial, style: GoogleFonts.outfit(color: AppColors.primaryPurple, fontSize: 16, fontWeight: FontWeight.w700)))),
-          const SizedBox(width: 14),
-          Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Row(crossAxisAlignment: CrossAxisAlignment.start, children: [Expanded(child: Text(displayName, softWrap: true, style: GoogleFonts.outfit(fontSize: 16, fontWeight: FontWeight.w700, color: AppColors.textPrimary))), if (isCurrent) Container(margin: const EdgeInsets.only(left: 6), padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2), decoration: BoxDecoration(color: AppColors.primaryPurple.withAlpha(20), borderRadius: BorderRadius.circular(6)), child: Text('You', style: GoogleFonts.outfit(fontSize: 10, fontWeight: FontWeight.w600, color: AppColors.primaryPurple)))],
-            ),
-            if (member.email.isNotEmpty) ...[const SizedBox(height: 3), Text(member.email, maxLines: 1, overflow: TextOverflow.ellipsis, style: GoogleFonts.outfit(fontSize: 12, color: AppColors.textSecondary))],
-          ])),
-        ]),
-        const SizedBox(height: 5),
-        Row(mainAxisAlignment: MainAxisAlignment.end, children: [
-          IconButton(tooltip: 'Edit family name', visualDensity: VisualDensity.compact, padding: EdgeInsets.zero, constraints: const BoxConstraints(minWidth: 36, minHeight: 36), icon: const Icon(Icons.edit_outlined, size: 19, color: AppColors.primaryPurple), onPressed: onEdit),
-          const SizedBox(width: 5),
-          Container(padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5), decoration: BoxDecoration(color: member.isOwner ? Colors.amber.withAlpha(40) : AppColors.lightLavender, borderRadius: BorderRadius.circular(10)), child: Text(member.isOwner ? 'Owner' : member.role.toUpperCase(), style: GoogleFonts.outfit(fontSize: 11, fontWeight: FontWeight.w700, color: member.isOwner ? Colors.amber.shade900 : AppColors.primaryPurple))),
-        ]),
-      ]),
+      constraints: const BoxConstraints(minHeight: 110),
+      padding: const EdgeInsets.fromLTRB(16, 14, 12, 12),
+      decoration: BoxDecoration(
+        color: AppColors.surfaceWhite,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(
+          color: isCurrent ? AppColors.primaryPurple.withAlpha(80) : AppColors.lightLavenderBorder,
+          width: isCurrent ? 1.5 : 1.2,
+        ),
+      ),
+      child: Column(
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                width: 44,
+                height: 44,
+                decoration: BoxDecoration(
+                  color: AppColors.lightLavender,
+                  shape: BoxShape.circle,
+                  border: Border.all(color: AppColors.primaryPurple.withAlpha(150), width: 1.5),
+                ),
+                child: Center(
+                  child: Text(
+                    initial,
+                    style: GoogleFonts.outfit(
+                      color: AppColors.primaryPurple,
+                      fontSize: 16,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.center,
+                      children: [
+                        Flexible(
+                          child: Text(
+                            displayName,
+                            style: GoogleFonts.outfit(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w700,
+                              color: AppColors.textPrimary,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        if (isCurrent)
+                          Container(
+                            margin: const EdgeInsets.only(left: 8),
+                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: AppColors.primaryPurple.withAlpha(20),
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: Text(
+                              'You',
+                              style: GoogleFonts.outfit(
+                                fontSize: 10,
+                                fontWeight: FontWeight.w600,
+                                color: AppColors.primaryPurple,
+                              ),
+                            ),
+                          ),
+                      ],
+                    ),
+                    if (member.email.isNotEmpty) ...[
+                      const SizedBox(height: 3),
+                      Text(
+                        member.email,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: GoogleFonts.outfit(
+                          fontSize: 12,
+                          color: AppColors.textSecondary,
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.end,
+            children: [
+              IconButton(
+                tooltip: 'Edit family name',
+                visualDensity: VisualDensity.compact,
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
+                icon: const Icon(Icons.edit_outlined, size: 19, color: AppColors.primaryPurple),
+                onPressed: onEdit,
+              ),
+              const SizedBox(width: 6),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                decoration: BoxDecoration(
+                  color: member.isOwner ? Colors.amber.withAlpha(40) : AppColors.lightLavender,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(
+                    color: member.isOwner ? Colors.amber.shade200 : AppColors.lightLavenderBorder,
+                    width: 1,
+                  ),
+                ),
+                child: Text(
+                  member.isOwner ? 'Owner' : member.role.toUpperCase(),
+                  style: GoogleFonts.outfit(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                    color: member.isOwner ? Colors.amber.shade900 : AppColors.primaryPurple,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
     );
   }
 }

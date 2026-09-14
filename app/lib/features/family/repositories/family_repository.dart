@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 import 'dart:math';
+import 'package:flutter/foundation.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 
 import '../models/family_model.dart';
@@ -158,12 +159,25 @@ class FamilyRepository implements IFamilyRepository {
     );
   }
 
+  final ValueNotifier<int> _nameUpdateNotifier = ValueNotifier<int>(0);
+
+  @override
+  ValueNotifier<int> get nameUpdateNotifier => _nameUpdateNotifier;
+
+  @override
+  String getFamilyMemberDisplayName({
+    required String familyId,
+    required String userId,
+    required String fallback,
+  }) => fallback;
+
   @override
   Future<void> updateFamilyMemberDisplayName({required String familyId, required String userId, required String displayName}) async {
     final trimmedName = displayName.trim();
     if (trimmedName.isEmpty) throw ArgumentError('Family display name cannot be empty.');
     if (trimmedName.length > 40) throw ArgumentError('Family display name must be 40 characters or less.');
     await _members.doc('${familyId}_$userId').update({'displayName': trimmedName}).timeout(const Duration(seconds: 8));
+    _nameUpdateNotifier.value++;
   }
 
   @override

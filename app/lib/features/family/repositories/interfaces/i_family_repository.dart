@@ -1,3 +1,5 @@
+import 'package:flutter/foundation.dart';
+
 import '../../models/family_model.dart';
 import '../../models/family_member_model.dart';
 import '../../models/family_invitation_model.dart';
@@ -7,6 +9,9 @@ import '../../../auth/models/user_model.dart';
 import '../../../assets/models/local_asset.dart';
 
 abstract class IFamilyRepository {
+  /// Notifier that increments when a family member display name is updated
+  ValueNotifier<int> get nameUpdateNotifier;
+
   /// Fetch the family for a given user ID (or null if not in a family)
   Future<FamilyModel?> getUserFamily(String userId);
 
@@ -31,6 +36,13 @@ abstract class IFamilyRepository {
 
   /// Stream members of a family
   Stream<List<FamilyMemberModel>> streamFamilyMembers(String familyId);
+
+  /// Get effective display name for a family member
+  String getFamilyMemberDisplayName({
+    required String familyId,
+    required String userId,
+    required String fallback,
+  });
 
   /// Update the family display name shown to other family members.
   Future<void> updateFamilyMemberDisplayName({

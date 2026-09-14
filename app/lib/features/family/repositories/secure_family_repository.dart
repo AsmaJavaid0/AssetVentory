@@ -64,6 +64,21 @@ class SecureFamilyRepository extends FamilyRepository {
   }
 
   @override
+  String getFamilyMemberDisplayName({
+    required String familyId,
+    required String userId,
+    required String fallback,
+  }) {
+    if (_viewerId.isEmpty) return fallback;
+    return _preferences.familyDisplayName(
+      familyId: familyId,
+      viewerId: _viewerId,
+      memberUserId: userId,
+      fallback: fallback,
+    );
+  }
+
+  @override
   Future<void> updateFamilyMemberDisplayName({
     required String familyId,
     required String userId,
@@ -81,15 +96,29 @@ class SecureFamilyRepository extends FamilyRepository {
       throw ArgumentError('Family display name must be 40 characters or less.');
     }
 
-    // IMPORTANT: family display names are viewer-specific. This writes only
-    // to this device's preferences, so renaming Dad as "Papa" here does not
-    // change Dad's name on Dad's phone or any other family member's screen.
+    // IMPORTANT: family display names are viewer-specific. This writes
+    // to this device's preferences so it is immediately updated locally.
     await _preferences.setFamilyDisplayName(
       familyId: familyId,
       viewerId: _viewerId,
       memberUserId: userId,
       displayName: trimmedName,
     );
+
+    // Also attempt to update Firestore document if permissions allow
+    // (e.g. user updating their own display name or family owner updating member).
+    try {
+      await super.updateFamilyMemberDisplayName(
+        familyId: familyId,
+        userId: userId,
+        displayName: trimmedName,
+      );
+    } catch (_) {
+      // Non-fatal if Firestore rules disallow editing another member's global doc
+    }
+
+    // Immediately notify all screens and widgets listening to name updates
+    nameUpdateNotifier.value++;
   }
 
   String _contentType(String path) {

@@ -12,6 +12,7 @@ import '../../features/assets/repositories/interfaces/i_asset_document_repositor
 import '../../features/family/repositories/interfaces/i_family_repository.dart';
 import '../../features/family/repositories/secure_family_repository.dart';
 
+import '../../features/auth/services/firestore_service.dart';
 import '../../features/tasks/services/task_service.dart';
 import '../../features/tasks/services/local_task_store.dart';
 import '../../features/tasks/services/task_notification_service.dart';
@@ -24,6 +25,7 @@ class ServiceLocator {
   IAssetDocumentRepository get assetDocumentRepository => getIt<IAssetDocumentRepository>();
   ICategoryRepository get categoryRepository => getIt<ICategoryRepository>();
   IFamilyRepository get familyRepository => getIt<IFamilyRepository>();
+  FirestoreService get firestoreService => getIt<FirestoreService>();
   TaskService get taskService => getIt<TaskService>();
   LocalTaskStore get localTaskStore => getIt<LocalTaskStore>();
   TaskNotificationService get taskNotificationService => getIt<TaskNotificationService>();
@@ -51,6 +53,7 @@ Future<void> setupServiceLocator() async {
   // Family Sharing uses the private Supabase-backed repository. Normal assets
   // and their media remain entirely local.
   getIt.registerLazySingleton<IFamilyRepository>(() => SecureFamilyRepository());
+  getIt.registerLazySingleton<FirestoreService>(() => FirestoreService());
 
   getIt.registerLazySingleton<IAssetRepository>(() => AssetRepository(
         database: getIt<AppDatabase>(),

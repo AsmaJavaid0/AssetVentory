@@ -35,9 +35,22 @@ class _FamilyDashboardScreenState extends State<FamilyDashboardScreen> {
   final _familyRepository = serviceLocator.familyRepository;
   final _searchController = TextEditingController();
   String _searchQuery = '';
+  // Tracks the version of local name overrides so the widget rebuilds
+  // immediately when the user edits a name on the Members screen.
+  late final VoidCallback _nameUpdateListener;
+
+  @override
+  void initState() {
+    super.initState();
+    _nameUpdateListener = () {
+      if (mounted) setState(() {});
+    };
+    _familyRepository.nameUpdateNotifier.addListener(_nameUpdateListener);
+  }
 
   @override
   void dispose() {
+    _familyRepository.nameUpdateNotifier.removeListener(_nameUpdateListener);
     _searchController.dispose();
     super.dispose();
   }
@@ -215,6 +228,7 @@ class _FamilyDashboardScreenState extends State<FamilyDashboardScreen> {
     required String ownerId,
     required String ownerName,
     required bool isCurrentUser,
+    required bool isOwner,
     required List<SharedAssetModel> assets,
   }) {
     final visibleAssets = assets
@@ -224,8 +238,14 @@ class _FamilyDashboardScreenState extends State<FamilyDashboardScreen> {
 
     if (visibleAssets.isEmpty) return const SizedBox.shrink();
 
-    final cleanName = ownerName.trim().isEmpty ? 'Member' : ownerName.trim();
-    final displayName = isCurrentUser ? 'My Assets' : "$cleanName's Assets";
+    // Resolve the most up-to-date local name (reflects edits from Members screen immediately)
+    final resolvedName = _familyRepository.getFamilyMemberDisplayName(
+      familyId: widget.family.id,
+      userId: ownerId,
+      fallback: ownerName.trim().isEmpty ? 'Member' : ownerName.trim(),
+    );
+    final cleanName = resolvedName.trim().isEmpty ? 'Member' : resolvedName.trim();
+    final cardTitle = isCurrentUser ? 'My Assets' : "${cleanName}'s Assets";
     final initial = cleanName[0].toUpperCase();
 
     return Container(
@@ -285,15 +305,40 @@ class _FamilyDashboardScreenState extends State<FamilyDashboardScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
-                        displayName,
-                        style: GoogleFonts.outfit(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w700,
-                          color: AppColors.textPrimary,
-                        ),
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
+                      Row(
+                        children: [
+                          Flexible(
+                            child: Text(
+                              cardTitle,
+                              style: GoogleFonts.outfit(
+                                fontSize: 16,
+                                fontWeight: FontWeight.w700,
+                                color: AppColors.textPrimary,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          if (isOwner && !isCurrentUser) ...[
+                            const SizedBox(width: 8),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: Colors.amber.withAlpha(40),
+                                borderRadius: BorderRadius.circular(6),
+                                border: Border.all(color: Colors.amber.shade200, width: 1),
+                              ),
+                              child: Text(
+                                'Owner',
+                                style: GoogleFonts.outfit(
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.w700,
+                                  color: Colors.amber.shade900,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ],
                       ),
                       const SizedBox(height: 3),
                       Text(
@@ -477,10 +522,22 @@ class _FamilyDashboardScreenState extends State<FamilyDashboardScreen> {
                 future: _familyRepository.getFamilyMembers(widget.family.id),
                 builder: (context, memberSnapshot) {
                   final members = memberSnapshot.data ?? [];
+                  // Build a role lookup so we can pass isOwner to each card
+                  final ownerIdSet = <String>{};
                   for (final member in members) {
+                    if (member.isOwner) ownerIdSet.add(member.userId);
                     if (groupedOwners.containsKey(member.userId)) {
-                      groupedOwners[member.userId] = member.familyDisplayName;
+                      // Prefer the real name from the member document
+                      final realName = member.name.trim().isNotEmpty &&
+                              member.name.trim() != member.email.trim()
+                          ? member.name.trim()
+                          : member.familyDisplayName;
+                      groupedOwners[member.userId] = realName;
                     }
+                  }
+                  // Also mark the family's designated owner
+                  if (widget.family.ownerId.isNotEmpty) {
+                    ownerIdSet.add(widget.family.ownerId);
                   }
 
                   final ownerIds = groupedOwners.keys.where((ownerId) {
@@ -507,6 +564,7 @@ class _FamilyDashboardScreenState extends State<FamilyDashboardScreen> {
                             ownerId: ownerId,
                             ownerName: groupedOwners[ownerId] ?? 'Member',
                             isCurrentUser: ownerId == widget.currentUser.id,
+                            isOwner: ownerIdSet.contains(ownerId),
                             assets: assets,
                           );
                         },
