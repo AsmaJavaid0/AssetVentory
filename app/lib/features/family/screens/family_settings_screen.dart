@@ -26,6 +26,7 @@ class _FamilySettingsScreenState extends State<FamilySettingsScreen> {
   final _familyRepository = serviceLocator.familyRepository;
   final _authService = AuthService();
   bool _isProcessing = false;
+  bool _pinUpdated = false;
   bool get _isOwner => widget.family.ownerId == widget.currentUser.id;
 
   void _copyCode() {
@@ -34,8 +35,20 @@ class _FamilySettingsScreenState extends State<FamilySettingsScreen> {
   }
 
   Future<void> _openPinSettings() async {
-    final changed = await Navigator.push<bool>(context, MaterialPageRoute(builder: (_) => FamilySharePinScreen(family: widget.family, currentUser: widget.currentUser)));
-    if (changed == true && mounted) Navigator.pop(context, true);
+    final changed = await Navigator.push<bool>(
+      context,
+      MaterialPageRoute(
+        builder: (_) => FamilySharePinScreen(
+          family: widget.family,
+          currentUser: widget.currentUser,
+        ),
+      ),
+    );
+    if (changed == true && mounted) {
+      setState(() {
+        _pinUpdated = true;
+      });
+    }
   }
 
   Future<void> _handleLogout() async {
@@ -142,14 +155,25 @@ class _FamilySettingsScreenState extends State<FamilySettingsScreen> {
   @override
   Widget build(BuildContext context) {
     final created = '${widget.family.createdAt.day}/${widget.family.createdAt.month}/${widget.family.createdAt.year}';
-    return Scaffold(
-      backgroundColor: AppColors.scaffoldBg,
-      appBar: AppBar(
-        title: Text('Family Settings', style: GoogleFonts.outfit(fontWeight: FontWeight.w700, color: AppColors.textPrimary)),
-        backgroundColor: Colors.white,
-        elevation: 0,
-        leading: IconButton(icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 20), onPressed: () => Navigator.pop(context)),
-      ),
+    final pinEnabled = _familyRepository.isFamilyPinEnabled(widget.family.id);
+
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, result) {
+        if (didPop) return;
+        Navigator.pop(context, _pinUpdated);
+      },
+      child: Scaffold(
+        backgroundColor: AppColors.scaffoldBg,
+        appBar: AppBar(
+          title: Text('Family Settings', style: GoogleFonts.outfit(fontWeight: FontWeight.w700, color: AppColors.textPrimary)),
+          backgroundColor: Colors.white,
+          elevation: 0,
+          leading: IconButton(
+            icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 20),
+            onPressed: () => Navigator.pop(context, _pinUpdated),
+          ),
+        ),
       body: _isProcessing
           ? const Center(child: CircularProgressIndicator(color: AppColors.primaryPurple))
           : ListView(
@@ -178,9 +202,14 @@ class _FamilySettingsScreenState extends State<FamilySettingsScreen> {
                 _sectionTitle('Shared Assets Security'),
                 _card(Column(children: [
                   ListTile(
-                    leading: Icon(widget.family.pinEnabled ? Icons.lock_rounded : Icons.lock_open_rounded, color: AppColors.primaryPurple),
+                    leading: Icon(pinEnabled ? Icons.lock_rounded : Icons.lock_open_rounded, color: AppColors.primaryPurple),
                     title: Text('Family Share PIN', style: GoogleFonts.outfit(fontWeight: FontWeight.w600, fontSize: 14)),
-                    subtitle: Text(widget.family.pinEnabled ? (_isOwner ? 'Enabled • change or remove the PIN' : 'Enabled • PIN required to view shared assets') : 'Protect shared assets with a 4–6 digit PIN', style: GoogleFonts.outfit(fontSize: 12, color: AppColors.textSecondary)),
+                    subtitle: Text(
+                      pinEnabled
+                          ? 'Enabled • Change or remove the PIN'
+                          : 'Protect shared assets with a 4–6 digit PIN',
+                      style: GoogleFonts.outfit(fontSize: 12, color: AppColors.textSecondary),
+                    ),
                     trailing: const Icon(Icons.arrow_forward_ios_rounded, size: 14),
                     onTap: _openPinSettings,
                   ),
@@ -197,6 +226,7 @@ class _FamilySettingsScreenState extends State<FamilySettingsScreen> {
                 _card(ListTile(leading: const Icon(Icons.exit_to_app_rounded, color: AppColors.error), title: Text(_isOwner ? 'Leave or Delete Family' : 'Leave Family Group', style: GoogleFonts.outfit(fontWeight: FontWeight.w600, fontSize: 14, color: AppColors.error)), subtitle: Text('Your personal assets will remain on your device.', style: GoogleFonts.outfit(fontSize: 12, color: AppColors.textSecondary)), onTap: _handleLeaveFamily)),
               ],
             ),
+      ),
     );
   }
 
@@ -217,6 +247,6 @@ class _SettingsRow extends StatelessWidget {
     Icon(icon, size: 20, color: AppColors.primaryPurple),
     const SizedBox(width: 12),
     Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text(label, style: GoogleFonts.outfit(fontSize: 11, color: AppColors.textSecondary)), const SizedBox(height: 2), Text(value, style: GoogleFonts.outfit(fontSize: 14, fontWeight: FontWeight.w600))])),
-    if (trailing != null) trailing!,
+    ?trailing,
   ]);
 }

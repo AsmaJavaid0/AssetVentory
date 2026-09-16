@@ -96,6 +96,8 @@ abstract class IFamilyRepository {
   // Family Share PIN security.
   // Default implementations keep existing repository variants
   // source-compatible; the secure repository overrides them.
+  bool isFamilyPinEnabled(String familyId) => false;
+
   Future<void> setFamilySharePin({
     required String familyId,
     required String pin,
@@ -111,6 +113,10 @@ abstract class IFamilyRepository {
 
   Future<bool> isFamilyShareUnlocked(String familyId) =>
       throw UnimplementedError();
+
+  Future<void> lockFamilyShare(String familyId) =>
+      throw UnimplementedError();
+
 
   Future<void> leaveFamily({
     required String familyId,

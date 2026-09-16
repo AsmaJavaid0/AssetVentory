@@ -369,6 +369,9 @@ class FamilyRepository implements IFamilyRepository {
   }
 
   @override
+  bool isFamilyPinEnabled(String familyId) => false;
+
+  @override
   Future<void> setFamilySharePin({required String familyId, required String pin}) async {
     throw UnimplementedError('PIN management is handled by SecureFamilyRepository.');
   }
@@ -385,8 +388,11 @@ class FamilyRepository implements IFamilyRepository {
 
   @override
   Future<bool> isFamilyShareUnlocked(String familyId) async {
-    throw UnimplementedError('PIN management is handled by SecureFamilyRepository.');
+    return true;
   }
+
+  @override
+  Future<void> lockFamilyShare(String familyId) async {}
 
   Future<void> _joinFamilyTransaction({required FamilyModel family, required FamilyMemberModel member, required String userId, required DateTime now, String? invitationId}) {
     final userRef = _users.doc(userId);

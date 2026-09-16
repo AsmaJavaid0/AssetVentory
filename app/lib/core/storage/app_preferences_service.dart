@@ -116,4 +116,48 @@ class AppPreferencesService {
     final key = 'family_display_name_${familyId}_${viewerId}_$memberUserId';
     return await prefs.setString(key, displayName.trim());
   }
+
+  // --- Family Share PIN ---
+  // Stored locally on this device. Protects access to the family sharing screen
+  // and shared assets.
+  String? getFamilySharePin({
+    required String familyId,
+    String? userId,
+  }) {
+    if (userId != null && userId.isNotEmpty) {
+      final userPin = _prefs?.getString('family_share_pin_${familyId}_$userId');
+      if (userPin != null && userPin.isNotEmpty) return userPin;
+    }
+    return _prefs?.getString('family_share_pin_$familyId');
+  }
+
+  bool isFamilyPinEnabled({
+    required String familyId,
+    String? userId,
+  }) {
+    final pin = getFamilySharePin(familyId: familyId, userId: userId);
+    return pin != null && pin.isNotEmpty;
+  }
+
+  Future<bool> setFamilySharePin({
+    required String familyId,
+    String? userId,
+    required String pin,
+  }) async {
+    if (userId != null && userId.isNotEmpty) {
+      await prefs.setString('family_share_pin_${familyId}_$userId', pin.trim());
+    }
+    return await prefs.setString('family_share_pin_$familyId', pin.trim());
+  }
+
+  Future<bool> removeFamilySharePin({
+    required String familyId,
+    String? userId,
+  }) async {
+    if (userId != null && userId.isNotEmpty) {
+      await prefs.remove('family_share_pin_${familyId}_$userId');
+    }
+    return await prefs.remove('family_share_pin_$familyId');
+  }
 }
+

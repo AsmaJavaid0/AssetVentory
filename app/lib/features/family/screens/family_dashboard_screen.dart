@@ -14,8 +14,6 @@ import 'share_asset_screen.dart';
 import 'family_settings_screen.dart';
 import 'family_member_assets_screen.dart';
 import 'family_share_pin_screen.dart';
-import 'shared_asset_details_screen.dart';
-import 'share_asset_permissions_screen.dart';
 
 class FamilyDashboardScreen extends StatefulWidget {
   final FamilyModel family;
@@ -59,12 +57,13 @@ class _FamilyDashboardScreenState extends State<FamilyDashboardScreen> {
     _familyRepository.nameUpdateNotifier.addListener(_nameUpdateListener);
   }
 
+  bool get _isPinEnabled => _familyRepository.isFamilyPinEnabled(widget.family.id);
+
   @override
   void didUpdateWidget(covariant FamilyDashboardScreen oldWidget) {
     super.didUpdateWidget(oldWidget);
 
-    if (oldWidget.family.id != widget.family.id ||
-        oldWidget.family.pinEnabled != widget.family.pinEnabled) {
+    if (oldWidget.family.id != widget.family.id) {
       _refreshPinAccess();
     }
   }
@@ -127,6 +126,21 @@ class _FamilyDashboardScreenState extends State<FamilyDashboardScreen> {
     }
   }
 
+  Future<void> _lockSharedAssets() async {
+    await _familyRepository.lockFamilyShare(widget.family.id);
+    if (mounted) {
+      setState(() {
+        _shareUnlocked = false;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Shared assets locked.'),
+          backgroundColor: AppColors.primaryPurple,
+        ),
+      );
+    }
+  }
+
   Future<void> _openSettings() async {
     final result = await Navigator.push<bool>(
       context,
@@ -138,8 +152,10 @@ class _FamilyDashboardScreenState extends State<FamilyDashboardScreen> {
       ),
     );
 
-    if (result == true && mounted) {
-      widget.onFamilyUpdated();
+    if (mounted) {
+      if (result == true) {
+        widget.onFamilyUpdated();
+      }
       await _refreshPinAccess();
     }
   }
@@ -173,9 +189,6 @@ class _FamilyDashboardScreenState extends State<FamilyDashboardScreen> {
     }
   }
 
-  void _openSharedAsset(SharedAssetModel asset) {
-    SharedAssetDetailsScreen.navigateTo(context, asset);
-  }
 
   Future<void> _openSearch() async {
     _searchController.text = _searchQuery;
@@ -238,72 +251,6 @@ class _FamilyDashboardScreenState extends State<FamilyDashboardScreen> {
     );
   }
 
-  Future<void> _managePermissions(SharedAssetModel asset) async {
-    final updated = await ShareAssetPermissionsScreen.navigateTo(
-      context,
-      sharedAsset: asset,
-    );
-
-    if (updated == true && mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Sharing permissions updated.'),
-          backgroundColor: AppColors.success,
-        ),
-      );
-    }
-  }
-
-  Future<void> _confirmUnshare(SharedAssetModel asset) async {
-    final confirm = await showDialog<bool>(
-      context: context,
-      builder: (c) => AlertDialog(
-        title: const Text('Stop Sharing Asset?'),
-        content: Text(
-          'Stop sharing "${asset.name}" with the family?',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(c, false),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(c, true),
-            child: const Text(
-              'Stop Sharing',
-              style: TextStyle(
-                color: AppColors.error,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-
-    if (confirm != true) return;
-
-    try {
-      await _familyRepository.unshareAsset(asset.id);
-
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Asset is no longer shared.'),
-            backgroundColor: AppColors.success,
-          ),
-        );
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(ErrorFormatter.format(e)),
-            backgroundColor: AppColors.error,
-          ),
-        );
-      }
-    }
-  }
 
   Widget _buildHeader(BuildContext context) {
     final top = MediaQuery.of(context).padding.top;
@@ -744,8 +691,20 @@ class _FamilyDashboardScreenState extends State<FamilyDashboardScreen> {
                       ),
                     ),
                   ),
+                  if (!_checkingPin && _isPinEnabled && _shareUnlocked) ...[
+                    IconButton(
+                      tooltip: 'Lock Shared Assets',
+                      icon: const Icon(
+                        Icons.lock_outline_rounded,
+                        color: AppColors.primaryPurple,
+                        size: 22,
+                      ),
+                      onPressed: _lockSharedAssets,
+                    ),
+                    const SizedBox(width: 6),
+                  ],
                   if (!_checkingPin &&
-                      (!widget.family.pinEnabled || _shareUnlocked))
+                      (!_isPinEnabled || _shareUnlocked))
                     ElevatedButton.icon(
                       onPressed: _openShareAsset,
                       icon: const Icon(
@@ -786,7 +745,7 @@ class _FamilyDashboardScreenState extends State<FamilyDashboardScreen> {
                 ),
               ),
             )
-          else if (widget.family.pinEnabled && !_shareUnlocked)
+          else if (_isPinEnabled && !_shareUnlocked)
             SliverToBoxAdapter(
               child: Padding(
                 padding: const EdgeInsets.fromLTRB(

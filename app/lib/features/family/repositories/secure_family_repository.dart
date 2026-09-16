@@ -2,7 +2,6 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:cloud_functions/cloud_functions.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
 import '../../../core/di/service_locator.dart';
@@ -20,26 +19,17 @@ class SecureFamilyRepository extends FamilyRepository {
   final FamilyFileService _files;
   final FirebaseFirestore _db;
   final AppPreferencesService _preferences;
-  final FirebaseFunctions _functions;
 
   SecureFamilyRepository({
     FamilyFileService? files,
     FirebaseFirestore? firestore,
     AppPreferencesService? preferences,
-    FirebaseFunctions? functions,
   })  : _files = files ?? FamilyFileService(),
         _db = firestore ?? FirebaseFirestore.instance,
-        _preferences = preferences ?? AppPreferencesService(),
-        _functions = functions ?? FirebaseFunctions.instance;
+        _preferences = preferences ?? AppPreferencesService();
 
   CollectionReference<Map<String, dynamic>> get _sharedAssets =>
       _db.collection('shared_assets');
-
-  CollectionReference<Map<String, dynamic>> get _families =>
-      _db.collection('families');
-
-  CollectionReference<Map<String, dynamic>> get _familyAccess =>
-      _db.collection('family_access');
 
   String get _viewerId => FirebaseAuth.instance.currentUser?.uid ?? '';
 
@@ -341,31 +331,41 @@ class SecureFamilyRepository extends FamilyRepository {
   }
 
   // ---------------------------------------------------------------------------
-  // Family Share PIN security
+  // Family Share PIN security (stored locally on device)
   // ---------------------------------------------------------------------------
+
+  final Set<String> _unlockedFamilyIds = <String>{};
+
+  @override
+  bool isFamilyPinEnabled(String familyId) {
+    return _preferences.isFamilyPinEnabled(
+      familyId: familyId,
+      userId: _viewerId,
+    );
+  }
 
   @override
   Future<void> setFamilySharePin({
     required String familyId,
     required String pin,
   }) async {
-    await _functions
-        .httpsCallable('setFamilySharePin')
-        .call({
-      'familyId': familyId,
-      'pin': pin,
-    });
+    await _preferences.setFamilySharePin(
+      familyId: familyId,
+      userId: _viewerId,
+      pin: pin,
+    );
+    _unlockedFamilyIds.add(familyId);
   }
 
   @override
   Future<void> removeFamilySharePin(
     String familyId,
   ) async {
-    await _functions
-        .httpsCallable('removeFamilySharePin')
-        .call({
-      'familyId': familyId,
-    });
+    await _preferences.removeFamilySharePin(
+      familyId: familyId,
+      userId: _viewerId,
+    );
+    _unlockedFamilyIds.remove(familyId);
   }
 
   @override
@@ -373,51 +373,34 @@ class SecureFamilyRepository extends FamilyRepository {
     required String familyId,
     required String pin,
   }) async {
-    final result = await _functions
-        .httpsCallable('verifyFamilySharePin')
-        .call({
-      'familyId': familyId,
-      'pin': pin,
-    });
-
-    return result.data is Map &&
-        result.data['success'] == true;
+    final savedPin = _preferences.getFamilySharePin(
+      familyId: familyId,
+      userId: _viewerId,
+    );
+    if (savedPin == null || savedPin.isEmpty) {
+      _unlockedFamilyIds.add(familyId);
+      return true;
+    }
+    final isMatch = savedPin.trim() == pin.trim();
+    if (isMatch) {
+      _unlockedFamilyIds.add(familyId);
+    }
+    return isMatch;
   }
 
   @override
   Future<bool> isFamilyShareUnlocked(
     String familyId,
   ) async {
-    final user = FirebaseAuth.instance.currentUser;
-
-    if (user == null) return false;
-
-    final family = await _families.doc(familyId).get();
-
-    if (!family.exists) return false;
-
-    final data = family.data() ?? {};
-
-    if (data['pinEnabled'] != true) {
+    if (!isFamilyPinEnabled(familyId)) {
       return true;
     }
+    return _unlockedFamilyIds.contains(familyId);
+  }
 
-    final access = await _familyAccess
-        .doc('${familyId}_${user.uid}')
-        .get();
-
-    if (!access.exists) {
-      return false;
-    }
-
-    final currentVersion =
-        (data['pinVersion'] as num?)?.toInt() ?? 1;
-
-    final grantedVersion =
-        (access.data()?['pinVersion'] as num?)?.toInt() ?? 0;
-
-    return currentVersion == grantedVersion &&
-        access.data()?['userId'] == user.uid;
+  @override
+  Future<void> lockFamilyShare(String familyId) async {
+    _unlockedFamilyIds.remove(familyId);
   }
 
   Future<String> getSecureImageUrl(
