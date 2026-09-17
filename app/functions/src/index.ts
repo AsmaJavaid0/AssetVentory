@@ -5,19 +5,62 @@ import { randomBytes, scryptSync, timingSafeEqual } from 'crypto';
 admin.initializeApp();
 const db = admin.firestore();
 
+async function getFamily(familyId: string) {
+  const snap = await db.collection('families').doc(familyId).get();
+  if (!snap.exists) throw new functions.https.HttpsError('not-found', 'Family not found.');
+  return snap;
+}
+
+async function assertOwner(familyId: string, uid: string) {
+  const family = await getFamily(familyId);
+  if (family.data()?.ownerId !== uid) {
+    throw new functions.https.HttpsError('permission-denied', 'Only the family owner can manage the PIN.');
+  }
+  return family;
+}
+
+async function verifyPinValue(familyId: string, pin: string, familySnap?: admin.firestore.DocumentSnapshot) {
+  const family = familySnap ?? await getFamily(familyId);
+  const data = family.data() ?? {};
+  if (data.pinEnabled !== true) return true;
+
+  const secretSnap = await db.collection('family_pin_secrets').doc(familyId).get();
+  if (!secretSnap.exists) {
+    throw new functions.https.HttpsError('failed-precondition', 'Family PIN is not configured correctly.');
+  }
+
+  const secret = secretSnap.data()!;
+  const actual = scryptSync(pin, String(secret.salt), 64);
+  const expected = Buffer.from(String(secret.hash), 'hex');
+  return expected.length === actual.length && timingSafeEqual(actual, expected);
+}
+
 export const setFamilySharePin = functions.https.onCall(async (data, context) => {
   if (!context.auth) throw new functions.https.HttpsError('unauthenticated', 'Sign in first.');
   const familyId = String(data?.familyId ?? '').trim();
   const pin = String(data?.pin ?? '');
-  if (!familyId || !/^\d{4,6}$/.test(pin)) throw new functions.https.HttpsError('invalid-argument', 'PIN must contain 4 to 6 digits.');
+  const currentPin = String(data?.currentPin ?? '');
 
-  const familyRef = db.collection('families').doc(familyId);
-  const familySnap = await familyRef.get();
-  if (!familySnap.exists || familySnap.data()?.ownerId !== context.auth.uid) throw new functions.https.HttpsError('permission-denied', 'Only the family owner can change the PIN.');
+  if (!familyId || !/^\d{4,6}$/.test(pin)) {
+    throw new functions.https.HttpsError('invalid-argument', 'PIN must contain 4 to 6 digits.');
+  }
+
+  const familySnap = await assertOwner(familyId, context.auth.uid);
+  const family = familySnap.data() ?? {};
+
+  if (family.pinEnabled === true) {
+    if (!/^\d{4,6}$/.test(currentPin)) {
+      throw new functions.https.HttpsError('invalid-argument', 'Current PIN is required.');
+    }
+    if (!(await verifyPinValue(familyId, currentPin, familySnap))) {
+      throw new functions.https.HttpsError('permission-denied', 'Incorrect current PIN.');
+    }
+  }
 
   const salt = randomBytes(16).toString('hex');
   const hash = scryptSync(pin, salt, 64).toString('hex');
-  const version = Number(familySnap.data()?.pinVersion ?? 0) + 1;
+  const version = Number(family.pinVersion ?? 0) + 1;
+
   await db.collection('family_pin_secrets').doc(familyId).set({
     familyId,
     salt,
@@ -25,19 +68,36 @@ export const setFamilySharePin = functions.https.onCall(async (data, context) =>
     version,
     updatedAt: admin.firestore.FieldValue.serverTimestamp(),
   });
-  await familyRef.update({ pinEnabled: true, pinVersion: version, updatedAt: admin.firestore.FieldValue.serverTimestamp() });
+
+  await db.collection('families').doc(familyId).update({
+    pinEnabled: true,
+    pinVersion: version,
+    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+  });
+
   await revokeFamilyAccess(familyId);
-  return { success: true };
+  return { success: true, pinVersion: version };
 });
 
 export const removeFamilySharePin = functions.https.onCall(async (data, context) => {
   if (!context.auth) throw new functions.https.HttpsError('unauthenticated', 'Sign in first.');
   const familyId = String(data?.familyId ?? '').trim();
-  const familySnap = await db.collection('families').doc(familyId).get();
-  if (!familySnap.exists || familySnap.data()?.ownerId !== context.auth.uid) throw new functions.https.HttpsError('permission-denied', 'Only the family owner can remove the PIN.');
+  const currentPin = String(data?.currentPin ?? '');
+  if (!familyId || !/^\d{4,6}$/.test(currentPin)) {
+    throw new functions.https.HttpsError('invalid-argument', 'Current PIN is required.');
+  }
+
+  const familySnap = await assertOwner(familyId, context.auth.uid);
+  if (!(await verifyPinValue(familyId, currentPin, familySnap))) {
+    throw new functions.https.HttpsError('permission-denied', 'Incorrect current PIN.');
+  }
 
   await db.collection('family_pin_secrets').doc(familyId).delete();
-  await db.collection('families').doc(familyId).update({ pinEnabled: false, pinVersion: admin.firestore.FieldValue.increment(1), updatedAt: admin.firestore.FieldValue.serverTimestamp() });
+  await db.collection('families').doc(familyId).update({
+    pinEnabled: false,
+    pinVersion: admin.firestore.FieldValue.increment(1),
+    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+  });
   await revokeFamilyAccess(familyId);
   return { success: true };
 });
@@ -46,29 +106,43 @@ export const verifyFamilySharePin = functions.https.onCall(async (data, context)
   if (!context.auth) throw new functions.https.HttpsError('unauthenticated', 'Sign in first.');
   const familyId = String(data?.familyId ?? '').trim();
   const pin = String(data?.pin ?? '');
-  if (!familyId || !/^\d{4,6}$/.test(pin)) throw new functions.https.HttpsError('invalid-argument', 'Enter a valid PIN.');
+  if (!familyId || !/^\d{4,6}$/.test(pin)) {
+    throw new functions.https.HttpsError('invalid-argument', 'Enter a valid PIN.');
+  }
 
-  const familySnap = await db.collection('families').doc(familyId).get();
-  if (!familySnap.exists) throw new functions.https.HttpsError('not-found', 'Family not found.');
+  const familySnap = await getFamily(familyId);
   const family = familySnap.data()!;
-  if (family.pinEnabled !== true) return { success: true };
-
   const memberSnap = await db.collection('family_members').doc(`${familyId}_${context.auth.uid}`).get();
-  if (!memberSnap.exists) throw new functions.https.HttpsError('permission-denied', 'You are not a member of this family.');
+  if (!memberSnap.exists) {
+    throw new functions.https.HttpsError('permission-denied', 'You are not a member of this family.');
+  }
 
-  const secretSnap = await db.collection('family_pin_secrets').doc(familyId).get();
-  if (!secretSnap.exists) throw new functions.https.HttpsError('failed-precondition', 'Family PIN is not configured correctly.');
-  const secret = secretSnap.data()!;
-  const actual = scryptSync(pin, String(secret.salt), 64);
-  const expected = Buffer.from(String(secret.hash), 'hex');
-  if (expected.length !== actual.length || !timingSafeEqual(actual, expected)) throw new functions.https.HttpsError('permission-denied', 'Incorrect family PIN.');
+  if (family.pinEnabled !== true) return { success: true };
+  if (!(await verifyPinValue(familyId, pin, familySnap))) {
+    throw new functions.https.HttpsError('permission-denied', 'Incorrect family PIN.');
+  }
 
+  const version = Number(family.pinVersion ?? 0);
   await db.collection('family_access').doc(`${familyId}_${context.auth.uid}`).set({
     familyId,
     userId: context.auth.uid,
-    pinVersion: Number(family.pinVersion ?? secret.version ?? 1),
+    pinVersion: version,
     grantedAt: admin.firestore.FieldValue.serverTimestamp(),
   });
+
+  return { success: true, pinVersion: version };
+});
+
+export const lockFamilyShare = functions.https.onCall(async (data, context) => {
+  if (!context.auth) throw new functions.https.HttpsError('unauthenticated', 'Sign in first.');
+  const familyId = String(data?.familyId ?? '').trim();
+  if (!familyId) throw new functions.https.HttpsError('invalid-argument', 'Family id is required.');
+
+  await getFamily(familyId);
+  const memberSnap = await db.collection('family_members').doc(`${familyId}_${context.auth.uid}`).get();
+  if (!memberSnap.exists) throw new functions.https.HttpsError('permission-denied', 'You are not a member of this family.');
+
+  await db.collection('family_access').doc(`${familyId}_${context.auth.uid}`).delete();
   return { success: true };
 });
 
