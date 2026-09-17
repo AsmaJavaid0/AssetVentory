@@ -1,4 +1,4 @@
-import 'package:flutter/foundation.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 
 import '../../../core/storage/app_preferences_service.dart';
 import '../models/family_model.dart';
@@ -15,7 +15,7 @@ class SecureFamilyRepository extends FamilyRepository {
   SecureFamilyRepository({AppPreferencesService? preferences})
       : _preferences = preferences ?? AppPreferencesService();
 
-  String get _viewerId => serviceLocatorCurrentUserId();
+  String get _viewerId => FirebaseAuth.instance.currentUser?.uid ?? '';
 
   Future<void> _cachePinState(String familyId) async {
     if (_viewerId.isEmpty) return;
@@ -25,9 +25,7 @@ class SecureFamilyRepository extends FamilyRepository {
     );
     final enabled = pin != null && pin.isNotEmpty;
     _pinEnabledByFamily[familyId] = enabled;
-    if (!enabled) {
-      _unlockedFamilyIds.add(familyId);
-    }
+    if (!enabled) _unlockedFamilyIds.add(familyId);
   }
 
   @override
@@ -163,7 +161,7 @@ class SecureFamilyRepository extends FamilyRepository {
       familyId: familyId,
       viewerId: _viewerId,
     );
-    if (savedPin == null || savedPin.isEmpty) return true;
+    if (savedPin == null || savedPin.isEmpty) return false;
 
     final valid = savedPin == pin.trim();
     if (valid) {
@@ -190,15 +188,6 @@ class SecureFamilyRepository extends FamilyRepository {
 
   @override
   Future<void> lockFamilyShare(String familyId) async {
-    if (_pinEnabledByFamily[familyId] == true) {
-      _unlockedFamilyIds.remove(familyId);
-    }
+    _unlockedFamilyIds.remove(familyId);
   }
-}
-
-// Kept here to avoid coupling FamilyRepository to authentication details.
-// The service locator already exposes the currently signed-in user.
-String serviceLocatorCurrentUserId() {
-  final user = serviceLocator.userRepository.currentUser;
-  return user?.id ?? '';
 }
