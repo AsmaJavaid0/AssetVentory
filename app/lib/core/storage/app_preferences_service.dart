@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class AppPreferencesService {
@@ -15,6 +16,9 @@ class AppPreferencesService {
   static const String _keyThemeMode = 'pref_theme_mode';
   static const String _keyTaskRemindersEnabled = 'pref_task_reminders_enabled';
   static const String _keyPushNotificationsEnabled = 'pref_push_notifications_enabled';
+  static const String _familyPinPrefix = 'family_share_pin_';
+
+  static const FlutterSecureStorage _secureStorage = FlutterSecureStorage();
 
   SharedPreferences? _prefs;
   final ValueNotifier<ThemeMode> themeModeNotifier = ValueNotifier<ThemeMode>(ThemeMode.light);
@@ -26,9 +30,7 @@ class AppPreferencesService {
   }
 
   Future<void> _removeLegacyFamilySharePins() async {
-    final legacyKeys = prefs.getKeys().where(
-      (key) => key.startsWith('family_share_pin_'),
-    );
+    final legacyKeys = prefs.getKeys().where((key) => key.startsWith(_familyPinPrefix));
     for (final key in legacyKeys) {
       await prefs.remove(key);
     }
@@ -39,6 +41,38 @@ class AppPreferencesService {
       throw StateError('AppPreferencesService has not been initialized. Call init() first.');
     }
     return _prefs!;
+  }
+
+  String _familyPinKey({required String familyId, required String viewerId}) =>
+      '$_familyPinPrefix${familyId}_$viewerId';
+
+  Future<void> setFamilySharePin({
+    required String familyId,
+    required String viewerId,
+    required String pin,
+  }) async {
+    await _secureStorage.write(
+      key: _familyPinKey(familyId: familyId, viewerId: viewerId),
+      value: pin,
+    );
+  }
+
+  Future<String?> getFamilySharePin({
+    required String familyId,
+    required String viewerId,
+  }) async {
+    return _secureStorage.read(
+      key: _familyPinKey(familyId: familyId, viewerId: viewerId),
+    );
+  }
+
+  Future<void> removeFamilySharePin({
+    required String familyId,
+    required String viewerId,
+  }) async {
+    await _secureStorage.delete(
+      key: _familyPinKey(familyId: familyId, viewerId: viewerId),
+    );
   }
 
   int get defaultReminderMinutes => _prefs?.getInt(_keyDefaultReminderMinutes) ?? 15;
