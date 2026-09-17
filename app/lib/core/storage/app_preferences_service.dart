@@ -32,36 +32,25 @@ class AppPreferencesService {
     return _prefs!;
   }
 
-  // --- Default Task Reminder (Minutes) ---
   int get defaultReminderMinutes => _prefs?.getInt(_keyDefaultReminderMinutes) ?? 15;
-
   Future<bool> setDefaultReminderMinutes(int minutes) async => await prefs.setInt(_keyDefaultReminderMinutes, minutes);
 
-  // --- Default Task Priority ('low', 'medium', 'high') ---
   String get defaultTaskPriority => _prefs?.getString(_keyDefaultTaskPriority) ?? 'medium';
-
   Future<bool> setDefaultTaskPriority(String priority) async => await prefs.setString(_keyDefaultTaskPriority, priority);
 
-  // --- Default Asset View ('list', 'grid') ---
   String get defaultAssetView => _prefs?.getString(_keyDefaultAssetView) ?? 'list';
-
   Future<bool> setDefaultAssetView(String view) async => await prefs.setString(_keyDefaultAssetView, view);
 
-  // --- Confirm Before Delete ---
   bool get confirmBeforeDelete => _prefs?.getBool(_keyConfirmBeforeDelete) ?? true;
-
   Future<bool> setConfirmBeforeDelete(bool enabled) async => await prefs.setBool(_keyConfirmBeforeDelete, enabled);
 
-  // --- Haptic Feedback ---
   bool get hapticFeedbackEnabled => _prefs?.getBool(_keyHapticFeedback) ?? true;
-
   Future<bool> setHapticFeedbackEnabled(bool enabled) async => await prefs.setBool(_keyHapticFeedback, enabled);
 
   void triggerHaptic() {
     if (hapticFeedbackEnabled) HapticFeedback.lightImpact();
   }
 
-  // --- Theme Mode ---
   ThemeMode get themeMode {
     final raw = _prefs?.getString(_keyThemeMode) ?? 'light';
     switch (raw) {
@@ -83,18 +72,13 @@ class AppPreferencesService {
     return await prefs.setString(_keyThemeMode, value);
   }
 
-  // --- Notification Toggles ---
   bool get taskRemindersEnabled => _prefs?.getBool(_keyTaskRemindersEnabled) ?? true;
-
   Future<bool> setTaskRemindersEnabled(bool enabled) async => await prefs.setBool(_keyTaskRemindersEnabled, enabled);
 
   bool get pushNotificationsEnabled => _prefs?.getBool(_keyPushNotificationsEnabled) ?? true;
-
   Future<bool> setPushNotificationsEnabled(bool enabled) async => await prefs.setBool(_keyPushNotificationsEnabled, enabled);
 
-  // --- Family display names ---
-  // These are intentionally local to this device/user. Renaming a family
-  // member changes only how that member is labelled on this user's screen.
+  // Family display names are intentionally local to this device/user.
   String familyDisplayName({
     required String familyId,
     required String viewerId,
@@ -116,48 +100,4 @@ class AppPreferencesService {
     final key = 'family_display_name_${familyId}_${viewerId}_$memberUserId';
     return await prefs.setString(key, displayName.trim());
   }
-
-  // --- Family Share PIN ---
-  // Stored locally on this device. Protects access to the family sharing screen
-  // and shared assets.
-  String? getFamilySharePin({
-    required String familyId,
-    String? userId,
-  }) {
-    if (userId != null && userId.isNotEmpty) {
-      final userPin = _prefs?.getString('family_share_pin_${familyId}_$userId');
-      if (userPin != null && userPin.isNotEmpty) return userPin;
-    }
-    return _prefs?.getString('family_share_pin_$familyId');
-  }
-
-  bool isFamilyPinEnabled({
-    required String familyId,
-    String? userId,
-  }) {
-    final pin = getFamilySharePin(familyId: familyId, userId: userId);
-    return pin != null && pin.isNotEmpty;
-  }
-
-  Future<bool> setFamilySharePin({
-    required String familyId,
-    String? userId,
-    required String pin,
-  }) async {
-    if (userId != null && userId.isNotEmpty) {
-      await prefs.setString('family_share_pin_${familyId}_$userId', pin.trim());
-    }
-    return await prefs.setString('family_share_pin_$familyId', pin.trim());
-  }
-
-  Future<bool> removeFamilySharePin({
-    required String familyId,
-    String? userId,
-  }) async {
-    if (userId != null && userId.isNotEmpty) {
-      await prefs.remove('family_share_pin_${familyId}_$userId');
-    }
-    return await prefs.remove('family_share_pin_$familyId');
-  }
 }
-
