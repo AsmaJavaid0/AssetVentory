@@ -24,6 +24,7 @@ dependencies:
   google_sign_in: ^6.2.2
   google_fonts: ^6.2.1
   shared_preferences: ^2.3.2
+  flutter_secure_storage: ^9.2.4
   qr_flutter: ^4.1.0
   firebase_storage: ^13.4.6
   image_picker: ^1.2.3
