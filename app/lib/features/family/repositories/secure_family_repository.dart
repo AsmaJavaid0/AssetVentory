@@ -1,43 +1,46 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:cloud_functions/cloud_functions.dart';
-import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/foundation.dart';
 
 import '../../../core/storage/app_preferences_service.dart';
 import '../models/family_model.dart';
 import '../models/family_member_model.dart';
 import 'family_repository.dart';
 
+/// Family Share PIN is a local privacy lock for this device/user.
+/// It does not participate in Family Share synchronization or Firestore access.
 class SecureFamilyRepository extends FamilyRepository {
   final AppPreferencesService _preferences;
-  final FirebaseFunctions _functions;
   final Map<String, bool> _pinEnabledByFamily = <String, bool>{};
   final Set<String> _unlockedFamilyIds = <String>{};
 
-  SecureFamilyRepository({
-    AppPreferencesService? preferences,
-    FirebaseFunctions? functions,
-  })  : _preferences = preferences ?? AppPreferencesService(),
-        _functions = functions ?? FirebaseFunctions.instance;
+  SecureFamilyRepository({AppPreferencesService? preferences})
+      : _preferences = preferences ?? AppPreferencesService();
 
-  String get _viewerId => FirebaseAuth.instance.currentUser?.uid ?? '';
+  String get _viewerId => serviceLocatorCurrentUserId();
 
-  void _cacheFamily(FamilyModel? family) {
-    if (family == null) return;
-    _pinEnabledByFamily[family.id] = family.pinEnabled;
-    if (!family.pinEnabled) _unlockedFamilyIds.add(family.id);
+  Future<void> _cachePinState(String familyId) async {
+    if (_viewerId.isEmpty) return;
+    final pin = await _preferences.getFamilySharePin(
+      familyId: familyId,
+      viewerId: _viewerId,
+    );
+    final enabled = pin != null && pin.isNotEmpty;
+    _pinEnabledByFamily[familyId] = enabled;
+    if (!enabled) {
+      _unlockedFamilyIds.add(familyId);
+    }
   }
 
   @override
   Future<FamilyModel?> getUserFamily(String userId) async {
     final family = await super.getUserFamily(userId);
-    _cacheFamily(family);
+    if (family != null) await _cachePinState(family.id);
     return family;
   }
 
   @override
   Stream<FamilyModel?> streamFamily(String familyId) {
-    return super.streamFamily(familyId).map((family) {
-      _cacheFamily(family);
+    return super.streamFamily(familyId).asyncMap((family) async {
+      if (family != null) await _cachePinState(family.id);
       return family;
     });
   }
@@ -55,13 +58,17 @@ class SecureFamilyRepository extends FamilyRepository {
   @override
   Future<List<FamilyMemberModel>> getFamilyMembers(String familyId) async {
     final members = await super.getFamilyMembers(familyId);
-    return members.map((member) => member.copyWith(displayName: _displayNameFor(member))).toList();
+    return members
+        .map((member) => member.copyWith(displayName: _displayNameFor(member)))
+        .toList();
   }
 
   @override
   Stream<List<FamilyMemberModel>> streamFamilyMembers(String familyId) {
     return super.streamFamilyMembers(familyId).map(
-      (members) => members.map((member) => member.copyWith(displayName: _displayNameFor(member))).toList(),
+      (members) => members
+          .map((member) => member.copyWith(displayName: _displayNameFor(member)))
+          .toList(),
     );
   }
 
@@ -86,10 +93,14 @@ class SecureFamilyRepository extends FamilyRepository {
     required String userId,
     required String displayName,
   }) async {
-    if (_viewerId.isEmpty) throw StateError('You must be signed in to edit a family display name.');
+    if (_viewerId.isEmpty) {
+      throw StateError('You must be signed in to edit a family display name.');
+    }
     final trimmed = displayName.trim();
     if (trimmed.isEmpty) throw ArgumentError('Family display name cannot be empty.');
-    if (trimmed.length > 40) throw ArgumentError('Family display name must be 40 characters or less.');
+    if (trimmed.length > 40) {
+      throw ArgumentError('Family display name must be 40 characters or less.');
+    }
 
     await _preferences.setFamilyDisplayName(
       familyId: familyId,
@@ -108,26 +119,36 @@ class SecureFamilyRepository extends FamilyRepository {
   }
 
   @override
-  bool isFamilyPinEnabled(String familyId) => _pinEnabledByFamily[familyId] ?? false;
-
-  Future<void> _call(String functionName, Map<String, dynamic> data) async {
-    if (_viewerId.isEmpty) throw StateError('You must be signed in.');
-    await _functions.httpsCallable(functionName).call(data);
-  }
+  bool isFamilyPinEnabled(String familyId) =>
+      _pinEnabledByFamily[familyId] ?? false;
 
   @override
   Future<void> setFamilySharePin({
     required String familyId,
     required String pin,
   }) async {
-    await _call('setFamilySharePin', {'familyId': familyId, 'pin': pin});
+    final normalized = pin.trim();
+    if (!RegExp(r'^\d{4,6}$').hasMatch(normalized)) {
+      throw ArgumentError('PIN must contain 4–6 digits.');
+    }
+    if (_viewerId.isEmpty) throw StateError('You must be signed in.');
+
+    await _preferences.setFamilySharePin(
+      familyId: familyId,
+      viewerId: _viewerId,
+      pin: normalized,
+    );
     _pinEnabledByFamily[familyId] = true;
     _unlockedFamilyIds.add(familyId);
   }
 
   @override
   Future<void> removeFamilySharePin(String familyId) async {
-    await _call('removeFamilySharePin', {'familyId': familyId});
+    if (_viewerId.isEmpty) throw StateError('You must be signed in.');
+    await _preferences.removeFamilySharePin(
+      familyId: familyId,
+      viewerId: _viewerId,
+    );
     _pinEnabledByFamily[familyId] = false;
     _unlockedFamilyIds.add(familyId);
   }
@@ -137,31 +158,47 @@ class SecureFamilyRepository extends FamilyRepository {
     required String familyId,
     required String pin,
   }) async {
-    try {
-      await _call('verifyFamilySharePin', {'familyId': familyId, 'pin': pin});
+    if (_viewerId.isEmpty) return false;
+    final savedPin = await _preferences.getFamilySharePin(
+      familyId: familyId,
+      viewerId: _viewerId,
+    );
+    if (savedPin == null || savedPin.isEmpty) return true;
+
+    final valid = savedPin == pin.trim();
+    if (valid) {
       _pinEnabledByFamily[familyId] = true;
       _unlockedFamilyIds.add(familyId);
-      return true;
-    } on FirebaseFunctionsException catch (e) {
-      if (e.code == 'permission-denied' || e.code == 'failed-precondition') return false;
-      rethrow;
     }
+    return valid;
   }
 
   @override
   Future<bool> isFamilyShareUnlocked(String familyId) async {
-    if (!_pinEnabledByFamily.containsKey(familyId)) {
-      final doc = await FirebaseFirestore.instance.collection('families').doc(familyId).get();
-      if (!doc.exists) return false;
-      _cacheFamily(FamilyModel.fromFirestore(doc));
-    }
-    if (_pinEnabledByFamily[familyId] != true) return true;
+    if (_viewerId.isEmpty) return false;
+
+    final savedPin = await _preferences.getFamilySharePin(
+      familyId: familyId,
+      viewerId: _viewerId,
+    );
+    final enabled = savedPin != null && savedPin.isNotEmpty;
+    _pinEnabledByFamily[familyId] = enabled;
+
+    if (!enabled) return true;
     return _unlockedFamilyIds.contains(familyId);
   }
 
   @override
   Future<void> lockFamilyShare(String familyId) async {
-    await _call('lockFamilyShare', {'familyId': familyId});
-    if (_pinEnabledByFamily[familyId] == true) _unlockedFamilyIds.remove(familyId);
+    if (_pinEnabledByFamily[familyId] == true) {
+      _unlockedFamilyIds.remove(familyId);
+    }
   }
+}
+
+// Kept here to avoid coupling FamilyRepository to authentication details.
+// The service locator already exposes the currently signed-in user.
+String serviceLocatorCurrentUserId() {
+  final user = serviceLocator.userRepository.currentUser;
+  return user?.id ?? '';
 }
