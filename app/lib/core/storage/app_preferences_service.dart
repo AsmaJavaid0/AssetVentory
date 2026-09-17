@@ -17,12 +17,21 @@ class AppPreferencesService {
   static const String _keyPushNotificationsEnabled = 'pref_push_notifications_enabled';
 
   SharedPreferences? _prefs;
-
   final ValueNotifier<ThemeMode> themeModeNotifier = ValueNotifier<ThemeMode>(ThemeMode.light);
 
   Future<void> init() async {
     _prefs = await SharedPreferences.getInstance();
+    await _removeLegacyFamilySharePins();
     themeModeNotifier.value = themeMode;
+  }
+
+  Future<void> _removeLegacyFamilySharePins() async {
+    final legacyKeys = prefs.getKeys().where(
+      (key) => key.startsWith('family_share_pin_'),
+    );
+    for (final key in legacyKeys) {
+      await prefs.remove(key);
+    }
   }
 
   SharedPreferences get prefs {
@@ -78,7 +87,6 @@ class AppPreferencesService {
   bool get pushNotificationsEnabled => _prefs?.getBool(_keyPushNotificationsEnabled) ?? true;
   Future<bool> setPushNotificationsEnabled(bool enabled) async => await prefs.setBool(_keyPushNotificationsEnabled, enabled);
 
-  // Family display names are intentionally local to this device/user.
   String familyDisplayName({
     required String familyId,
     required String viewerId,
