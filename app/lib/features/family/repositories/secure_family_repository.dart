@@ -1,3 +1,4 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
@@ -149,15 +150,18 @@ class SecureFamilyRepository extends FamilyRepository {
 
   @override
   Future<bool> isFamilyShareUnlocked(String familyId) async {
-    if (!(_pinEnabledByFamily[familyId] ?? true)) return true;
+    if (!_pinEnabledByFamily.containsKey(familyId)) {
+      final doc = await FirebaseFirestore.instance.collection('families').doc(familyId).get();
+      if (!doc.exists) return false;
+      _cacheFamily(FamilyModel.fromFirestore(doc));
+    }
+    if (_pinEnabledByFamily[familyId] != true) return true;
     return _unlockedFamilyIds.contains(familyId);
   }
 
   @override
   Future<void> lockFamilyShare(String familyId) async {
     await _call('lockFamilyShare', {'familyId': familyId});
-    if (_pinEnabledByFamily[familyId] == true) {
-      _unlockedFamilyIds.remove(familyId);
-    }
+    if (_pinEnabledByFamily[familyId] == true) _unlockedFamilyIds.remove(familyId);
   }
 }
