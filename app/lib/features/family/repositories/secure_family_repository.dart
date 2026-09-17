@@ -2,12 +2,15 @@ import 'package:cloud_functions/cloud_functions.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
 import '../../../core/storage/app_preferences_service.dart';
+import '../models/family_model.dart';
 import '../models/family_member_model.dart';
 import 'family_repository.dart';
 
 class SecureFamilyRepository extends FamilyRepository {
   final AppPreferencesService _preferences;
   final FirebaseFunctions _functions;
+  final Map<String, bool> _pinEnabledByFamily = <String, bool>{};
+  final Set<String> _unlockedFamilyIds = <String>{};
 
   SecureFamilyRepository({
     AppPreferencesService? preferences,
@@ -16,6 +19,27 @@ class SecureFamilyRepository extends FamilyRepository {
         _functions = functions ?? FirebaseFunctions.instance;
 
   String get _viewerId => FirebaseAuth.instance.currentUser?.uid ?? '';
+
+  void _cacheFamily(FamilyModel? family) {
+    if (family == null) return;
+    _pinEnabledByFamily[family.id] = family.pinEnabled;
+    if (!family.pinEnabled) _unlockedFamilyIds.add(family.id);
+  }
+
+  @override
+  Future<FamilyModel?> getUserFamily(String userId) async {
+    final family = await super.getUserFamily(userId);
+    _cacheFamily(family);
+    return family;
+  }
+
+  @override
+  Stream<FamilyModel?> streamFamily(String familyId) {
+    return super.streamFamily(familyId).map((family) {
+      _cacheFamily(family);
+      return family;
+    });
+  }
 
   String _displayNameFor(FamilyMemberModel member) {
     if (_viewerId.isEmpty) return member.familyDisplayName;
@@ -72,25 +96,18 @@ class SecureFamilyRepository extends FamilyRepository {
       memberUserId: userId,
       displayName: trimmed,
     );
-
     try {
       await super.updateFamilyMemberDisplayName(
         familyId: familyId,
         userId: userId,
         displayName: trimmed,
       );
-    } catch (_) {
-      // Local family-specific names remain usable when the global update is denied.
-    }
+    } catch (_) {}
     nameUpdateNotifier.value++;
   }
 
-  // PIN state is authoritative in families/{familyId}.pinEnabled. This
-  // compatibility method must not be used as a security boundary.
   @override
-  bool isFamilyPinEnabled(String familyId) => false;
-
-  final Set<String> _unlockedFamilyIds = <String>{};
+  bool isFamilyPinEnabled(String familyId) => _pinEnabledByFamily[familyId] ?? false;
 
   Future<void> _call(String functionName, Map<String, dynamic> data) async {
     if (_viewerId.isEmpty) throw StateError('You must be signed in.');
@@ -102,17 +119,16 @@ class SecureFamilyRepository extends FamilyRepository {
     required String familyId,
     required String pin,
   }) async {
-    await _call('setFamilySharePin', {
-      'familyId': familyId,
-      'pin': pin,
-    });
+    await _call('setFamilySharePin', {'familyId': familyId, 'pin': pin});
+    _pinEnabledByFamily[familyId] = true;
     _unlockedFamilyIds.add(familyId);
   }
 
   @override
   Future<void> removeFamilySharePin(String familyId) async {
     await _call('removeFamilySharePin', {'familyId': familyId});
-    _unlockedFamilyIds.remove(familyId);
+    _pinEnabledByFamily[familyId] = false;
+    _unlockedFamilyIds.add(familyId);
   }
 
   @override
@@ -121,10 +137,8 @@ class SecureFamilyRepository extends FamilyRepository {
     required String pin,
   }) async {
     try {
-      await _call('verifyFamilySharePin', {
-        'familyId': familyId,
-        'pin': pin,
-      });
+      await _call('verifyFamilySharePin', {'familyId': familyId, 'pin': pin});
+      _pinEnabledByFamily[familyId] = true;
       _unlockedFamilyIds.add(familyId);
       return true;
     } on FirebaseFunctionsException catch (e) {
@@ -135,12 +149,15 @@ class SecureFamilyRepository extends FamilyRepository {
 
   @override
   Future<bool> isFamilyShareUnlocked(String familyId) async {
+    if (!(_pinEnabledByFamily[familyId] ?? true)) return true;
     return _unlockedFamilyIds.contains(familyId);
   }
 
   @override
   Future<void> lockFamilyShare(String familyId) async {
     await _call('lockFamilyShare', {'familyId': familyId});
-    _unlockedFamilyIds.remove(familyId);
+    if (_pinEnabledByFamily[familyId] == true) {
+      _unlockedFamilyIds.remove(familyId);
+    }
   }
 }
