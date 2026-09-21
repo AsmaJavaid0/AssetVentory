@@ -21,25 +21,25 @@ dependencies:
   firebase_auth: ^6.2.0
   cloud_firestore: ^6.1.2
   cloud_functions: ^6.1.0
-  google_sign_in: ^6.2.2
-  google_fonts: ^6.2.1
+  google_sign_in: ^7.2.0
+  google_fonts: ^8.2.1
   shared_preferences: ^2.3.2
-  flutter_secure_storage: ^9.2.4
+  flutter_secure_storage: ^11.2.0
   qr_flutter: ^4.1.0
   firebase_storage: ^13.4.6
   image_picker: ^1.2.3
-  file_picker: ^12.0.0
+  file_picker: ^13.1.0
   emoji_picker_flutter: ^4.5.3
   drift: ^2.28.0
-  drift_flutter: ^0.2.5
+  drift_flutter: ^0.3.1
   path_provider: ^2.1.5
   uuid: ^4.5.1
-  get_it: ^8.0.2
+  get_it: ^9.2.1
   share_plus: ^13.3.0
   url_launcher: ^6.3.1
   firebase_messaging: ^16.5.0
-  flutter_local_notifications: ^19.2.1
-  timezone: ^0.10.0
+  flutter_local_notifications: ^22.3.1
+  timezone: ^0.11.1
   flutter_timezone: ^5.1.0
   intl: ^0.20.2
   open_filex: ^4.7.0

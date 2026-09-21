@@ -33,10 +33,9 @@ class TaskNotificationService {
     } catch (e) {
       debugPrint('TaskNotificationService: Timezone detection fallback: $e');
       final now = DateTime.now();
-      final offsetMillis = now.timeZoneOffset.inMilliseconds;
       timezone.Location? matchedLoc;
       for (final loc in timezone.timeZoneDatabase.locations.values) {
-        if (loc.currentTimeZone.offset == offsetMillis) {
+        if (loc.currentTimeZone.offset == now.timeZoneOffset) {
           matchedLoc = loc;
           break;
         }
@@ -53,7 +52,7 @@ class TaskNotificationService {
     );
 
     await _notificationsPlugin.initialize(
-      const InitializationSettings(android: androidSettings, iOS: darwinSettings, macOS: darwinSettings),
+      settings: const InitializationSettings(android: androidSettings, iOS: darwinSettings, macOS: darwinSettings),
       onDidReceiveNotificationResponse: (NotificationResponse response) async {
         final actionId = response.actionId;
         final payload = response.payload;
@@ -87,8 +86,8 @@ class TaskNotificationService {
 
     // Delete legacy notification channels to clear cached sounds
     try {
-      await android?.deleteNotificationChannel('task_alarms_channel');
-      await android?.deleteNotificationChannel('task_reminders_channel');
+      await android?.deleteNotificationChannel(channelId: 'task_alarms_channel');
+      await android?.deleteNotificationChannel(channelId: 'task_reminders_channel');
     } catch (_) {}
 
     const defaultAlarmSound = UriAndroidNotificationSound('content://settings/system/alarm_alert');
@@ -247,15 +246,15 @@ class TaskNotificationService {
     final scheduled = timezone.TZDateTime.from(scheduledDateTime, timezone.local);
 
     // Cancel any previous notification with this ID before scheduling a new one
-    await _notificationsPlugin.cancel(notificationId);
+    await _notificationsPlugin.cancel(id: notificationId);
 
     try {
       await _notificationsPlugin.zonedSchedule(
-        notificationId,
-        '${task.taskType.icon} ${task.title}',
-        task.assetName != null ? 'Asset: ${task.assetName}' : (task.description?.isNotEmpty == true ? task.description! : 'Scheduled Task Alarm'),
-        scheduled,
-        details,
+        id: notificationId,
+        title: '${task.taskType.icon} ${task.title}',
+        body: task.assetName != null ? 'Asset: ${task.assetName}' : (task.description?.isNotEmpty == true ? task.description! : 'Scheduled Task Alarm'),
+        scheduledDate: scheduled,
+        notificationDetails: details,
         androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
         payload: task.id,
       );
@@ -264,11 +263,11 @@ class TaskNotificationService {
       debugPrint('Exact alarm scheduling failed with exactAllowWhileIdle ($e), falling back to inexact schedule');
       try {
         await _notificationsPlugin.zonedSchedule(
-          notificationId,
-          '${task.taskType.icon} ${task.title}',
-          task.assetName != null ? 'Asset: ${task.assetName}' : (task.description?.isNotEmpty == true ? task.description! : 'Scheduled Task Alarm'),
-          scheduled,
-          details,
+          id: notificationId,
+          title: '${task.taskType.icon} ${task.title}',
+          body: task.assetName != null ? 'Asset: ${task.assetName}' : (task.description?.isNotEmpty == true ? task.description! : 'Scheduled Task Alarm'),
+          scheduledDate: scheduled,
+          notificationDetails: details,
           androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
           payload: task.id,
         );
@@ -281,7 +280,7 @@ class TaskNotificationService {
 
   Future<void> cancelTaskNotification(String taskId) async {
     await initialize();
-    await _notificationsPlugin.cancel(_generateNotificationId(taskId));
+    await _notificationsPlugin.cancel(id: _generateNotificationId(taskId));
   }
 
   Future<void> cancelAllNotifications() async {

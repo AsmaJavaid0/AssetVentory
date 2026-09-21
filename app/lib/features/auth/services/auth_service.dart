@@ -5,10 +5,20 @@ import 'firestore_service.dart';
 
 class AuthService {
   final FirebaseAuth _auth = FirebaseAuth.instance;
-  final GoogleSignIn _googleSignIn = GoogleSignIn(
-    serverClientId: '205786278593-oa8baequuvjh8uoh56pb84241nuhng0o.apps.googleusercontent.com',
-  );
+  final GoogleSignIn _googleSignIn = GoogleSignIn.instance;
+  static bool _isGoogleSignInInitialized = false;
+  static Future<void>? _googleSignInInitFuture;
   final FirestoreService _firestoreService = FirestoreService();
+
+  Future<void> _ensureGoogleSignInInitialized() async {
+    if (_isGoogleSignInInitialized) return;
+    _googleSignInInitFuture ??= _googleSignIn.initialize(
+      serverClientId: '205786278593-oa8baequuvjh8uoh56pb84241nuhng0o.apps.googleusercontent.com',
+    ).then((_) {
+      _isGoogleSignInInitialized = true;
+    });
+    await _googleSignInInitFuture;
+  }
 
   Stream<User?> get authStateChanges => _auth.authStateChanges();
 
@@ -79,16 +89,16 @@ class AuthService {
   /// Sign In with Google
   Future<Result<UserCredential>> signInWithGoogle() async {
     try {
-      final GoogleSignInAccount? googleUser = await _googleSignIn.signIn();
-      if (googleUser == null) {
-        return Result.failure(AuthException('User cancelled the sign-in flow'));
+      await _ensureGoogleSignInInitialized();
+      final GoogleSignInAccount googleUser = await _googleSignIn.authenticate();
+
+      final GoogleSignInAuthentication googleAuth = googleUser.authentication;
+
+      if (googleAuth.idToken == null) {
+        return Result.failure(AuthException('Failed to obtain Google ID token'));
       }
 
-      final GoogleSignInAuthentication googleAuth =
-          await googleUser.authentication;
-
       final OAuthCredential credential = GoogleAuthProvider.credential(
-        accessToken: googleAuth.accessToken,
         idToken: googleAuth.idToken,
       );
 
@@ -106,6 +116,11 @@ class AuthService {
       }
 
       return Result.success(userCredential);
+    } on GoogleSignInException catch (e) {
+      if (e.code == GoogleSignInExceptionCode.canceled) {
+        return Result.failure(AuthException('User cancelled the sign-in flow'));
+      }
+      return Result.failure(AuthException(e.description ?? 'Google sign-in failed', e.code.name));
     } on FirebaseAuthException catch (e) {
       return Result.failure(AuthException(e.message ?? 'Authentication failed', e.code));
     } catch (e) {
@@ -127,9 +142,9 @@ class AuthService {
 
   /// Sign out
   Future<void> signOut() async {
-    await Future.wait([
-      _auth.signOut(),
-      _googleSignIn.signOut(),
-    ]);
+    try {
+      await _googleSignIn.signOut();
+    } catch (_) {}
+    await _auth.signOut();
   }
 }

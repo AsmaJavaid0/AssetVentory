@@ -9,6 +9,7 @@ import '../../../core/di/service_locator.dart';
 import '../../assets/models/local_asset.dart';
 import '../../assets/models/local_category.dart';
 import '../../assets/screens/asset_details_screen.dart';
+import '../../assets/screens/categories_screen.dart';
 import '../../tasks/models/task_model.dart';
 import 'notifications_screen.dart';
 
@@ -79,6 +80,15 @@ class _HomeScreenState extends State<HomeScreen> {
   Future<void> _openAsset(LocalAsset asset) async {
     await AssetDetailsScreen.navigateTo(context, asset);
     if (mounted) await _loadHomeData();
+  }
+
+  Future<void> _openCategories() async {
+    if (_categories.isNotEmpty) {
+      await CategoriesScreen.navigateTo(context);
+      if (mounted) await _loadHomeData();
+    } else {
+      widget.onTabSelected?.call(1);
+    }
   }
 
   Future<void> _openNotifications() async {
@@ -174,7 +184,7 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget _buildMetrics() {
     final cards = <Widget>[
       _metric(Icons.inventory_2_rounded, '${_assets.length}', 'Assets', true, () => widget.onTabSelected?.call(1)),
-      _metric(Icons.folder_rounded, '${_categories.length}', 'Categories', false, () => widget.onTabSelected?.call(1)),
+      _metric(Icons.folder_rounded, '${_categories.length}', 'Categories', false, _openCategories),
       _metric(Icons.task_alt_rounded, '${_upcomingTasks.length}', 'Reminders', false, () => widget.onTabSelected?.call(3)),
       _metric(Icons.groups_rounded, 'Family', 'Sharing', false, () => widget.onTabSelected?.call(2)),
     ];
